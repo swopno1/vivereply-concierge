@@ -10,18 +10,18 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/adapter-pg": "7",
     "@prisma/client": "7",
     "dotenv": "^18.0.9",
     "next": "latest",
-    "pg": "^8.23.1",
+    "pg": "8",
     "react": "latest",
     "react-dom": "latest"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "latest",
     "@types/node": "latest",
-    "@types/pg": "^8.23.1",
+    "@types/pg": "8",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "prisma": "7",

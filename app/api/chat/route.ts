@@ -101,10 +101,12 @@ export async function POST(req: NextRequest) {
     const { reply } = await runAgent({
       messages: [
         { role: "system", content: systemPrompt(conversation.language === "bn" ? "bn" : "en") },
-        ...history.map((m: { role: string; content: string }) => ({
-          role: m.role === "assistant" ? "assistant" : "user",
-          content: m.content,
-        })),
+        ...history.map(
+          (m: { role: string; content: string }): { role: "assistant" | "user"; content: string } => ({
+            role: m.role === "assistant" ? "assistant" : "user",
+            content: m.content,
+          })
+        ),
       ],
       tools: TOOL_DEFINITIONS,
       execute,
