@@ -1,4 +1,4 @@
-// Minimal Meta Model API provider adapter (step 1).
+// Minimal Meta Model API provider adapter (step 1b: returns usage for logging).
 // Talks to Muse Spark via the OpenAI-compatible chat completions endpoint.
 // No tool-calling yet — tools arrive in step 2 (AI front-of-house).
 
@@ -10,7 +10,15 @@ export type ChatMessage = {
   content: string;
 };
 
-export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
+export type Usage = {
+  promptTokens: number;
+  completionTokens: number;
+  reasoningTokens: number;
+};
+
+export async function chatCompletion(
+  messages: ChatMessage[]
+): Promise<{ reply: string; usage: Usage }> {
   const apiKey = process.env.META_API_KEY;
   if (!apiKey) {
     throw new Error("META_API_KEY is not set");
@@ -33,5 +41,13 @@ export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
   if (typeof content !== "string" || !content) {
     throw new Error("Empty reply from model");
   }
-  return content;
+  const u = data?.usage ?? {};
+  return {
+    reply: content,
+    usage: {
+      promptTokens: u.prompt_tokens ?? 0,
+      completionTokens: u.completion_tokens ?? 0,
+      reasoningTokens: u.completion_tokens_details?.reasoning_tokens ?? 0,
+    },
+  };
 }

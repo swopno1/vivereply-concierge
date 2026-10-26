@@ -14,6 +14,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
   async function send() {
     const text = input.trim();
@@ -26,10 +27,11 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, conversationId }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "Request failed.");
+      if (data.conversationId) setConversationId(data.conversationId);
       setMessages((m) => [...m, { role: "assistant", text: data.reply }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
@@ -42,7 +44,7 @@ export default function Home() {
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col p-4">
       <header className="border-b pb-3">
         <h1 className="text-xl font-bold">Vivereply Concierge</h1>
-        <p className="text-sm text-gray-500">Demo chat — step 1: talking to Muse Spark.</p>
+        <p className="text-sm text-gray-500">Demo chat — conversations now saved.</p>
       </header>
 
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto py-4">
