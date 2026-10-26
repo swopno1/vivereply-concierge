@@ -1,0 +1,8 @@
+{
+  "name": "vivereply-concierge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Vivereply Concierge — AI front-of-house for resorts (Meta Global AI Developer Hackathon)",
+  "scripts": {}
+}
