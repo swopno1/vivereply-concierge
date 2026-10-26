@@ -1,4 +1,4 @@
-// Concierge's own schema (step 1b). Suite data is referenced by ID only —
+// Concierge's own schema (step 2a). Suite data is referenced by ID only —
 // never joined across databases. Knowledge tables arrive with step 3 (RAG).
 
 generator client {
@@ -6,18 +6,21 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Conversation {
-  id         String       @id @default(cuid())
+  id         String         @id @default(cuid())
   propertyId String
-  language   String       @default("en")
-  status     String       @default("OPEN")
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  language   String         @default("en")
+  status     String         @default("OPEN")
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
   messages   Message[]
   toolCalls  ToolCallLog[]
+  handoffs   HandoffRecord[]
 }
 
 model Message {
@@ -44,6 +47,16 @@ model ToolCallLog {
   createdAt        DateTime     @default(now())
 
   @@index([conversationId, createdAt])
+}
+
+model HandoffRecord {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  reason         String
+  summary        String
+  status         String       @default("OPEN")
+  createdAt      DateTime     @default(now())
 }
 
 model PropertyBinding {
