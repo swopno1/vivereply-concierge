@@ -65,3 +65,23 @@ model PropertyBinding {
   secretRef    String
   createdAt    DateTime @default(now())
 }
+
+model KnowledgeDocument {
+  id        String           @id @default(cuid())
+  title     String
+  source    String           @default("demo-seed")
+  content   String
+  createdAt DateTime         @default(now())
+  chunks    KnowledgeChunk[]
+}
+
+model KnowledgeChunk {
+  id         String            @id @default(cuid())
+  documentId String
+  document   KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  content    String
+  embedding  Unsupported("vector(768)")
+  createdAt  DateTime          @default(now())
+
+  @@index([documentId])
+}

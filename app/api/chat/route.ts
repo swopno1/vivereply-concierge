@@ -5,6 +5,8 @@ import { TOOL_DEFINITIONS, createToolExecutor, type ToolDb } from "@/lib/tools";
 import { systemPrompt } from "@/lib/prompts";
 import { detectLanguage } from "@/lib/language";
 import { buildCards } from "@/lib/cards";
+import { embedText } from "@/lib/embeddings";
+import { retrieveGrounding, toVectorLiteral } from "@/lib/rag";
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -107,9 +109,46 @@ export async function POST(req: NextRequest) {
     // UI can never show a quote or draft from an earlier conversation.
     const turnStart = new Date();
 
+    // Step 3 (RAG — supporting only, never the headline): retrieve
+    // seeded property knowledge for this turn's question. Retrieval
+    // failure is NOT fatal: the agent then runs without grounding and
+    // must say it does not know property facts instead of inventing.
+    let grounding: string | null = null;
+    try {
+      const retrieved = await retrieveGrounding({
+        query: message,
+        embed: embedText,
+        search: async (embedding) => {
+          const rows = await prisma.$queryRaw<
+            Array<{ title: string; content: string; similarity: number }>
+          >`SELECT d."title", c."content", 1 - (c."embedding" <=> ${toVectorLiteral(embedding)}::vector) AS "similarity" FROM "KnowledgeChunk" AS c JOIN "KnowledgeDocument" AS d ON d."id" = c."documentId" ORDER BY c."embedding" <=> ${toVectorLiteral(embedding)}::vector ASC LIMIT 4`;
+          return rows;
+        },
+      });
+      grounding = retrieved.text;
+      if (retrieved.chunks.length > 0) {
+        await prisma.toolCallLog.create({
+          data: {
+            conversationId: conversation.id,
+            toolName: "rag_retrieval",
+            input: { query: message } as never,
+            output: { chunks: retrieved.chunks } as never,
+          },
+        });
+      }
+    } catch (e) {
+      console.error(
+        "RAG retrieval failed, continuing without grounding:",
+        e instanceof Error ? e.message : e
+      );
+    }
+
     const { reply } = await runAgent({
       messages: [
-        { role: "system", content: systemPrompt(conversation.language === "bn" ? "bn" : "en") },
+        {
+          role: "system",
+          content: systemPrompt(conversation.language === "bn" ? "bn" : "en", grounding),
+        },
         ...history.map(
           (m: { role: string; content: string }): { role: "assistant" | "user"; content: string } => ({
             role: m.role === "assistant" ? "assistant" : "user",

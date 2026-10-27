@@ -26,6 +26,7 @@
     "@types/react-dom": "latest",
     "prisma": "7",
     "tailwindcss": "latest",
-    "typescript": "latest"
+    "typescript": "latest",
+    "tsx": "4"
   }
 }
