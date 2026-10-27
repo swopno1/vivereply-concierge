@@ -28,12 +28,16 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Language follows the guest: Bengali script switches the conversation
-  // to Bengali for this and later turns.
-  if (detectLanguage(message) === "bn" && conversation.language !== "bn") {
+  // Language follows the guest's latest real language, both ways: a
+  // Bengali-letter message switches to Bengali, an English-letter
+  // message switches back. Neutral messages (dates, prices, "৳15,000"
+  // alone) return null and leave the language unchanged, so a
+  // conversation can never get stuck by a currency sign again.
+  const detected = detectLanguage(message);
+  if (detected && detected !== conversation.language) {
     conversation = await prisma.conversation.update({
       where: { id: conversation.id },
-      data: { language: "bn" },
+      data: { language: detected },
     });
   }
 
