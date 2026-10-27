@@ -4,6 +4,7 @@ import { runAgent } from "@/lib/agent";
 import { TOOL_DEFINITIONS, createToolExecutor, type ToolDb } from "@/lib/tools";
 import { systemPrompt } from "@/lib/prompts";
 import { detectLanguage } from "@/lib/language";
+import { buildCards } from "@/lib/cards";
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -102,6 +103,10 @@ export async function POST(req: NextRequest) {
       return result;
     };
 
+    // Step 2b: cards are built from this turn's tool logs only, so the
+    // UI can never show a quote or draft from an earlier conversation.
+    const turnStart = new Date();
+
     const { reply } = await runAgent({
       messages: [
         { role: "system", content: systemPrompt(conversation.language === "bn" ? "bn" : "en") },
@@ -134,7 +139,14 @@ export async function POST(req: NextRequest) {
       where: { id: conversation.id },
       data: { updatedAt: new Date() },
     });
-    return NextResponse.json({ reply, conversationId: conversation.id });
+    const turnLogs = await prisma.toolCallLog.findMany({
+      where: { conversationId: conversation.id, createdAt: { gte: turnStart } },
+      orderBy: { createdAt: "asc" },
+    });
+    const cards = buildCards(
+      turnLogs.map((l) => ({ toolName: l.toolName, input: l.input, output: l.output }))
+    );
+    return NextResponse.json({ reply, conversationId: conversation.id, cards });
   } catch (err) {
     console.error("Agent error:", err instanceof Error ? err.message : err);
     return NextResponse.json(

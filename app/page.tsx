@@ -2,7 +2,71 @@
 
 import { useState } from "react";
 
-type Message = { role: "user" | "assistant"; text: string };
+type Card =
+  | {
+      kind: "quote";
+      room: string;
+      checkIn: string;
+      checkOut: string;
+      nights: number;
+      total: string;
+      available: number;
+    }
+  | {
+      kind: "draft";
+      room: string;
+      checkIn: string;
+      checkOut: string;
+      bookingCode: string;
+      suiteTotal: string;
+      quotedTotal: string;
+      totalsMatch: boolean;
+    }
+  | { kind: "handoff"; reason: string; summary: string };
+
+type Message = { role: "user" | "assistant"; text: string; cards?: Card[] };
+
+function CardView({ card }: { card: Card }) {
+  if (card.kind === "quote") {
+    return (
+      <div className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm">
+        <p className="font-semibold">Quote — {card.room}</p>
+        <p className="text-gray-700">
+          {card.checkIn} → {card.checkOut} · {card.nights} night{card.nights === 1 ? "" : "s"} ·{" "}
+          {card.available} available
+        </p>
+        <p className="font-semibold">Total: {card.total}</p>
+      </div>
+    );
+  }
+  if (card.kind === "draft") {
+    return (
+      <div className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm">
+        <p className="font-semibold">Booking draft held — {card.room}</p>
+        <p className="text-gray-700">
+          {card.checkIn} → {card.checkOut}
+        </p>
+        <p>
+          Booking code: <span className="font-mono font-semibold">{card.bookingCode}</span>
+        </p>
+        <p>Total: {card.suiteTotal}</p>
+        {!card.totalsMatch && (
+          <p className="text-amber-700">
+            Note: the Suite total ({card.suiteTotal}) governs — it differs from the quoted{" "}
+            {card.quotedTotal}.
+          </p>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm">
+      <p className="font-semibold">Passed to staff</p>
+      <p className="text-gray-700">{card.reason}</p>
+      <p className="text-gray-700">{card.summary}</p>
+    </div>
+  );
+}
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([
@@ -32,7 +96,10 @@ export default function Home() {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "Request failed.");
       if (data.conversationId) setConversationId(data.conversationId);
-      setMessages((m) => [...m, { role: "assistant", text: data.reply }]);
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", text: data.reply, cards: Array.isArray(data.cards) ? data.cards : [] },
+      ]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
@@ -45,19 +112,26 @@ export default function Home() {
       <header className="border-b pb-3">
         <h1 className="text-xl font-bold">Vivereply Concierge</h1>
         <p className="text-sm text-gray-500">Demo chat — conversations now saved.</p>
+        <p className="text-sm">
+          <a href="/staff" className="underline">
+            Staff view (handoffs)
+          </a>
+        </p>
       </header>
 
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto py-4">
         {messages.map((m, i) => (
-          <div
-            key={i}
-            className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${
-              m.role === "user"
-                ? "self-end bg-black text-white"
-                : "self-start bg-gray-100 text-gray-900"
-            }`}
-          >
-            {m.text}
+          <div key={i} className={`flex max-w-[80%] flex-col gap-2 ${m.role === "user" ? "self-end items-end" : "self-start items-start"}`}>
+            <div
+              className={`rounded-2xl px-4 py-2 text-sm leading-relaxed ${
+                m.role === "user" ? "bg-black text-white" : "bg-gray-100 text-gray-900"
+              }`}
+            >
+              {m.text}
+            </div>
+            {(m.cards ?? []).map((card, j) => (
+              <CardView key={j} card={card} />
+            ))}
           </div>
         ))}
         {sending && (
