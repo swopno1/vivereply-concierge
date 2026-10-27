@@ -15,6 +15,7 @@
 // are inserted with raw SQL; Prisma cannot write that column directly.
 
 import { randomUUID } from "node:crypto";
+import "../lib/env";
 import { prisma } from "../lib/prisma";
 import { embedText } from "../lib/embeddings";
 import { toVectorLiteral } from "../lib/rag";
@@ -37,7 +38,7 @@ async function main(): Promise<void> {
     const created = await prisma.knowledgeDocument.create({
       data: { title: doc.title, source: "demo-seed", content: doc.content },
     });
-    const embedding = await embedText(doc.content);
+    const embedding = await embedText(doc.content, "RETRIEVAL_DOCUMENT");
     await prisma.$executeRaw`INSERT INTO "KnowledgeChunk" ("id", "documentId", "content", "embedding", "createdAt") VALUES (${randomUUID()}, ${created.id}, ${doc.content}, ${toVectorLiteral(embedding)}::vector, NOW())`;
     console.log(`Seeded: ${doc.title} (${embedding.length} dimensions)`);
   }
