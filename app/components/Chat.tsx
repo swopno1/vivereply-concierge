@@ -1,16 +1,18 @@
 "use client";
 
-// Shared chat UI (step 4 refactor). The main page (/) and the widget
-// page (/widget) render the SAME component, so a guest sees the same
-// chat whether they open the demo directly or through an embedded
-// widget on another site. Compact mode (widget) hides the staff link
-// and uses the widget property's title; everything else — messages,
-// cards, language, tools — is identical.
+// Shared chat UI (step 4 refactor, token-carrying since step 4.5).
+// The main page (/) and the widget page (/widget) render the SAME
+// component, so a guest sees the same chat whether they open the demo
+// directly or through an embedded widget on another site. Compact mode
+// (widget) hides the staff link and uses the widget property's title;
+// everything else — messages, cards, language, tools — is identical.
 //
-// propertyId, when given, is sent to /api/chat and stored as the new
-// conversation's label. In v1 it does NOT switch the Suite catalogue
-// or database (single demo property): the tools still use the demo
-// catalogue and SUITE_API_BASE_URL. Multi-property routing is future
+// The token (issued server-side by / or by the widget handshake) is
+// sent with every /api/chat call, and the API trusts ONLY the token's
+// propertyId. The browser never sends a propertyId anymore: a widget
+// token still does NOT switch the Suite catalogue or database in v1
+// (single demo property) — it only labels the conversation and gates
+// which site may host the chat. Multi-property routing is future
 // work, not something this prop pretends to do.
 
 import { useState } from "react";
@@ -83,12 +85,14 @@ function CardView({ card }: { card: Card }) {
 
 export default function Chat({
   compact = false,
-  propertyId,
   title,
+  token,
+  source,
 }: {
   compact?: boolean;
-  propertyId?: string;
   title?: string;
+  token: string;
+  source: "direct" | "widget";
 }) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -112,7 +116,7 @@ export default function Chat({
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, conversationId, propertyId }),
+        body: JSON.stringify({ message: text, conversationId, token, source }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "Request failed.");

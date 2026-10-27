@@ -1,8 +1,16 @@
-// Main chat page (step 4 refactor). Thin wrapper only — the chat UI
-// lives in app/components/Chat.tsx so / and /widget share one component.
+// Main chat page (step 4 refactor, token-issued since step 4.5).
+// Server component: it mints a direct chat token for this visit so
+// /api/chat can verify every message, the same way the widget token
+// is verified. Direct visits need no approved domain; embedding this
+// page elsewhere is a separate concern (see README security section).
 
 import Chat from "./components/Chat";
+import { createChatToken } from "@/lib/auth";
 
 export default function Home() {
-  return <Chat />;
+  const token = createChatToken({
+    propertyId: process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat",
+    scope: "direct",
+  });
+  return <Chat token={token ?? ""} source="direct" />;
 }

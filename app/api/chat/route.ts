@@ -7,6 +7,8 @@ import { detectLanguage } from "@/lib/language";
 import { buildCards } from "@/lib/cards";
 import { embedText } from "@/lib/embeddings";
 import { retrieveGrounding, toVectorLiteral } from "@/lib/rag";
+import { verifyChatToken } from "@/lib/auth";
+import { isDomainApproved } from "@/lib/domains";
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -18,23 +20,41 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Message is too long." }, { status: 400 });
   }
 
+  // Step 4.5: every chat call must carry a signed token (direct
+  // token from / or widget token from the handshake). The token's
+  // propertyId governs — a propertyId sent by the browser is ignored
+  // entirely, so a client can no longer claim any property. A widget
+  // token's domain is re-checked against the approved list on every
+  // message, so deactivating a domain stops its widget immediately.
+  const chatToken = verifyChatToken(typeof body?.token === "string" ? body.token : null);
+  if (!chatToken) {
+    return NextResponse.json(
+      { error: "Chat token expired or invalid. Please reload the page." },
+      { status: 403 }
+    );
+  }
+  if (chatToken.scope === "widget") {
+    if (!chatToken.domain || !(await isDomainApproved(chatToken.propertyId, chatToken.domain))) {
+      return NextResponse.json(
+        { error: "This site is no longer approved to host this chat." },
+        { status: 403 }
+      );
+    }
+  }
+
   const incomingId = typeof body?.conversationId === "string" ? body.conversationId : "";
-  // Step 4: a widget client may label a new conversation with its
-  // propertyId. It is a label only in v1 — it does not switch the
-  // catalogue, Suite URL, or database (single demo property).
-  const requestedPropertyId =
-    typeof body?.propertyId === "string" ? body.propertyId.trim() : "";
-  const newPropertyId =
-    requestedPropertyId.length > 0 && requestedPropertyId.length <= 100
-      ? requestedPropertyId
-      : (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat");
   let conversation = incomingId
     ? await prisma.conversation.findUnique({ where: { id: incomingId } })
     : null;
+  // A conversation id from another property is ignored, never reused:
+  // it would otherwise let one site's token read another's thread.
+  if (conversation && conversation.propertyId !== chatToken.propertyId) {
+    conversation = null;
+  }
   if (!conversation) {
     conversation = await prisma.conversation.create({
       data: {
-        propertyId: newPropertyId,
+        propertyId: chatToken.propertyId,
         language: "en",
       },
     });

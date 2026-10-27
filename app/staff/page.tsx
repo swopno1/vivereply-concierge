@@ -1,13 +1,21 @@
-// Staff handoff view (step 2b). Lists every handoff the agent made, with
-// the full conversation transcript, so staff can pick up where the bot
-// left off. Demo only in v1: no login protects this page — do not expose
-// it beyond the demo until staff auth exists.
+// Staff handoff view (step 2b, protected since step 4.5). Lists every
+// handoff the agent made, with the full conversation transcript, so
+// staff can pick up where the bot left off. No valid admin session
+// cookie means a redirect to /login, before any handoff is read.
 
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function StaffPage() {
+  const store = await cookies();
+  if (!verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value)) {
+    redirect("/login?next=/staff");
+  }
+
   const handoffs = await prisma.handoffRecord.findMany({
     orderBy: { createdAt: "desc" },
     include: {
@@ -65,7 +73,7 @@ export default async function StaffPage() {
       </div>
 
       <p className="border-t pt-3 text-sm text-gray-500">
-        Demo only — this page has no login in v1.
+        Protected by admin login since step 4.5.
       </p>
     </main>
   );

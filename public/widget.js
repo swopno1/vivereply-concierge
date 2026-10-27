@@ -1,15 +1,21 @@
-// Vivereply Concierge embed script (step 4). No dependencies, no
-// build step — Next serves this file statically from /public.
-// Usage on any site (replace the host with the Concierge deployment):
+// Vivereply Concierge embed script (step 4, handshake since step 4.5).
+// No dependencies, no build step — Next serves this file statically
+// from /public. Usage on any site (replace the host with the Concierge
+// deployment):
 //   <script src="https://<concierge-host>/widget.js" data-key="demo-krishnachura"></script>
 //
 // How it works: the script derives its own origin from its <script>
 // src, so the same file works on localhost and on a deployment with
-// no code change. It adds a floating "Chat" button and an iframe
-// panel pointing at /widget?key=<key> on that origin. The iframe is
-// what talks to /api/chat; this script never sees messages, keys, or
-// guest data. A missing data-key falls back to the demo key so the
-// demo embed still works with a bare script tag.
+// no code change. It then asks that origin for a widget token, sending
+// the embed key. The browser attaches the host page's Origin header to
+// that request, and the server only issues a token when that origin's
+// host is approved for the key's property (see /admin). Without a
+// token, the panel shows an error instead of a chat — an unapproved
+// site cannot host the bot by copying this script. The token is
+// short-lived and scoped to one domain and property; /api/chat
+// re-checks approval on every message, so deactivating a domain in
+// /admin stops its widget on the next message. This script never sees
+// messages or guest data; the iframe talks to /api/chat.
 
 (function () {
   var scripts = document.getElementsByTagName("script");
@@ -34,11 +40,6 @@
     "background:#fff;border:1px solid #d1d5db;border-radius:16px;overflow:hidden;" +
     "box-shadow:0 8px 32px rgba(0,0,0,0.25);display:none;";
 
-  var frame = document.createElement("iframe");
-  frame.title = "Vivereply Concierge chat";
-  frame.src = origin + "/widget?key=" + encodeURIComponent(key);
-  frame.style.cssText = "width:100%;height:100%;border:0;";
-
   var open = false;
   button.addEventListener("click", function () {
     open = !open;
@@ -46,7 +47,47 @@
     button.textContent = open ? "Close" : "Chat";
   });
 
-  panel.appendChild(frame);
   document.body.appendChild(panel);
   document.body.appendChild(button);
+
+  function showError(message) {
+    var error = document.createElement("div");
+    error.style.cssText = "padding:16px;font-size:14px;color:#374151;font-family:inherit;";
+    error.textContent = message;
+    panel.appendChild(error);
+  }
+
+  fetch(origin + "/api/widget-token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key: key }),
+  })
+    .then(function (res) {
+      return res.json().then(function (data) {
+        return { ok: res.ok, data: data };
+      });
+    })
+    .then(function (result) {
+      if (!result.ok || !result.data.token) {
+        showError(
+          result.data && result.data.error
+            ? result.data.error
+            : "Chat is unavailable right now."
+        );
+        return;
+      }
+      var frame = document.createElement("iframe");
+      frame.title = "Vivereply Concierge chat";
+      frame.src =
+        origin +
+        "/widget?key=" +
+        encodeURIComponent(key) +
+        "&token=" +
+        encodeURIComponent(result.data.token);
+      frame.style.cssText = "width:100%;height:100%;border:0;";
+      panel.appendChild(frame);
+    })
+    .catch(function () {
+      showError("Chat is unavailable right now.");
+    });
 })();

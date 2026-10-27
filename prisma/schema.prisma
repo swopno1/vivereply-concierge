@@ -85,3 +85,20 @@ model KnowledgeChunk {
 
   @@index([documentId])
 }
+
+// Approved widget hosts (step 4.5). A domain here, still active, is
+// the only thing that lets a site embed the widget for that property.
+// Hostnames are exact (lowercased, no scheme, no port). Admins manage
+// rows in /admin; there is no user table in v1 (single admin via
+// ADMIN_PASSWORD env, see lib/auth.ts).
+model ApprovedDomain {
+  id         String   @id @default(cuid())
+  domain     String
+  propertyId String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([domain, propertyId])
+  @@index([propertyId, active])
+}

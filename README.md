@@ -95,6 +95,34 @@ shows a "not configured" panel, never a guessed property, and in v1
 it labels the conversation without switching catalogue, Suite URL, or
 database (single demo property).
 
+## Security (step 4.5)
+
+Three pieces, kept simple for the hackathon window:
+
+- **Admin login (`/login`)**: single admin, password only, from the
+  `ADMIN_PASSWORD` env var. A signed HttpOnly session cookie protects
+  `/staff` and `/admin`. No signup, no user table, no 2FA in v1 —
+  recovery is changing the env var.
+- **Approved domains (`/admin`)**: only hosts listed there (and still
+  active) can embed the widget for a property. demo1.vivereply.com is
+  seeded for the demo property. Deactivating a domain stops its widget
+  on the next chat message.
+- **Widget token handshake**: `widget.js` asks `/api/widget-token`
+  from the host page, and the browser attaches the host page's Origin.
+  Only an approved origin gets a short-lived signed token, and
+  `/api/chat` verifies that token — and re-checks domain approval —
+  on every message. The token's propertyId governs; a propertyId sent
+  by the browser is ignored. `/` issues a direct token server-side
+  and needs no approved domain.
+
+Honest limits: this stops unauthorized embedding and unauthorized
+staff/admin access, not a determined attacker forging headers with
+curl (in a real browser the Origin header cannot be faked by the
+embedding site). There is no rate limiting in v1, and localhost is
+approved automatically in development only. Post-hackathon upgrades:
+multi-user admin, 2FA, audit log, rate limiting, per-domain
+frame-ancestors headers.
+
 ## Demo flow to try
 
 1. Sea-facing room, 2 nights, ~৳15,000/night → quote card, then
