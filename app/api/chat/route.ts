@@ -19,13 +19,22 @@ export async function POST(req: NextRequest) {
   }
 
   const incomingId = typeof body?.conversationId === "string" ? body.conversationId : "";
+  // Step 4: a widget client may label a new conversation with its
+  // propertyId. It is a label only in v1 — it does not switch the
+  // catalogue, Suite URL, or database (single demo property).
+  const requestedPropertyId =
+    typeof body?.propertyId === "string" ? body.propertyId.trim() : "";
+  const newPropertyId =
+    requestedPropertyId.length > 0 && requestedPropertyId.length <= 100
+      ? requestedPropertyId
+      : (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat");
   let conversation = incomingId
     ? await prisma.conversation.findUnique({ where: { id: incomingId } })
     : null;
   if (!conversation) {
     conversation = await prisma.conversation.create({
       data: {
-        propertyId: process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat",
+        propertyId: newPropertyId,
         language: "en",
       },
     });

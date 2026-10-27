@@ -80,6 +80,21 @@ Standalone scripts (like the seeder) must import `lib/env` first,
 before `lib/prisma` — `tsx` does not load `.env` files by itself, and
 the Prisma Pool is created at import time.
 
+## Widget (embed on any site)
+
+```html
+<script src="https://<your-concierge-host>/widget.js" data-key="demo-krishnachura"></script>
+```
+
+That one script tag adds a floating Chat button and an iframe panel
+loading `/widget?key=demo-krishnachura` from the Concierge host — the
+same chat as `/`, in compact mode. The script derives its origin from
+its own `src`, so it works on localhost and on a deployment with no
+code change. The key is a public label, not a secret: an unknown key
+shows a "not configured" panel, never a guessed property, and in v1
+it labels the conversation without switching catalogue, Suite URL, or
+database (single demo property).
+
 ## Demo flow to try
 
 1. Sea-facing room, 2 nights, ~৳15,000/night → quote card, then
