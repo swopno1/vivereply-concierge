@@ -13,7 +13,9 @@ the database stay in the app. It stops the moment any callback answers
 
 1. `pip install modal && modal setup` (Modal account; token stays local).
 2. Create the secret (values never in chat or repo):
-   `modal secret create vivereply-onboarding APP_BASE_URL=https://app.vivereply.com WORKER_SHARED_SECRET=<same value as the app env>`
+   `modal secret create vivereply-onboarding APP_BASE_URL=https://app.vivereply.com WORKER_SHARED_SECRET=<same value as the app env> GEMINI_API_KEY=<same Gemini key> WORKER_DB_URL=<pooler URL for the onboarding_worker role>`
+   The DB URL uses the least-privilege role from `docs/worker-db-role.sql`
+   (run that SQL first) — never the service role, never the app's own URL.
 3. `modal deploy worker/onboarding.py` → copy the printed web endpoint URL.
 4. Set `MODAL_WORKER_URL` to that URL in Vercel + local `.env`.
 5. Submit a test onboarding run; watch `modal app logs vivereply-onboarding`.
@@ -21,9 +23,11 @@ the database stay in the app. It stops the moment any callback answers
 ## Invoke contract
 
 ```
-POST {MODAL_WORKER_URL}  Authorization: Bearer <WORKER_SHARED_SECRET>
+POST {MODAL_WORKER_URL}  (auth inside the payload, timing-safe compare)
 { "runId", "propertyId", "website": "...|null",
-  "files": [{ "path", "downloadUrl" }], "version": "1" }
+  "files": [{ "path", "downloadUrl" }], "storageHost": "...",
+  "rawUploadUrl": "...|null", "auth": "<WORKER_SHARED_SECRET>",
+  "version": "2" }
 ```
 
 The endpoint answers `{ accepted: true }` fast; work continues in the

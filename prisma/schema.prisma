@@ -177,6 +177,11 @@ model KnowledgeChunk {
   documentId String
   document   KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
   content    String
+  // Visibility switch (worker rework): the worker stages chunks unindexed
+  // and flips its job's chunks on clean completion, so guests never see a
+  // half-ingested run. Default true so existing rows and seed scripts stay
+  // live with no backfill — the worker always sets false explicitly.
+  indexed    Boolean           @default(true)
   embedding  Unsupported("vector(768)")
   createdAt  DateTime          @default(now())
 

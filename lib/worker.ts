@@ -13,6 +13,8 @@ export async function invokeIngestionWorker(input: {
   propertyId: string;
   website: string | null;
   files: WorkerFile[];
+  storageHost: string;
+  rawUploadUrl: string | null;
 }): Promise<{ invoked: boolean; note: string }> {
   const url = process.env.MODAL_WORKER_URL;
   const secret = process.env.WORKER_SHARED_SECRET;
@@ -22,10 +24,13 @@ export async function invokeIngestionWorker(input: {
   if (!secret) {
     return { invoked: false, note: "Worker secret not configured — run stays queued." };
   }
+  // Auth travels in the payload (compared timing-safe server-side):
+  // a plain-dict web endpoint cannot reliably read request headers, so no
+  // Authorization header is sent — nothing here implies otherwise.
   const res = await fetch(url, {
     method: "POST",
-    headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...input, auth: secret, version: "2" }),
     signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) {

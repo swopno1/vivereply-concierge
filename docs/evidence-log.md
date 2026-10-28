@@ -176,6 +176,29 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
   MODAL_WORKER_URL) → bucket SQL → db push → Modal deploy → app deploy → live
   onboarding trial on a test property.
 
+## 2026-10-28 — worker rework built (uncommitted, feature/rag-onboarding)
+
+- Worker owns embed + store: Modal Secret gains GEMINI_API_KEY + WORKER_DB_URL
+  (least-privilege role via docs/worker-db-role.sql, never service-role);
+  chunks staged indexed=false, flipped on completion; raw bundle to Storage.
+- SSRF guard on every fetch (public-only + redirect re-validation + caps);
+  auth via timing-safe payload secret (no implied header security).
+- App trimmed: callback is progress/complete/failed + budget stop-authority;
+  invoke passes storageHost + rawUploadUrl; dashboard polls to terminal.
+- Retrieval filters indexed=true; KnowledgeChunk.indexed defaults true (no
+  backfill; worker always stages false explicitly).
+- DEVIATION from plan: full RLS-with-session-var deferred — enabling RLS
+  without proving the app role bypasses it could break live reads. Shipped
+  least-privilege GRANTs + fail-closed insert helper (re-reads document
+  property) + CHECK constraint; RLS stays a documented, verifiable follow-up.
+- STATIC PROOF: tsc green; py_compile OK; guard probes 33/33 on real worker
+  code via import stubs (11 blocked IPs incl. metadata/link-local/multicast —
+  the probe caught Python's is_global multicast quirk, fixed explicitly;
+  7 URL rejects, chunker, vector format, insert fail-closed ×3).
+- PENDING founder lift (order): role SQL → db push → Modal secret additions →
+  redeploy worker + app → live adversarial trial (metadata-URL run must fail
+  closed with zero chunks; fixture run lands indexed).
+
 ## 2026-10-28 — settings page built (uncommitted, feature/settings-page)
 
 - BUILT /settings (admin-guarded): per-key chat embed snippets + copy (origin from

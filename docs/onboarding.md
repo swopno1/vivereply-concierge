@@ -8,17 +8,20 @@ embedded, property-scoped vectors. The browser form lives at `/onboarding`
 ## One-time setup (founder, in order)
 
 1. `pnpm exec prisma db push` (adds `PropertyProfile`, `OnboardingRun`,
-   `KnowledgeDocument.propertyId` with demo backfill).
+   `KnowledgeDocument.propertyId` with demo backfill, `KnowledgeChunk.indexed`
+   defaulting live so existing rows need no backfill).
 2. Create the private Storage bucket `onboarding-uploads` — Supabase
    dashboard (Storage → New bucket, private), or SQL:
    `insert into storage.buckets (id, name, public) values ('onboarding-uploads','onboarding-uploads',false);`
-3. Env (Vercel + local, values never in chat): `SUPABASE_URL`,
+3. Run `docs/worker-db-role.sql` (least-privilege worker role + guard
+   constraint) as the database owner.
+4. Env (Vercel + local, values never in chat): `SUPABASE_URL`,
    `SUPABASE_SERVICE_KEY` (service role — server only),
    `WORKER_SHARED_SECRET` (random 32+ chars),
-   `MODAL_WORKER_URL` (after step 4).
-4. Deploy the worker: `worker/README.md` (Modal account, secret, deploy,
-   webhook URL back into env).
-5. Redeploy the app.
+   `MODAL_WORKER_URL` (after step 5).
+5. Deploy the worker: `worker/README.md` (Modal account, secret with Gemini
+   key + worker DB URL, deploy, webhook URL back into env).
+6. Redeploy the app.
 
 ## How a run flows
 
@@ -35,11 +38,13 @@ embedded, property-scoped vectors. The browser form lives at `/onboarding`
 4. The worker tries `/.well-known/vivereply-knowledge.json` first (5s, 2MB
    cap), else crawls politely (robots.txt, sitemap-first, same-origin,
    50 pages / 200k chars), parses uploads, chunks (~500 tokens, 200 overlap),
-   and streams batches to `POST /api/worker/callback` (Bearer secret).
-5. The app enforces the token ceiling BEFORE embedding each batch (500k
-   estimate/run; breach → PARTIAL with reason), embeds via Gemini batch,
-   and upserts documents/chunks scoped to the property. Every callback
-   answers `{stop}` — true halts the worker.
+   and stores rows itself (documents + chunks tagged with the job's property ID, chunks staged unindexed). Every fetch passes the SSRF guard (public IPs only, redirects re-validated, byte caps). It reports progress to `POST /api/worker/callback` (Bearer secret).
+5. The worker embeds via Gemini (same model/dims as the app seed path). The app
+   enforces the token ceiling on every progress report (500k estimate/run;
+   breach → PARTIAL with reason) and answers `{stop}` — true halts the
+   worker. On clean completion the worker flips its job's chunks indexed
+   (atomic visibility), uploads the raw bundle to Storage for audit, and
+   reports COMPLETE with counts.
 6. Terminal states: COMPLETE, PARTIAL (budget abort, stats kept), FAILED
    (error kept). Callbacks for terminal runs are ignored (stop: true).
 

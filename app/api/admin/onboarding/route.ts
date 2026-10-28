@@ -13,7 +13,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 import { ONBOARDING_BUDGET, sanitizeFilename } from "@/lib/onboarding";
-import { signDownloadUrl } from "@/lib/storage";
+import { signDownloadUrl, signUploadUrl } from "@/lib/storage";
 import { invokeIngestionWorker } from "@/lib/worker";
 
 async function isAdmin(): Promise<boolean> {
@@ -194,9 +194,20 @@ export async function POST(req: NextRequest) {
     await prisma.onboardingRun.update({ where: { id: run.id }, data: { error } });
     return NextResponse.json({ run: shapeRun({ ...run, error }), worker: { invoked: false, note: error } });
   }
+  // Raw-bundle signing is best-effort: without it the worker skips the
+  // audit bundle but the run still proceeds (website-only runs especially).
+  let storageHost = "";
+  let rawUploadUrl: string | null = null;
+  try {
+    storageHost = new URL(process.env.SUPABASE_URL ?? "").hostname;
+    rawUploadUrl = await signUploadUrl(`raw/${safeProp}/${run.id}.json`);
+  } catch {
+    storageHost = "";
+    rawUploadUrl = null;
+  }
   let worker = { invoked: false, note: "Worker not configured — run stays queued." };
   try {
-    worker = await invokeIngestionWorker({ runId: run.id, propertyId, website, files });
+    worker = await invokeIngestionWorker({ runId: run.id, propertyId, website, files, storageHost, rawUploadUrl });
     await prisma.onboardingRun.update({
       where: { id: run.id },
       data: { status: worker.invoked ? "RUNNING" : "PENDING" },

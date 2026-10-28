@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Profile = {
   businessName: string;
@@ -31,6 +31,7 @@ type RunState = {
   error: string | null;
   approvedRerun: boolean;
   approvedBy: string | null;
+  updatedAt: string;
 };
 
 const EMPTY_PROFILE: Profile = {
@@ -186,6 +187,14 @@ export default function OnboardingBoard() {
     setNotice(data.note ?? "Invoked.");
     await load(loadedFor);
   }
+
+  // Poll while the run is alive; terminal states stop the loop.
+  useEffect(() => {
+    if (!loadedFor || !run || (run.status !== "PENDING" && run.status !== "RUNNING")) return;
+    const timer = setInterval(() => void load(loadedFor), 5000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadedFor, run?.status, run?.updatedAt]);
 
   const blocked = run !== null && !run.approvedRerun;
   const stats = run?.stats;

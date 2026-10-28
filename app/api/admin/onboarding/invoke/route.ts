@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
-import { signDownloadUrl } from "@/lib/storage";
+import { signDownloadUrl, signUploadUrl } from "@/lib/storage";
 import { invokeIngestionWorker } from "@/lib/worker";
 
 export async function POST(req: NextRequest) {
@@ -35,11 +35,23 @@ export async function POST(req: NextRequest) {
     const files = await Promise.all(
       run.filePaths.map(async (path) => ({ path, downloadUrl: await signDownloadUrl(path) }))
     );
+    const safeProp = propertyId.replace(/[^a-zA-Z0-9-]+/g, "_").slice(0, 80);
+    let storageHost = "";
+    let rawUploadUrl: string | null = null;
+    try {
+      storageHost = new URL(process.env.SUPABASE_URL ?? "").hostname;
+      rawUploadUrl = await signUploadUrl(`raw/${safeProp}/${run.id}.json`);
+    } catch {
+      storageHost = "";
+      rawUploadUrl = null;
+    }
     const worker = await invokeIngestionWorker({
       runId: run.id,
       propertyId,
       website: run.website,
       files,
+      storageHost,
+      rawUploadUrl,
     });
     if (worker.invoked) {
       await prisma.onboardingRun.update({ where: { id: run.id }, data: { status: "RUNNING" } });

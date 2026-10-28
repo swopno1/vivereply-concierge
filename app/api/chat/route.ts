@@ -276,7 +276,7 @@ export async function POST(req: NextRequest) {
             search: async (embedding) => {
               const rows = await prisma.$queryRaw<
                 Array<{ title: string; content: string; similarity: number }>
-              >`SELECT d."title", c."content", 1 - (c."embedding" <=> ${toVectorLiteral(embedding)}::vector) AS "similarity" FROM "KnowledgeChunk" AS c JOIN "KnowledgeDocument" AS d ON d."id" = c."documentId" WHERE d."propertyId" = ${activeConversation.propertyId} ORDER BY c."embedding" <=> ${toVectorLiteral(embedding)}::vector ASC LIMIT 4`;
+              >`SELECT d."title", c."content", 1 - (c."embedding" <=> ${toVectorLiteral(embedding)}::vector) AS "similarity" FROM "KnowledgeChunk" AS c JOIN "KnowledgeDocument" AS d ON d."id" = c."documentId" WHERE d."propertyId" = ${activeConversation.propertyId} AND c."indexed" = true ORDER BY c."embedding" <=> ${toVectorLiteral(embedding)}::vector ASC LIMIT 4`;
               return rows;
             },
           });
