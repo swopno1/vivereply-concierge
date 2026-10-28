@@ -56,9 +56,9 @@ export default function AppShell({
         <div className="flex items-center gap-3 px-2 py-2">
           <span
             aria-hidden
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0C1222]"
           >
-            V
+            <img src="/brand/vivereply-mark.svg" alt="" className="h-7 w-7" />
           </span>
           <span className="min-w-0">
             <span className="block truncate text-[15px] font-semibold leading-tight">

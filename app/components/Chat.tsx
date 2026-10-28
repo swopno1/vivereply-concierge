@@ -352,6 +352,12 @@ export default function Chat({
     >
       {compact && (
         <header className="flex items-center gap-3 border-b border-gray-200 bg-white/90 px-4 py-3 backdrop-blur">
+          <span
+            aria-hidden
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0C1222]"
+          >
+            <img src="/brand/vivereply-mark.svg" alt="" className="h-6 w-6" />
+          </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[15px] font-semibold leading-tight">
               {title ?? "Vivereply Concierge"}

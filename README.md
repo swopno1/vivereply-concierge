@@ -1,5 +1,7 @@
 # Vivereply Concierge
 
+![Vivereply Concierge — AI front-of-house for resorts](public/og-concierge.png)
+
 AI front-of-house for resorts — a demo chat that checks live availability,
 quotes exact prices, holds booking drafts, answers property questions from
 seeded knowledge, and hands complex cases to staff with the full

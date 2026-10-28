@@ -25,13 +25,21 @@
   var key = current.getAttribute("data-key") || "demo-krishnachura";
 
   var button = document.createElement("button");
-  button.textContent = "Chat";
   button.setAttribute("aria-label", "Open Vivereply Concierge chat");
   button.style.cssText =
     "position:fixed;right:20px;bottom:20px;z-index:2147483647;" +
+    "display:flex;align-items:center;" +
     "background:#111827;color:#fff;border:0;border-radius:9999px;" +
-    "padding:13px 22px;font-size:14px;font-weight:600;cursor:pointer;" +
+    "padding:11px 22px 11px 14px;font-size:14px;font-weight:600;cursor:pointer;" +
     "box-shadow:0 8px 24px rgba(0,0,0,0.22),0 2px 6px rgba(0,0,0,0.12);font-family:inherit;";
+  var icon = document.createElement("img");
+  icon.src = origin + "/brand/vivereply-mark.svg";
+  icon.alt = "";
+  icon.style.cssText = "width:22px;height:22px;margin-right:8px;";
+  var label = document.createElement("span");
+  label.textContent = "Chat";
+  button.appendChild(icon);
+  button.appendChild(label);
 
   var panel = document.createElement("div");
   panel.style.cssText =
@@ -44,7 +52,7 @@
   button.addEventListener("click", function () {
     open = !open;
     panel.style.display = open ? "block" : "none";
-    button.textContent = open ? "Close" : "Chat";
+    label.textContent = open ? "Close" : "Chat";
   });
 
   document.body.appendChild(panel);
