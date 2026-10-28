@@ -54,7 +54,39 @@ model HandoffRecord {
   reason         String
   summary        String
   status         String       @default("OPEN")
+  assignee       String?
   createdAt      DateTime     @default(now())
+  notes          HandoffNote[]
+}
+
+// Staff follow-up notes on a handoff (bridge API). Written by client
+// dashboards through server-to-server calls, never by the chat agent.
+model HandoffNote {
+  id        String        @id @default(cuid())
+  handoffId String
+  handoff   HandoffRecord @relation(fields: [handoffId], references: [id], onDelete: Cascade)
+  author    String
+  body      String
+  createdAt DateTime      @default(now())
+
+  @@index([handoffId, createdAt])
+}
+
+// Server-to-server bridge credentials (one per client dashboard
+// integration). Only the secret's hash is stored — a stolen database
+// row cannot call the API. The full token is shown once, at mint time,
+// and never again. Revoking (active = false) kills the key on its next
+// call, because every bridge request re-checks the row.
+model BridgeToken {
+  id         String   @id @default(cuid())
+  prefix     String   @unique
+  secretHash String
+  name       String
+  propertyId String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([propertyId, active])
 }
 
 model PropertyBinding {

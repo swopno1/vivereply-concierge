@@ -10,6 +10,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 import AdminDomains from "../../components/AdminDomains";
+import BridgeTokens from "../../components/BridgeTokens";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,15 @@ export default async function AdminPage() {
     active: r.active,
     createdAt: r.createdAt.toISOString(),
   }));
+  const tokenRows = await prisma.bridgeToken.findMany({ orderBy: { createdAt: "asc" } });
+  const initialTokens = tokenRows.map((r) => ({
+    id: r.id,
+    prefix: r.prefix,
+    name: r.name,
+    propertyId: r.propertyId,
+    active: r.active,
+    createdAt: r.createdAt.toISOString(),
+  }));
 
   return (
     <div className="mx-auto w-full max-w-2xl p-4">
@@ -39,6 +49,16 @@ export default async function AdminPage() {
       </header>
       <div className="py-4">
         <AdminDomains initial={initial} />
+      </div>
+      <header className="border-b pb-3">
+        <h2 className="text-xl font-bold">Bridge tokens</h2>
+        <p className="text-sm text-gray-500">
+          Server-to-server keys for client dashboards to read and work handoffs. A token sees
+          only its own property&apos;s handoffs. See docs/bridge-integration.md for the API.
+        </p>
+      </header>
+      <div className="py-4">
+        <BridgeTokens initial={initialTokens} />
       </div>
     </div>
   );
