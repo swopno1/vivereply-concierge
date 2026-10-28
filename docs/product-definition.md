@@ -85,6 +85,12 @@ check runs. Nothing is faked with timers.
   and the full transcript. Behind the admin login.
 - Admin page (/admin). The approved-domains list: which websites may embed
   the widget. Deactivating a domain stops its widget on the next message.
+  It also mints the bridge tokens below.
+- Staff bridge (server API — built, going live with the next deploy). Client
+  dashboards work handoffs from their own servers: list, read with
+  transcript, assign, close, follow-up notes — all as JSON, guarded by
+  per-property keys. Keys are hashed, revocable instantly, and never leave
+  the server. See docs/bridge-integration.md.
 - Security. Single admin password (env-held), signed login cookie, per-chat
   signed tokens that carry the property ID (the browser's claim is ignored),
   domain re-checked on every message. Honest limits: one admin, no 2FA, no
