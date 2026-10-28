@@ -1,32 +1,25 @@
 "use client";
 
-// Shared chat UI (step 4 refactor, token-carrying since step 4.5).
-// The main page (/) and the widget page (/widget) render the SAME
-// component, so a guest sees the same chat whether they open the demo
-// directly or through an embedded widget on another site. Compact mode
-// (widget) hides the staff link and uses the widget property's title;
-// everything else — messages, cards, language, tools — is identical.
+// Shared chat pane — the conversation only. On the web app (/) the
+// app/(shell)/layout.tsx sidebar wraps this component; the widget
+// (/widget panel) renders it bare with its own header. The shell's New
+// chat button reaches this component through a window event (see
+// AppShell.NEW_CHAT_EVENT); the reset is refused while a reply is in
+// flight, so an in-turn reset can never orphan state updates.
 //
-// The token (issued server-side by / or by the widget handshake) is
-// sent with every /api/chat call, and the API trusts ONLY the token's
-// propertyId. The browser never sends a propertyId anymore: a widget
-// token still does NOT switch the Suite catalogue or database in v1
-// (single demo property) — it only labels the conversation and gates
-// which site may host the chat. Multi-property routing is future
-// work, not something this prop pretends to do.
-//
-// Waiting states: /api/chat streams REAL phases, so the status line is
-// never faked — "Thinking…" while the model reasons, "Checking…" with
-// a one-line detail while a live resort check runs, then the reply
-// types itself out word by word. The input stays open while a reply is
-// in flight: a follow-up is shown immediately, marked waiting, and sent
-// automatically when the current reply finishes (it never interrupts
-// the in-flight turn, which would corrupt the single-conversation
-// booking guards). Tapping a typing reply shows the full text at once.
-// Cards appear only once typing completes, so a quote or draft never
-// pops in before the sentence that explains it.
+// Waiting states: /api/chat streams REAL phases — "Thinking…" while the
+// model reasons, "Checking…" with a one-line detail while a live resort
+// check runs, then the reply types itself out word by word. The input
+// stays open while a reply is in flight: a follow-up is shown
+// immediately, marked waiting, and sent automatically when the current
+// reply finishes (it never interrupts the in-flight turn, which would
+// corrupt the single-conversation booking guards). Tapping a typing reply
+// shows the full text at once. Cards appear only once typing completes,
+// so a quote or draft never pops in before the sentence that explains it.
+// Visitors who prefer reduced motion get the full reply instantly.
 
 import { useEffect, useRef, useState } from "react";
+import { NEW_CHAT_EVENT } from "./AppShell";
 
 type Card =
   | {
@@ -61,32 +54,44 @@ type Message = {
 
 type Phase = "idle" | "checking" | "thinking" | "typing";
 
+const GREETING =
+  "Hello! I'm the Vivereply Concierge. Ask about rooms, prices, check-in, or anything about your stay.";
+
+const SUGGESTIONS = [
+  "Sea-facing room for 2 nights in November",
+  "ব্যাম্বু কটেজ ৪ থেকে ৬ নভেম্বর খালি আছে কি?",
+  "I need help from a person",
+];
+
 function CardView({ card }: { card: Card }) {
   if (card.kind === "quote") {
     return (
-      <div className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm">
-        <p className="font-semibold">Quote — {card.room}</p>
-        <p className="text-gray-700">
+      <div className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+        <p className="text-sm font-semibold text-gray-900">Quote — {card.room}</p>
+        <p className="mt-0.5 text-sm text-gray-700">
           {card.checkIn} → {card.checkOut} · {card.nights} night{card.nights === 1 ? "" : "s"} ·{" "}
           {card.available} available
         </p>
-        <p className="font-semibold">Total: {card.total}</p>
+        <p className="mt-1 text-base font-bold text-gray-900">Total: {card.total}</p>
       </div>
     );
   }
   if (card.kind === "draft") {
     return (
-      <div className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm">
-        <p className="font-semibold">Booking draft held — {card.room}</p>
-        <p className="text-gray-700">
+      <div className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+        <p className="text-sm font-semibold text-gray-900">Booking draft held — {card.room}</p>
+        <p className="mt-0.5 text-sm text-gray-700">
           {card.checkIn} → {card.checkOut}
         </p>
-        <p>
-          Booking code: <span className="font-mono font-semibold">{card.bookingCode}</span>
+        <p className="mt-1 text-sm text-gray-900">
+          Booking code:{" "}
+          <span className="rounded-md bg-gray-100 px-2 py-0.5 font-mono font-semibold">
+            {card.bookingCode}
+          </span>
         </p>
-        <p>Total: {card.suiteTotal}</p>
+        <p className="mt-1 text-base font-bold text-gray-900">Total: {card.suiteTotal}</p>
         {!card.totalsMatch && (
-          <p className="text-amber-700">
+          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
             Note: the Suite total ({card.suiteTotal}) governs — it differs from the quoted{" "}
             {card.quotedTotal}.
           </p>
@@ -95,10 +100,10 @@ function CardView({ card }: { card: Card }) {
     );
   }
   return (
-    <div className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm">
-      <p className="font-semibold">Passed to staff</p>
-      <p className="text-gray-700">{card.reason}</p>
-      <p className="text-gray-700">{card.summary}</p>
+    <div className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+      <p className="text-sm font-semibold text-gray-900">Passed to staff</p>
+      <p className="mt-0.5 text-sm text-gray-700">{card.reason}</p>
+      <p className="mt-0.5 text-sm text-gray-700">{card.summary}</p>
     </div>
   );
 }
@@ -115,11 +120,7 @@ export default function Chat({
   source: "direct" | "widget";
 }) {
   const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "greeting",
-      role: "assistant",
-      text: "Hello! I'm the Vivereply Concierge. Ask about rooms, prices, check-in, or anything about your stay.",
-    },
+    { id: "greeting", role: "assistant", text: GREETING },
   ]);
   const [input, setInput] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -144,6 +145,29 @@ export default function Chat({
     if (el && nearBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [messages, phase, phaseDetail, reassurance]);
 
+  function newChat() {
+    // Reset to a fresh conversation. Refused while a reply is in flight:
+    // resetting mid-turn would orphan the turn's state updates.
+    if (busyRef.current) return;
+    queueRef.current = [];
+    setQueuedCount(0);
+    conversationIdRef.current = null;
+    setMessages([{ id: "greeting", role: "assistant", text: GREETING }]);
+    setInput("");
+    setPhase("idle");
+    setPhaseDetail("");
+    setReassurance("");
+    setError("");
+  }
+
+  // The shell sidebar's New chat button dispatches this; the widget has
+  // no shell, so the listener simply never fires there.
+  useEffect(() => {
+    const reset = () => newChat();
+    window.addEventListener(NEW_CHAT_EVENT, reset);
+    return () => window.removeEventListener(NEW_CHAT_EVENT, reset);
+  }, []);
+
   function startNextFromQueue() {
     const next = queueRef.current[0];
     if (!next || busyRef.current) return;
@@ -156,6 +180,16 @@ export default function Chat({
   function typewrite(fullText: string, cards: Card[]): Promise<void> {
     return new Promise((resolve) => {
       const id = nextId();
+      // Reduced motion: show the full reply at once, no typing effect.
+      if (
+        typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ) {
+        setMessages((m) => [...m, { role: "assistant", text: fullText, cards, id }]);
+        resolve();
+        return;
+      }
       setMessages((m) => [...m, { role: "assistant", text: "", cards, id, typing: true }]);
       const words = fullText.split(" ");
       // Chunked so a long reply still finishes in ~3 seconds; a short
@@ -303,28 +337,31 @@ export default function Chat({
   }
 
   const busy = phase !== "idle";
+  const showSuggestions = messages.length <= 1 && phase === "idle" && !error;
+
+  // Desktop web constrains the reading column; the narrow widget uses full width.
+  const columnWidth = compact ? "w-full" : "mx-auto w-full max-w-3xl";
 
   return (
     <main
       className={
         compact
-          ? "mx-auto flex min-h-screen w-full flex-col p-3"
-          : "mx-auto flex min-h-screen max-w-2xl flex-col p-4"
+          ? "mx-auto flex h-screen w-full flex-col bg-white font-sans text-gray-900 antialiased"
+          : "flex h-full w-full flex-col bg-white font-sans text-gray-900 antialiased"
       }
     >
-      <header className="border-b pb-3">
-        <h1 className="text-xl font-bold">{compact && title ? title : "Vivereply Concierge"}</h1>
-        <p className="text-sm text-gray-500">
-          {compact ? "Ask about rooms, prices, and your stay." : "Demo chat — conversations now saved."}
-        </p>
-        {!compact && (
-          <p className="text-sm">
-            <a href="/staff" className="underline">
-              Staff view (handoffs)
-            </a>
-          </p>
-        )}
-      </header>
+      {compact && (
+        <header className="flex items-center gap-3 border-b border-gray-200 bg-white/90 px-4 py-3 backdrop-blur">
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-semibold leading-tight">
+              {title ?? "Vivereply Concierge"}
+            </span>
+            <span className="block truncate text-xs text-gray-500">
+              Ask about rooms, prices, and your stay.
+            </span>
+          </span>
+        </header>
+      )}
 
       <div
         ref={listRef}
@@ -332,72 +369,106 @@ export default function Chat({
           const el = e.currentTarget;
           nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
         }}
-        className="flex flex-1 flex-col gap-3 overflow-y-auto py-4"
+        className="flex flex-1 flex-col overflow-y-auto px-4 py-6"
       >
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={`flex max-w-[80%] flex-col gap-2 ${m.role === "user" ? "self-end items-end" : "self-start items-start"}`}
-          >
-            <div
-              onClick={() => {
-                if (m.typing) skipTypingRef.current?.();
-              }}
-              title={m.typing ? "Tap to show the full reply" : undefined}
-              className={`rounded-2xl px-4 py-2 text-sm leading-relaxed ${
-                m.role === "user" ? "bg-black text-white" : "bg-gray-100 text-gray-900"
-              } ${m.typing ? "cursor-pointer" : ""}`}
-            >
-              {m.text}
-              {m.typing && <span className="animate-pulse">▍</span>}
-            </div>
-            {m.typing && <p className="text-xs text-gray-400">Tap to show the full reply</p>}
-            {m.pending && <p className="text-xs text-gray-400">Waiting…</p>}
-            {!m.typing && (m.cards ?? []).map((card, j) => <CardView key={j} card={card} />)}
-          </div>
-        ))}
-        {(phase === "checking" || phase === "thinking") && (
-          <div
-            aria-live="polite"
-            className="self-start rounded-2xl bg-gray-100 px-4 py-2 text-sm text-gray-500"
-          >
-            <span>
-              {phase === "checking" ? "Checking…" : "Thinking…"}
-              <span className="ml-1 inline-flex gap-1 align-middle">
-                <span className="animate-bounce">.</span>
-                <span className="animate-bounce" style={{ animationDelay: "150ms" }}>
+        <div className={`flex flex-col gap-6 ${columnWidth}`}>
+          {messages.map((m) =>
+            m.role === "user" ? (
+              <div key={m.id} className="flex flex-col items-end gap-1">
+                <div className="max-w-[80%] whitespace-pre-wrap rounded-3xl bg-gray-100 px-5 py-2.5 text-[15px] leading-7 text-gray-900">
+                  {m.text}
+                </div>
+                {m.pending && <p className="text-xs text-gray-500">Waiting…</p>}
+              </div>
+            ) : (
+              <div key={m.id} className="flex flex-col items-start gap-2">
+                <div
+                  onClick={() => {
+                    if (m.typing) skipTypingRef.current?.();
+                  }}
+                  title={m.typing ? "Tap to show the full reply" : undefined}
+                  className={`w-full whitespace-pre-wrap text-[15px] leading-7 text-gray-900 ${m.typing ? "cursor-pointer" : ""}`}
+                >
+                  {m.text}
+                  {m.typing && <span className="motion-safe:animate-pulse">▍</span>}
+                </div>
+                {m.typing && <p className="text-xs text-gray-500">Tap to show the full reply</p>}
+                {!m.typing && (m.cards ?? []).map((card, j) => <CardView key={j} card={card} />)}
+              </div>
+            )
+          )}
+          {(phase === "checking" || phase === "thinking") && (
+            <div aria-live="polite" className="flex items-center gap-2 text-sm text-gray-500">
+              <span className="inline-flex gap-1">
+                <span className="motion-safe:animate-bounce">.</span>
+                <span className="motion-safe:animate-bounce" style={{ animationDelay: "150ms" }}>
                   .
                 </span>
-                <span className="animate-bounce" style={{ animationDelay: "300ms" }}>
+                <span className="motion-safe:animate-bounce" style={{ animationDelay: "300ms" }}>
                   .
                 </span>
               </span>
-            </span>
-            {phaseDetail && <span className="block text-xs text-gray-500">{phaseDetail}</span>}
-            {reassurance && <span className="block text-xs italic text-gray-500">{reassurance}</span>}
-          </div>
-        )}
+              <span>
+                {phase === "checking" ? "Checking…" : "Thinking…"}
+                {phaseDetail && <span className="text-gray-500"> — {phaseDetail}</span>}
+              </span>
+              {reassurance && <span className="italic">{reassurance}</span>}
+            </div>
+          )}
+          {showSuggestions && (
+            <div className="flex flex-wrap gap-2">
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => submit(s)}
+                  className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 shadow-sm hover:bg-gray-50"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {error && (
-        <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <div className={`px-4 ${columnWidth}`}>
+          <p className="mb-2 rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-700">{error}</p>
+        </div>
       )}
 
-      <div className="flex gap-2 border-t pt-3">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder={busy ? "Type a follow-up — I'll send it next…" : "Type a message…"}
-          className="flex-1 rounded-full border px-4 py-2 text-sm outline-none focus:border-black"
-        />
-        <button
-          onClick={handleSend}
-          disabled={!input.trim() && queuedCount === 0}
-          className="rounded-full bg-black px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
-        >
-          Send
-        </button>
+      <div className="border-t border-gray-200 bg-white px-4 pb-3 pt-3">
+        <div className={columnWidth}>
+          <div className="flex items-end gap-2 rounded-[28px] border border-gray-300 bg-white px-2 py-2 shadow-sm focus-within:border-gray-500">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSend()}
+              placeholder={busy ? "Type a follow-up — I'll send it next…" : "Message the Concierge…"}
+              aria-label="Message the Concierge"
+              className="flex-1 bg-transparent px-3 py-2 text-[15px] text-gray-900 outline-none placeholder:text-gray-400"
+            />
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() && queuedCount === 0}
+              aria-label="Send message"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white disabled:opacity-30"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                <path
+                  d="M8 13V3M8 3L3.5 7.5M8 3l4.5 4.5"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
+          <p className="mt-2 text-center text-xs text-gray-400">
+            The Concierge answers from live resort data — staff confirm every booking.
+          </p>
+        </div>
       </div>
     </main>
   );

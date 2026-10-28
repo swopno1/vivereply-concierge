@@ -40,7 +40,7 @@ function LoginInner() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center p-4">
+    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center p-4">
       <h1 className="text-xl font-bold">Admin login</h1>
       <p className="mt-1 text-sm text-gray-500">
         Staff view and domain settings are protected. No signup in v1 — the admin password is set

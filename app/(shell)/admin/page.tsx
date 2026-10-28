@@ -1,15 +1,15 @@
-// Admin configure page (step 4.5). Server-rendered, protected: no
-// valid session cookie means a redirect to /login, before any domain
-// row is read or rendered. The domain list itself comes from the
-// database here; adds and toggles go through /api/admin/domains,
-// which re-checks the session on every call.
+// Admin configure page (inside the shell route group: nav and sign-out
+// live in the sidebar, so this page keeps only its own content).
+// Server-rendered, protected: no valid session cookie means a redirect
+// to /login, before any domain row is read or rendered. The domain list
+// itself comes from the database here; adds and toggles go through
+// /api/admin/domains, which re-checks the session on every call.
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
-import AdminDomains from "../components/AdminDomains";
-import LogoutButton from "../components/LogoutButton";
+import AdminDomains from "../../components/AdminDomains";
 
 export const dynamic = "force-dynamic";
 
@@ -29,26 +29,17 @@ export default async function AdminPage() {
   }));
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col p-4">
-      <header className="flex items-start justify-between gap-3 border-b pb-3">
-        <div>
-          <h1 className="text-xl font-bold">Admin — Approved domains</h1>
-          <p className="text-sm text-gray-500">
-            Only these sites can host the widget. Deactivating a domain stops its widget on the
-            next chat message.
-          </p>
-        </div>
-        <LogoutButton />
+    <div className="mx-auto w-full max-w-2xl p-4">
+      <header className="border-b pb-3">
+        <h1 className="text-xl font-bold">Admin — Approved domains</h1>
+        <p className="text-sm text-gray-500">
+          Only these sites can host the widget. Deactivating a domain stops its widget on the
+          next chat message.
+        </p>
       </header>
       <div className="py-4">
         <AdminDomains initial={initial} />
       </div>
-      <p className="border-t pt-3 text-sm text-gray-500">
-        <a href="/staff" className="underline">
-          Staff view (handoffs)
-        </a>{" "}
-        · <a href="/" className="underline">Back to chat</a>
-      </p>
-    </main>
+    </div>
   );
 }

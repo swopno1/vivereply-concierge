@@ -29,16 +29,16 @@
   button.setAttribute("aria-label", "Open Vivereply Concierge chat");
   button.style.cssText =
     "position:fixed;right:20px;bottom:20px;z-index:2147483647;" +
-    "background:#000;color:#fff;border:0;border-radius:9999px;" +
-    "padding:12px 20px;font-size:14px;font-weight:600;cursor:pointer;" +
-    "box-shadow:0 4px 16px rgba(0,0,0,0.25);font-family:inherit;";
+    "background:#111827;color:#fff;border:0;border-radius:9999px;" +
+    "padding:13px 22px;font-size:14px;font-weight:600;cursor:pointer;" +
+    "box-shadow:0 8px 24px rgba(0,0,0,0.22),0 2px 6px rgba(0,0,0,0.12);font-family:inherit;";
 
   var panel = document.createElement("div");
   panel.style.cssText =
     "position:fixed;right:20px;bottom:76px;z-index:2147483647;" +
-    "width:360px;max-width:calc(100vw - 40px);height:520px;max-height:calc(100vh - 100px);" +
-    "background:#fff;border:1px solid #d1d5db;border-radius:16px;overflow:hidden;" +
-    "box-shadow:0 8px 32px rgba(0,0,0,0.25);display:none;";
+    "width:380px;max-width:calc(100vw - 40px);height:560px;max-height:calc(100vh - 100px);" +
+    "background:#fff;border:1px solid #e5e7eb;border-radius:20px;overflow:hidden;" +
+    "box-shadow:0 16px 48px rgba(0,0,0,0.18),0 4px 12px rgba(0,0,0,0.08);display:none;";
 
   var open = false;
   button.addEventListener("click", function () {
