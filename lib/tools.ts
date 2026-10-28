@@ -11,6 +11,16 @@ import { isDateString, nightsBetween, quoteForStay, formatTaka } from "@/demo-co
 import { getAvailability, createBooking } from "./suite";
 import type { ToolDefinition } from "./meta";
 
+export type BookingDraftRecord = {
+  bookingCode: string;
+  room: string;
+  checkIn: string;
+  checkOut: string;
+  suiteTotal: string;
+  quotedTotal: string;
+  totalsMatch: boolean;
+};
+
 export type ToolDb = {
   hasQuote(
     conversationId: string,
@@ -19,6 +29,7 @@ export type ToolDb = {
     checkOut: string
   ): Promise<boolean>;
   hasDraft(conversationId: string): Promise<boolean>;
+  getDraft(conversationId: string): Promise<BookingDraftRecord | null>;
   createHandoff(conversationId: string, reason: string, summary: string): Promise<void>;
 };
 
@@ -74,6 +85,18 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
           guestPhone: { type: "string", description: "Guest phone number." },
         },
         required: ["roomSlug", "checkIn", "checkOut", "guestName", "guestEmail", "guestPhone"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "verify_booking",
+      description: "Re-verify the booking draft held in this conversation, from its confirmed record. Use when the guest asks whether their booking is confirmed, or when anything about the booking is in doubt. Never use availability to verify a booking.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
       },
     },
   },
@@ -140,6 +163,24 @@ export function createToolExecutor(conversationId: string, db: ToolDb) {
       if (!reason || !summary) return err("A handoff needs a reason and a summary.");
       await db.createHandoff(conversationId, reason, summary);
       return { handedOff: true, message: "The conversation has been passed to staff with the full summary." };
+    }
+
+    if (name === "verify_booking") {
+      const draft = await db.getDraft(conversationId);
+      if (!draft) {
+        return err("No booking draft is held in this conversation yet. A draft exists only after the guest confirms a quote and shares their details.");
+      }
+      return {
+        verified: true,
+        bookingCode: draft.bookingCode,
+        room: draft.room,
+        checkIn: draft.checkIn,
+        checkOut: draft.checkOut,
+        suiteTotal: draft.suiteTotal,
+        quotedTotal: draft.quotedTotal,
+        totalsMatch: draft.totalsMatch,
+        message: "This booking is confirmed as held (status PENDING, no payment taken). Read these details back to the guest exactly as shown.",
+      };
     }
 
     const stay = args as StayArgs;

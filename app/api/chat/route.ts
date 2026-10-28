@@ -105,6 +105,42 @@ export async function POST(req: NextRequest) {
           return Boolean(output?.bookingCode);
         });
       },
+      getDraft: async (cid) => {
+        const logs = await prisma.toolCallLog.findMany({
+          where: { conversationId: cid, toolName: "create_booking_draft" },
+          orderBy: { createdAt: "desc" },
+        });
+        for (const l of logs) {
+          const output = l.output as {
+            bookingCode?: string;
+            room?: string;
+            checkIn?: string;
+            checkOut?: string;
+            suiteTotal?: string;
+            quotedTotal?: string;
+            totalsMatch?: boolean;
+          } | null;
+          if (
+            output?.bookingCode &&
+            output.room &&
+            output.checkIn &&
+            output.checkOut &&
+            output.suiteTotal &&
+            output.quotedTotal
+          ) {
+            return {
+              bookingCode: output.bookingCode,
+              room: output.room,
+              checkIn: output.checkIn,
+              checkOut: output.checkOut,
+              suiteTotal: output.suiteTotal,
+              quotedTotal: output.quotedTotal,
+              totalsMatch: output.totalsMatch === true,
+            };
+          }
+        }
+        return null;
+      },
       createHandoff: async (cid, reason, summary) => {
         await prisma.handoffRecord.create({ data: { conversationId: cid, reason, summary } });
         await prisma.conversation.update({
