@@ -1,8 +1,8 @@
 // Login (multi-tenant core). Owners sign in with the email + password from
-// the seed file; the founder bootstrap is password-only (empty email,
-// ADMIN_PASSWORD env). No signup anywhere. After login the browser is sent
-// to ?next= (same-site path only) or the role home (/admin for super-admin,
-// /settings for owners) so the session cookie applies on load.
+// registration; the founder bootstrap is ADMIN_EMAIL + ADMIN_PASSWORD (env).
+// No signup anywhere. After login the browser is sent to ?next= (same-site
+// path only) or the role home (/admin for super-admin, /settings for
+// owners) so the session cookie applies on load.
 
 "use client";
 
@@ -23,7 +23,7 @@ function LoginInner() {
   const [sending, setSending] = useState(false);
 
   async function submit() {
-    if (!password || sending) return;
+    if (!email.trim() || !password || sending) return;
     setError("");
     setSending(true);
     try {
@@ -77,7 +77,7 @@ function LoginInner() {
         />
         <button
           onClick={submit}
-          disabled={sending || !password}
+          disabled={sending || !email.trim() || !password}
           className="rounded-full bg-black px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
           Log in

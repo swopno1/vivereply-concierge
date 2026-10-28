@@ -6,11 +6,11 @@
 //   - Session: proves a browser passed /login. Stored as an HttpOnly
 //     cookie, checked server-side by /staff, /admin, /settings,
 //     /onboarding, and /api/admin/*. Two roles: SUPER_ADMIN (the
-//     founder — password-only bootstrap via ADMIN_PASSWORD env, or a
+//     founder — ADMIN_EMAIL + ADMIN_PASSWORD env, checked first, or a
 //     User row) and OWNER (one property, email + scrypt password from
-//     the seed file). There is no signup, no password reset, no 2FA —
-//     recovery is changing the env var (bootstrap) or re-seeding (user
-//     rows). That is the honest bar, stated in the README.
+//     registration). There is no signup, no password reset-by-email, no
+//     2FA — recovery is changing the env vars (bootstrap) or the admin
+//     revoke (user rows). That is the honest bar, stated in the README.
 //   - Chat token: proves a chat request is allowed. Issued either
 //     server-side for a direct visit to / (scope "direct"), or by the
 //     widget handshake for an approved domain (scope "widget").
@@ -96,6 +96,17 @@ export function verifyAdminPassword(password: string): boolean {
   const a = createHash("sha256").update(password).digest();
   const b = createHash("sha256").update(expected).digest();
   return timingSafeEqual(a, b);
+}
+
+// Founder bootstrap identity: login as super-admin needs BOTH this email
+// and ADMIN_PASSWORD. Unset or empty ADMIN_EMAIL disables the bootstrap
+// entirely (fail closed — a User-row super-admin still works). Never reuse
+// this email for a User row: the bootstrap check runs first, so the row
+// would be shadowed (recovery stays unconditional, by design).
+export function isBootstrapEmail(email: string): boolean {
+  const admin = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+  if (!admin) return false;
+  return email.toLowerCase().trim() === admin;
 }
 
 // --- Owner passwords (scrypt, no new deps) -------------------------------

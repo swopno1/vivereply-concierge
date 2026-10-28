@@ -106,7 +106,7 @@ Environment (see `.env.example` for the full list):
 - `DATABASE_URL` — Supabase transaction pooler (port 6543, runtime)
 - `DIRECT_URL` — Supabase session pooler (port 5432, migrations)
 - `GEMINI_API_KEY` — Google AI Studio, embeddings only
-- `ADMIN_PASSWORD` — founder bootstrap login (super-admin, password-only)
+- `ADMIN_EMAIL` + `ADMIN_PASSWORD` — founder bootstrap login (super-admin)
 - `SESSION_SECRET` — signs sessions + tokens (≥16 chars; unset in
   production fails login and chat closed)
 - `BINDING_SECRET_KEY` — encrypts backend keys at rest (≥32 chars)
@@ -149,7 +149,8 @@ panel, never a guessed property.
 
 - **Logins**: owners sign in with email + scrypt password (seeded or
   registered by super-admin, temp password shown once, must-change
-  banner until replaced). Sessions are signed cookies bound to
+  banner until replaced). The founder bootstrap is `ADMIN_EMAIL` +
+  `ADMIN_PASSWORD` (env, checked first). Sessions are signed cookies bound to
   server-side rows — revocable per session (logout), per user
   (password change, admin kill-switch), with 7-day absolute + 24-hour
   idle expiry. The founder bootstrap is password-only via env.
