@@ -33,6 +33,9 @@ resort.
 - **Staff bridge (server API)** — client dashboards list, read, assign,
   close, and annotate handoffs as JSON, guarded by per-property keys minted
   in `/admin`. See `docs/bridge-integration.md`.
+- **Settings** (`/settings`, admin-only) — copy-paste widget codes, bridge
+  snippets, security status, and profile; Secrets and Appearance are
+  reserved Later rooms.
 - **RAG grounding (supporting only)** — property questions (check-in
   times, food, packages, location) are answered from seeded demo
   knowledge via pgvector + Gemini embeddings, similarity ≥ 0.45, top 4.

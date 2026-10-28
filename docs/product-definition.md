@@ -86,6 +86,10 @@ check runs. Nothing is faked with timers.
 - Admin page (/admin). The approved-domains list: which websites may embed
   the widget. Deactivating a domain stops its widget on the next message.
   It also mints the bridge tokens below.
+- Settings (/settings — built, going live with the next deploy). Admin-only
+  configuration rooms: copy-paste chat widget codes per key, staff bridge
+  server snippets, a live security status board, and the admin profile.
+  Secrets and appearance are honest Later placeholders for now.
 - Staff bridge (server API — built, going live with the next deploy). Client
   dashboards work handoffs from their own servers: list, read with
   transcript, assign, close, follow-up notes — all as JSON, guarded by

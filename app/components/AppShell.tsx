@@ -17,6 +17,7 @@ const NAV = [
   { href: "/", label: "Chat" },
   { href: "/staff", label: "Staff handoffs" },
   { href: "/admin", label: "Admin" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export default function AppShell({
