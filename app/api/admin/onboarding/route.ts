@@ -1,4 +1,5 @@
-// Onboarding admin API: status + submit (RAG engine, admin session only).
+// Onboarding admin API: status + submit (RAG engine, session only; owners
+// act only for their own property).
 //   GET  ?propertyId= -> { profile, run } (either may be null)
 //   POST -> { propertyId, profile, website?, filePaths[] } validates,
 //     enforces the once-only gate, upserts the profile, (re)starts the run,
@@ -8,18 +9,12 @@
 // enforced by the worker + callback, which abort to PARTIAL.
 
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { getSession, sessionCan } from "@/lib/tenant";
 import { ONBOARDING_BUDGET, sanitizeFilename } from "@/lib/onboarding";
 import { signDownloadUrl, signUploadUrl } from "@/lib/storage";
 import { invokeIngestionWorker } from "@/lib/worker";
-
-async function isAdmin(): Promise<boolean> {
-  const store = await cookies();
-  return verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value);
-}
 
 function str(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
@@ -78,12 +73,16 @@ function shapeRun(run: {
 }
 
 export async function GET(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const propertyId = req.nextUrl.searchParams.get("propertyId") ?? "";
   if (!propertyId) {
     return NextResponse.json({ error: "propertyId query is required." }, { status: 400 });
+  }
+  if (!sessionCan(session, propertyId)) {
+    return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
   }
   const [profile, run] = await Promise.all([
     prisma.propertyProfile.findUnique({ where: { propertyId } }),
@@ -93,7 +92,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const body = await req.json().catch(() => null);
@@ -102,6 +102,9 @@ export async function POST(req: NextRequest) {
   const businessName = str(profile.businessName, 150);
   if (!propertyId) {
     return NextResponse.json({ error: "Property ID is required (max 100 characters)." }, { status: 400 });
+  }
+  if (!sessionCan(session, propertyId)) {
+    return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
   }
   if (!businessName) {
     return NextResponse.json({ error: "Business name is required (max 150 characters)." }, { status: 400 });

@@ -9,12 +9,12 @@
 // no code change. It then asks that origin for a widget token, sending
 // the embed key. The browser attaches the host page's Origin header to
 // that request, and the server only issues a token when that origin's
-// host is approved for the key's property (see /admin). Without a
+// host is approved for the key's property (see Settings). Without a
 // token, the panel shows an error instead of a chat — an unapproved
 // site cannot host the bot by copying this script. The token is
 // short-lived and scoped to one domain and property; /api/chat
 // re-checks approval on every message, so deactivating a domain in
-// /admin stops its widget on the next message. This script never sees
+// Settings stops its widget on the next message. This script never sees
 // messages or guest data; the iframe talks to /api/chat.
 
 (function () {

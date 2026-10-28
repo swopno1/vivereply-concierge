@@ -1,13 +1,16 @@
-// Admin session + chat tokens (step 4.5). No new dependencies:
-// everything here uses Node's built-in crypto (HMAC-SHA256).
+// Session + chat tokens (step 4.5, multi-tenant core). No new
+// dependencies: everything here uses Node's built-in crypto
+// (HMAC-SHA256 for tokens, scrypt for passwords).
 //
 // Two different tokens, do not confuse them:
-//   - Admin session: proves a browser passed the /login password.
-//     Stored as an HttpOnly cookie, checked server-side by /staff,
-//     /admin, and /api/admin/*. Single admin in v1: the password is
-//     ADMIN_PASSWORD (Vercel env, never in the repo). There is no
-//     signup, no password reset, no 2FA in v1 — recovery is changing
-//     the env var. That is the honest demo bar, stated in the README.
+//   - Session: proves a browser passed /login. Stored as an HttpOnly
+//     cookie, checked server-side by /staff, /admin, /settings,
+//     /onboarding, and /api/admin/*. Two roles: SUPER_ADMIN (the
+//     founder — password-only bootstrap via ADMIN_PASSWORD env, or a
+//     User row) and OWNER (one property, email + scrypt password from
+//     the seed file). There is no signup, no password reset, no 2FA —
+//     recovery is changing the env var (bootstrap) or re-seeding (user
+//     rows). That is the honest bar, stated in the README.
 //   - Chat token: proves a chat request is allowed. Issued either
 //     server-side for a direct visit to / (scope "direct"), or by the
 //     widget handshake for an approved domain (scope "widget").
@@ -15,7 +18,7 @@
 //     propertyId the browser sends. A widget token also carries its
 //     domain, and /api/chat re-checks that domain against the
 //     approved list on every message, so deactivating a domain in
-//     /admin kills its widgets on the next message, not just on new
+//     Settings kills its widgets on the next message, not just on new
 //     embeds.
 //
 // SESSION_SECRET: if unset in development, a dev-only fallback is
@@ -24,11 +27,12 @@
 // an unset secret means tokens cannot be created or verified — the
 // app fails closed rather than signing tokens with a known secret.
 
-import { createHmac, createHash, timingSafeEqual } from "node:crypto";
+import { createHmac, createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 
 export const ADMIN_SESSION_COOKIE = "concierge_session";
 const SESSION_DAYS = 7;
 const CHAT_TOKEN_HOURS = 24;
+const EMBED_TOKEN_MINUTES = 15;
 
 function sessionSecret(): string | null {
   const secret = process.env.SESSION_SECRET;
@@ -87,22 +91,89 @@ export function verifyAdminPassword(password: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-// --- Admin session --------------------------------------------------
+// --- Owner passwords (scrypt, no new deps) -------------------------------
+// Format: scrypt$1$<salt-hex>$<hash-hex> (N=16384, r=8, p=1, 32 bytes).
+// Hashing lives here and in prisma/seed-tenants.mjs (plain-JS twin with the
+// same parameters — no tsx needed to seed; change both together).
+const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1, keyLen: 32 } as const;
 
-type SessionPayload = { v: number; exp: number };
+function scryptKey(password: string, salt: Buffer): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scrypt(password, salt, SCRYPT_PARAMS.keyLen, { N: SCRYPT_PARAMS.N, r: SCRYPT_PARAMS.r, p: SCRYPT_PARAMS.p }, (err, key) =>
+      err ? reject(err) : resolve(key as Buffer)
+    );
+  });
+}
 
-export function createSessionToken(): string | null {
+export async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16);
+  const hash = await scryptKey(password, salt);
+  return `scrypt$1$${salt.toString("hex")}$${hash.toString("hex")}`;
+}
+
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const [algo, ver, saltHex, hashHex] = stored.split("$");
+  if (algo !== "scrypt" || ver !== "1" || !saltHex || !hashHex) return false;
+  let salt: Buffer;
+  let expected: Buffer;
+  try {
+    salt = Buffer.from(saltHex, "hex");
+    expected = Buffer.from(hashHex, "hex");
+  } catch {
+    return false;
+  }
+  if (salt.length !== 16 || expected.length !== SCRYPT_PARAMS.keyLen) return false;
+  let actual: Buffer;
+  try {
+    actual = await scryptKey(password, salt);
+  } catch {
+    return false;
+  }
+  return timingSafeEqual(actual, expected);
+}
+
+// A valid-format hash of a password nobody knows, for the login timing
+// path: unknown emails still pay one scrypt, so enumeration by timing
+// buys nothing. Useless to an attacker — it verifies nothing real.
+export const DUMMY_PASSWORD_HASH =
+  "scrypt$1$a81e47d152cf4764e8e651fffc7a9547$f8b778f0a1c7c165bd2f27573b286ba90656874c526d8bdfd089d30884f70621";
+
+// --- Session (v2, role + property) --------------------------------------
+// v1 tokens (boolean admin) are NOT accepted anymore — this deploy logs
+// everyone out exactly once, and every session from here carries who and
+// which property. An OWNER session always carries its propertyId; a
+// SUPER_ADMIN session carries null (all properties).
+
+export type SessionRole = "SUPER_ADMIN" | "OWNER";
+
+export type Session = {
+  uid: string;
+  email: string | null;
+  role: SessionRole;
+  propertyId: string | null;
+};
+
+type SessionPayload = { v: number; uid: string; email: string | null; role: string; propertyId: string | null; exp: number };
+
+export function createSessionToken(session: Session): string | null {
   return encodeToken({
-    v: 1,
+    v: 2,
+    uid: session.uid,
+    email: session.email,
+    role: session.role,
+    propertyId: session.propertyId,
     exp: Math.floor(Date.now() / 1000) + SESSION_DAYS * 24 * 3600,
   });
 }
 
-export function verifySessionToken(token: string | null | undefined): boolean {
-  if (!token) return false;
+export function verifySessionToken(token: string | null | undefined): Session | null {
+  if (!token) return null;
   const payload = decodeToken<SessionPayload>(token);
-  if (!payload || payload.v !== 1) return false;
-  return payload.exp > Math.floor(Date.now() / 1000);
+  if (!payload || payload.v !== 2) return null;
+  if (!payload.uid || (payload.role !== "SUPER_ADMIN" && payload.role !== "OWNER")) return null;
+  if (payload.role === "OWNER" && !payload.propertyId) return null;
+  if (payload.exp <= Math.floor(Date.now() / 1000)) return null;
+  return { uid: payload.uid, email: payload.email ?? null, role: payload.role, propertyId: payload.propertyId };
 }
 
 // --- Chat token -----------------------------------------------------
@@ -139,6 +210,42 @@ export function verifyChatToken(token: string | null | undefined): ChatToken | n
     return null;
   }
   if (payload.scope === "widget" && !payload.domain) return null;
+  if (payload.exp <= Math.floor(Date.now() / 1000)) return null;
+  return payload;
+}
+
+// --- Staff embed token -------------------------------------------------
+// Short-lived (15 min), single-purpose: authorizes the staff iframe widget
+// (/staff/embed) for ONE property from ONE dashboard origin. Minted
+// server-side by the client dashboard through POST /api/bridge/embed-tokens
+// (bridge-key auth — embed tokens can never mint more tokens). The origin
+// binding is enforced at iframe load (Referer check); the 15-minute expiry
+// bounds a stolen token's window. kind:"embed" separates these from chat
+// tokens — neither verifies as the other (probed).
+
+export type EmbedToken = {
+  v: number;
+  kind: "embed";
+  propertyId: string;
+  origin: string;
+  exp: number;
+};
+
+export function createEmbedToken(args: { propertyId: string; origin: string }): string | null {
+  return encodeToken({
+    v: 1,
+    kind: "embed",
+    propertyId: args.propertyId,
+    origin: args.origin,
+    exp: Math.floor(Date.now() / 1000) + EMBED_TOKEN_MINUTES * 60,
+  });
+}
+
+export function verifyEmbedToken(token: string | null | undefined): EmbedToken | null {
+  if (!token) return null;
+  const payload = decodeToken<EmbedToken>(token);
+  if (!payload || payload.v !== 1 || payload.kind !== "embed") return null;
+  if (!payload.propertyId || !payload.origin) return null;
   if (payload.exp <= Math.floor(Date.now() / 1000)) return null;
   return payload;
 }

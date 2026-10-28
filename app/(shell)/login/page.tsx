@@ -1,21 +1,23 @@
-// Admin login (step 4.5). Single admin, password only — no signup,
-// no email, no user table. The password is ADMIN_PASSWORD (env).
-// After login the browser is sent to /admin (or ?next=, when that
-// path is a same-site path) so the session cookie applies on load.
+// Login (multi-tenant core). Owners sign in with the email + password from
+// the seed file; the founder bootstrap is password-only (empty email,
+// ADMIN_PASSWORD env). No signup anywhere. After login the browser is sent
+// to ?next= (same-site path only) or the role home (/admin for super-admin,
+// /settings for owners) so the session cookie applies on load.
 
 "use client";
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-function safeNext(raw: string | null): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/admin";
+function safeNext(raw: string | null, fallback: string): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return fallback;
   return raw;
 }
 
 function LoginInner() {
   const params = useSearchParams();
-  const next = safeNext(params.get("next"));
+  const requestedNext = params.get("next");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
@@ -28,12 +30,14 @@ function LoginInner() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ email: email.trim(), password }),
       });
-      if (!res.ok) throw new Error("Invalid password.");
-      window.location.href = next;
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error("Invalid email or password.");
+      const fallback = data?.role === "OWNER" ? "/settings" : "/admin";
+      window.location.href = safeNext(requestedNext, fallback);
     } catch {
-      setError("Invalid password.");
+      setError("Invalid email or password.");
     } finally {
       setSending(false);
     }
@@ -47,18 +51,27 @@ function LoginInner() {
         </span>
         <span className="text-lg font-bold">Vivereply Concierge</span>
       </div>
-      <h1 className="text-xl font-bold">Admin login</h1>
+      <h1 className="text-xl font-bold">Log in</h1>
       <p className="mt-1 text-sm text-gray-500">
-        Staff view and domain settings are protected. No signup in v1 — the admin password is set
-        in the deployment environment.
+        Owners sign in with the email and password from registration. No signup — new properties
+        are registered by the Vivereply team.
       </p>
       <div className="mt-4 flex flex-col gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="Owner email"
+          autoComplete="username"
+          className="rounded-full border px-4 py-2 text-sm outline-none focus:border-black"
+        />
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder="Admin password"
+          placeholder="Password"
           autoComplete="current-password"
           className="rounded-full border px-4 py-2 text-sm outline-none focus:border-black"
         />

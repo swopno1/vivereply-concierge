@@ -199,6 +199,115 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
   redeploy worker + app → live adversarial trial (metadata-URL run must fail
   closed with zero chunks; fixture run lands indexed).
 
+## 2026-10-28 — P0 sweep: 6/7 green, prod chat red (our side, not Cosmo)
+
+- PASS: app home 200, bridge unauth 401, /settings 307→login, widget
+  handshake accept + reject, demo1 widget tag present.
+- FAIL: live chat quote returns "The resort's booking connection needs
+  attention." Root cause: prod main = 8d007f7 (adapters); chat route calls
+  adapterForProperty + catalogueForProperty, which query the NEW
+  propertyBinding/roomMapping tables; prod DB not migrated → throw → that
+  exact error (app/api/chat/route.ts:229-234).
+- demo1 Suite is HEALTHY: direct availability probe Bamboo Dec 1–3 →
+  available: 4, HTTP 200. No Cosmo action needed.
+- ALSO FOUND: PR #6 (RAG) is NOT merged — main tip is 8d007f7. Merge order
+  must be #6 first, then tenant work (feature/tenant-core stacks on it).
+- PENDING founder action (blocks P0): run `pnpm exec prisma db push`
+  against the PROD DB from outside the sandbox, confirm, then P0 re-runs.
+
+## 2026-10-28 — P1 built, static proof green (uncommitted, feature/tenant-core)
+
+- Tenant model: Property (slug id, name, widgetKey, status) + User (email,
+  scrypt hash, SUPER_ADMIN/OWNER, nullable propertyId). No signup route
+  anywhere; rows come from prisma/seed-tenants.mjs only (idempotent upserts:
+  property + domains + owner; passwords from TENANT_PASSWORD_<SLUG> env,
+  min 12 chars; empty ownerEmail seeds property without a user).
+- Sessions v2 (role + property; v1 rejected — one global logout on deploy).
+  Login: email+password user path (dummy-hash timing cover, owner fails
+  closed on missing/inactive property) + password-only founder bootstrap.
+- Enforcement: lib/tenant.ts (getSession/sessionCan/resolvePropertyId);
+  /admin super-only; /staff /settings /onboarding + all 10 /api/admin/*
+  routes property-scoped (by-id cross-property reads answer 404, never 403);
+  onboarding approve is SUPER_ADMIN-only (owners can't self-approve reruns);
+  direct-chat token follows the resolved property (signed-out keeps demo).
+- Widget keys resolve static-first, Property-table-second (inactive unknown).
+- STATIC PROOF: tsc green; 18/18 auth probes on real lib/auth.ts (scrypt
+  round-trip/wrong/malformed/version/lengths/dummy/salt, session mint/
+  round-trip/super/garbage/empty/tamper/v1-reject/owner-without-property/
+  bad-role/expiry); 3/3 seed parity (seed hash verifies in app verifier).
+- NOT yet proven live (needs founder db push incl. new tables + deploy):
+  owner login, seed run, page/API scoping, both-direction isolation.
+
+## 2026-10-28 — P0 GREEN 7/7 after founder db push (prod main 8d007f7)
+
+- Sweep: home 200, bridge 401, /settings 307→login, handshake accept +
+  reject, Bamboo Dec 1–3 2026 → ৳17,000 card (available: 4), demo1 widget tag.
+- Baseline extra: Bengali dated total ৳17,000 ✓; lookup RES-202610-00001 →
+  "Hi Arisha … 2026-10-28 → 2026-10-29, PENDING", zero contact leak ✓.
+- FLAKINESS NOTE (probe, not product): year-less "Dec 1 to Dec 3" makes the
+  agent sometimes ask for the year — probes now pin 2026. Product wart for
+  P6 polish: prompt should assume the nearest upcoming year and state it.
+- This is the regression baseline every later phase re-proves (quote-only;
+  no draft writes burned — draft loop stays proven by RES-202610-00001/2).
+
+## 2026-10-28 — P2 built, static proof green (uncommitted, feature/tenant-core)
+
+- FixtureSuiteAdapter (demo-config/fixture.ts + lib/suite.ts): same contract,
+  no HTTP; deterministic full availability; totals from shared quoteForStay
+  (drafts always match quotes); FIX- drafts in process memory (restart wipes,
+  lookup then 404s honestly); details stub { sent: true }; ping v1.
+- Precedence: fixture registry → binding row → demo env fallback → honest
+  throw. Fixture wins even over a row (graduate by deregistering commit).
+- Seabreeze rooms ride the seed file (harbor ৳12,500 fx-harbor-suite, dune
+  ৳6,800 fx-dune-room); Krishnachura keeps file fallback (no seed rooms).
+- Chat emits per-turn resolution log (property/adapter/rooms/persona).
+- STATIC PROOF: tsc green; 15/15 probes on compiled real suite.ts with NO
+  database env (precedence, availability ×4, draft code/total parity
+  2,500,000p, lookup round-trip/unknown/namespaced, guest/room validation,
+  details stub, ping). HttpSuiteAdapter untouched.
+- NOT yet proven live (needs PR #6 merge + P1 tables + deploy + seed run):
+  seabreeze chat quote/draft/lookup, Krishnachura fallback unchanged.
+
+## 2026-10-28 — P3 built, static proof green (uncommitted, feature/tenant-core)
+
+- Embed tokens (lib/auth.ts): 15-min, property + origin bound, kind:"embed"
+  (mutually exclusive with chat tokens, probed both directions).
+- Mint POST /api/bridge/embed-tokens (bridge-key ONLY, no chaining);
+  origin must be full https (http loopback in dev only).
+- Iframe GET /staff/embed?token= (bare, outside shell): verifies token +
+  strict Referer-vs-bound-origin check (missing/mismatch = error panel, no
+  fallback); widget re-verifies per API call; 401 → "refresh dashboard".
+- All 4 bridge handoff endpoints accept key OR embed (same scoping, same
+  404 rules); error text now "bridge credential" (statuses unchanged).
+- Widget UI: status filter, list, transcript, notes, assign, close/reopen.
+- STATIC PROOF: tsc green; 7/7 token probes (real auth.ts); 25/25 bridge
+  probes (compiled real bridge.ts, NO database env: 14 origin, 8 referer,
+  3 dual-auth). Honest limits documented (no frame-ancestors v1, 15-min
+  theft window, no-referrer dashboards can't embed).
+- NOT yet proven live (needs deploy + a bridge key + dashboard page):
+  mint → iframe load → note/assign/close round-trip; referer reject live.
+
+## 2026-10-28 — P5 built, tsc green (uncommitted, feature/tenant-core)
+
+- Settings is now the single config surface: Chat widget codes, Widget
+  domains (moved), Staff bridge codes + iframe/mint snippets (new), Bridge
+  keys (moved), Suite connections, Room catalogues, Secrets (honest Later),
+  Security (+owner-logins +embed-token rows), Profile (role-aware),
+  Appearance (honest Later). Zero "manage in Admin" links remain.
+- /admin repurposed to super-only ops overview: Properties & owners table,
+  Onboarding re-run approvals (new component, super-only API), cross-property
+  backend failures.
+- Nav: Talk/Manage/Configure groups + icons; /admin hidden for owners.
+- Brand: chat-widget error panel carries the mark (header + bubble already
+  did); staff iframe + its error panel branded; login/shell branded.
+- BUG FIX: /widget used static-only key lookup — seeded keys (seabreeze)
+  would handshake OK then fail to render. Now resolveWidgetProperty.
+- Approve controls hidden from owners on the board (API already rejected).
+- STATIC PROOF: tsc green; stale-/admin sweep clean (code + live contract
+  doc; suite-adapter-plan kept as the historical record it is).
+- NOT yet proven live (needs deploy): consolidated settings render, admin
+  ops render, seeded-key widget render, nav groups.
+
 ## 2026-10-28 — settings page built (uncommitted, feature/settings-page)
 
 - BUILT /settings (admin-guarded): per-key chat embed snippets + copy (origin from

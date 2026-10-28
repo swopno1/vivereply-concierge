@@ -1,18 +1,18 @@
-// Onboarding upload signing (RAG engine, admin session only).
+// Onboarding upload signing (RAG engine, session only; owners sign uploads
+// only under their own property's prefix).
 //   POST /api/admin/onboarding/uploads { propertyId, filename, size }
 //     -> { path, uploadUrl } (PUT the file bytes there within the hour)
 // Enforces the extension allowlist + per-file size cap. The browser uploads
 // straight to Supabase Storage — file bytes never transit Vercel.
 
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { getSession, sessionCan } from "@/lib/tenant";
 import { ONBOARDING_BUDGET, sanitizeFilename, storagePath } from "@/lib/onboarding";
 import { signUploadUrl } from "@/lib/storage";
 
 export async function POST(req: NextRequest) {
-  const store = await cookies();
-  if (!verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value)) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const body = await req.json().catch(() => null);
@@ -21,6 +21,9 @@ export async function POST(req: NextRequest) {
   const size = body?.size;
   if (!propertyId || propertyId.length > 100) {
     return NextResponse.json({ error: "Property ID is required (max 100 characters)." }, { status: 400 });
+  }
+  if (!sessionCan(session, propertyId)) {
+    return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
   }
   if (!filename) {
     return NextResponse.json(

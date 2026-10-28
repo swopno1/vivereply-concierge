@@ -1,31 +1,31 @@
-// Approved-domain admin API (step 4.5). Every method requires the
-// admin session cookie — no session, no list, no changes.
+// Approved-domain admin API (step 4.5, multi-tenant core). Every method
+// requires the session cookie — no session, no list, no changes. Owners
+// see and touch only their own property's rows.
 //   GET    -> [{ id, domain, propertyId, active, createdAt }]
 //   POST   -> { domain, propertyId } creates a row (409 if it exists)
 //   PATCH  -> { id, active } activates or deactivates a row
 // Domain input is a bare hostname only (no scheme, no port, no path).
 
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { getSession, sessionCan } from "@/lib/tenant";
 import { normalizeHostname } from "@/lib/domains";
 
-async function isAdmin(): Promise<boolean> {
-  const store = await cookies();
-  return verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value);
-}
-
 export async function GET() {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
-  const rows = await prisma.approvedDomain.findMany({ orderBy: { createdAt: "asc" } });
+  const rows = await prisma.approvedDomain.findMany({
+    where: session.role === "OWNER" ? { propertyId: session.propertyId ?? "" } : {},
+    orderBy: { createdAt: "asc" },
+  });
   return NextResponse.json(rows);
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const body = await req.json().catch(() => null);
@@ -41,6 +41,9 @@ export async function POST(req: NextRequest) {
   if (!propertyId || propertyId.length > 100) {
     return NextResponse.json({ error: "Property ID is required (max 100 characters)." }, { status: 400 });
   }
+  if (!sessionCan(session, propertyId)) {
+    return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
+  }
   const existing = await prisma.approvedDomain.findUnique({
     where: { domain_propertyId: { domain, propertyId } },
   });
@@ -55,7 +58,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const body = await req.json().catch(() => null);
@@ -64,9 +68,10 @@ export async function PATCH(req: NextRequest) {
   if (!id) {
     return NextResponse.json({ error: "Domain id is required." }, { status: 400 });
   }
-  const row = await prisma.approvedDomain.update({ where: { id }, data: { active } }).catch(() => null);
-  if (!row) {
+  const current = await prisma.approvedDomain.findUnique({ where: { id } });
+  if (!current || !sessionCan(session, current.propertyId)) {
     return NextResponse.json({ error: "Domain not found." }, { status: 404 });
   }
+  const row = await prisma.approvedDomain.update({ where: { id }, data: { active } });
   return NextResponse.json(row);
 }

@@ -1,5 +1,6 @@
-// Approved-domain manager UI (step 4.5). Client component used by
-// the protected /admin server page. Add validates nothing on its own
+// Approved-domain manager UI (step 4.5). Client component used by the
+// protected /settings server page (single-property view). Add validates
+// nothing on its own
 // — the API enforces hostname format and duplicates. Deactivating a
 // domain kills its widgets on the next chat message (the API re-checks
 // approval every time), it does not just hide new embeds.
@@ -16,10 +17,16 @@ export type ApprovedDomainRow = {
   createdAt: string;
 };
 
-export default function AdminDomains({ initial }: { initial: ApprovedDomainRow[] }) {
+export default function AdminDomains({
+  initial,
+  initialPropertyId,
+}: {
+  initial: ApprovedDomainRow[];
+  initialPropertyId?: string;
+}) {
   const [rows, setRows] = useState<ApprovedDomainRow[]>(initial);
   const [domain, setDomain] = useState("");
-  const [propertyId, setPropertyId] = useState("krishnachura-retreat");
+  const [propertyId, setPropertyId] = useState(initialPropertyId ?? "");
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
 

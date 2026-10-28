@@ -1,6 +1,7 @@
-// Room-mapping admin API (adapter Phase 3). Every method requires the
-// admin session cookie. One row per room per property; rows govern the
-// chat catalogue for any property that has them.
+// Room-mapping admin API (adapter Phase 3, multi-tenant core). Every method
+// requires the session cookie; owners touch only their own property's
+// rows. One row per room per property; rows govern the chat catalogue for
+// any property that has them.
 //   GET   ?propertyId= -> rows (400 without it)
 //   POST  -> { propertyId, slug, name, basePricePoisha, suiteRoomId,
 //             highlights[] } creates (409 on dup slug)
@@ -10,14 +11,8 @@
 // Room IDs are opaque backend identifiers (usually UUIDs, never enforced).
 
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
-
-async function isAdmin(): Promise<boolean> {
-  const store = await cookies();
-  return verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value);
-}
+import { getSession, sessionCan } from "@/lib/tenant";
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -77,12 +72,16 @@ function shape(row: {
 }
 
 export async function GET(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const propertyId = req.nextUrl.searchParams.get("propertyId") ?? "";
   if (!propertyId) {
     return NextResponse.json({ error: "propertyId query is required." }, { status: 400 });
+  }
+  if (!sessionCan(session, propertyId)) {
+    return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
   }
   const rows = await prisma.roomMapping.findMany({
     where: { propertyId },
@@ -92,7 +91,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
@@ -100,6 +100,9 @@ export async function POST(req: NextRequest) {
     body && typeof body.propertyId === "string" ? body.propertyId.trim() : "";
   if (!propertyId || propertyId.length > 100) {
     return NextResponse.json({ error: "Property ID is required (max 100 characters)." }, { status: 400 });
+  }
+  if (!sessionCan(session, propertyId)) {
+    return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
   }
   const cleaned = cleanRoom(body ?? {});
   if (!cleaned.ok) {
@@ -119,7 +122,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
@@ -128,7 +132,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Row id is required." }, { status: 400 });
   }
   const existing = await prisma.roomMapping.findUnique({ where: { id } });
-  if (!existing) {
+  if (!existing || !sessionCan(session, existing.propertyId)) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });
   }
   const merged = {
@@ -155,7 +159,8 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
@@ -163,9 +168,10 @@ export async function DELETE(req: NextRequest) {
   if (!id) {
     return NextResponse.json({ error: "Row id is required." }, { status: 400 });
   }
-  const row = await prisma.roomMapping.delete({ where: { id } }).catch(() => null);
-  if (!row) {
+  const current = await prisma.roomMapping.findUnique({ where: { id } });
+  if (!current || !sessionCan(session, current.propertyId)) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });
   }
-  return NextResponse.json({ deleted: true, slug: row.slug });
+  await prisma.roomMapping.delete({ where: { id } });
+  return NextResponse.json({ deleted: true, slug: current.slug });
 }

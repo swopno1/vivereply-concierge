@@ -10,6 +10,7 @@
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { verifyEmbedToken } from "./auth";
 
 export type MintedToken = {
   token: string;
@@ -68,4 +69,67 @@ export async function verifyBridgeKey(header: string | null): Promise<BridgeAuth
     return null;
   }
   return { tokenId: row.id, propertyId: row.propertyId };
+}
+
+// --- Staff embed (P3) ----------------------------------------------------
+// The iframe widget authorizes with a short-lived embed token instead of a
+// bridge key (the key must never reach a browser). verifyBridgeRequest
+// accepts EITHER credential on the handoff endpoints — same property
+// scoping, same 404 rules — and reports which one came in. The mint
+// endpoint itself takes bridge keys ONLY (no token chaining).
+
+export type BridgeRequestAuth = BridgeAuth & { via: "key" | "embed" };
+
+export async function verifyBridgeRequest(header: string | null): Promise<BridgeRequestAuth | null> {
+  const keyAuth = await verifyBridgeKey(header);
+  if (keyAuth) return { ...keyAuth, via: "key" };
+  const embed = verifyEmbedToken(bearerToken(header));
+  if (!embed) return null;
+  return { tokenId: "embed", propertyId: embed.propertyId, via: "embed" };
+}
+
+// Mint-time origin validation: a full web origin (scheme + host + optional
+// port), https only — http survives solely for loopback in development, so
+// a dashboard can be built locally. Returns the normalized origin bound
+// into the token, or null when the input is not an acceptable origin.
+export function cleanEmbedOrigin(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > 253) return null;
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) return null;
+  const host = url.hostname.toLowerCase();
+  if (!host) return null;
+  const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "::1";
+  if (url.protocol === "https:") {
+    return `https://${host}${url.port ? `:${url.port}` : ""}`;
+  }
+  if (url.protocol === "http:" && isLoopback && process.env.NODE_ENV !== "production") {
+    return `http://${host}${url.port ? `:${url.port}` : ""}`;
+  }
+  return null;
+}
+
+// Iframe-load origin binding: the browser's Referer for the iframe document
+// request must equal the origin bound into the token. Missing, unparseable,
+// or mismatched referers fail CLOSED — a dashboard that strips referrers
+// cannot host the widget (documented in bridge-integration.md). There is no
+// "allow missing" fallback: one would void the binding for stolen tokens.
+export function refererMatchesOrigin(referer: string | null, boundOrigin: string): boolean {
+  if (!referer || !boundOrigin) return false;
+  let url: URL;
+  try {
+    url = new URL(referer);
+  } catch {
+    return false;
+  }
+  const host = url.hostname.toLowerCase();
+  if (!host) return false;
+  const origin = `${url.protocol}//${host}${url.port ? `:${url.port}` : ""}`;
+  return origin === boundOrigin;
 }

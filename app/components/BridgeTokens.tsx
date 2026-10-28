@@ -1,5 +1,5 @@
 // Bridge-token manager UI. Client component used by the protected
-// /admin server page. Minting shows the full token ONCE — it is never
+// /settings server page (single-property view). Minting shows the full token ONCE — it is never
 // stored or shown again, so the admin must copy it into the client
 // server's secrets immediately. Revoking kills the key on its next API
 // call, because every bridge request re-checks the token row.
@@ -17,10 +17,16 @@ export type BridgeTokenRow = {
   createdAt: string;
 };
 
-export default function BridgeTokens({ initial }: { initial: BridgeTokenRow[] }) {
+export default function BridgeTokens({
+  initial,
+  initialPropertyId,
+}: {
+  initial: BridgeTokenRow[];
+  initialPropertyId?: string;
+}) {
   const [rows, setRows] = useState<BridgeTokenRow[]>(initial);
   const [name, setName] = useState("");
-  const [propertyId, setPropertyId] = useState("krishnachura-retreat");
+  const [propertyId, setPropertyId] = useState(initialPropertyId ?? "");
   const [message, setMessage] = useState("");
   const [onceToken, setOnceToken] = useState("");
   const [sending, setSending] = useState(false);

@@ -9,7 +9,7 @@
 // carrying the token so /api/chat can verify every message.
 
 import Chat from "../components/Chat";
-import { getWidgetProperty } from "@/demo-config/widget-keys";
+import { resolveWidgetProperty } from "@/demo-config/widget-keys";
 import { verifyChatToken } from "@/lib/auth";
 import { isDomainApproved } from "@/lib/domains";
 
@@ -17,9 +17,14 @@ export const dynamic = "force-dynamic";
 
 function ErrorPanel({ message }: { message: string }) {
   return (
-    <main className="mx-auto flex min-h-screen w-full flex-col p-4">
-      <h1 className="text-xl font-bold">Vivereply Concierge</h1>
-      <p className="text-sm text-gray-500">{message}</p>
+    <main className="mx-auto flex min-h-screen w-full flex-col bg-white p-4 font-sans text-gray-900 antialiased">
+      <div className="flex items-center gap-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0C1222]">
+          <img src="/brand/vivereply-mark.svg" alt="" className="h-7 w-7" />
+        </span>
+        <h1 className="text-[15px] font-semibold">Vivereply Concierge</h1>
+      </div>
+      <p className="mt-3 text-sm text-gray-500">{message}</p>
     </main>
   );
 }
@@ -30,7 +35,10 @@ export default async function WidgetPage({
   searchParams: Promise<{ key?: string; token?: string }>;
 }) {
   const params = await searchParams;
-  const property = getWidgetProperty(params.key ?? null);
+  // Database-aware resolution (multi-tenant core): seeded properties' keys
+  // work here exactly as at the handshake — static-only lookup would strand
+  // every property after the first.
+  const property = await resolveWidgetProperty(params.key ?? null);
   const token = verifyChatToken(params.token);
   if (!property || !token) {
     return <ErrorPanel message="This demo widget is not configured. Check the embed script's data-key." />;

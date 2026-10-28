@@ -22,8 +22,8 @@ export type RoomRow = {
 
 const EMPTY = { slug: "", name: "", taka: "", suiteRoomId: "", highlights: "" };
 
-export default function RoomCatalogues() {
-  const [propertyId, setPropertyId] = useState("krishnachura-retreat");
+export default function RoomCatalogues({ initialPropertyId }: { initialPropertyId?: string }) {
+  const [propertyId, setPropertyId] = useState(initialPropertyId ?? "");
   const [loadedFor, setLoadedFor] = useState("");
   const [rows, setRows] = useState<RoomRow[]>([]);
   const [form, setForm] = useState(EMPTY);

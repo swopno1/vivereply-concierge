@@ -22,9 +22,15 @@ export type SuiteBindingRow = {
 
 type TestResult = { ok: boolean; ping: boolean; latencyMs: number; detail: string };
 
-export default function SuiteBindings({ initial }: { initial: SuiteBindingRow[] }) {
+export default function SuiteBindings({
+  initial,
+  initialPropertyId,
+}: {
+  initial: SuiteBindingRow[];
+  initialPropertyId?: string;
+}) {
   const [rows, setRows] = useState<SuiteBindingRow[]>(initial);
-  const [propertyId, setPropertyId] = useState("");
+  const [propertyId, setPropertyId] = useState(initialPropertyId ?? "");
   const [suiteBaseUrl, setSuiteBaseUrl] = useState("");
   const [secret, setSecret] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -48,7 +54,7 @@ export default function SuiteBindings({ initial }: { initial: SuiteBindingRow[] 
 
   function cancelEdit() {
     setEditingId(null);
-    setPropertyId("");
+    setPropertyId(initialPropertyId ?? "");
     setSuiteBaseUrl("");
     setSecret("");
     setMessage("");

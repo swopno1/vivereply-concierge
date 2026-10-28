@@ -9,6 +9,41 @@ datasource db {
   provider  = "postgresql"
 }
 
+// Tenant registry (multi-tenant core). One row per resort. The id is the
+// property slug (e.g. krishnachura-retreat) matching the propertyId strings
+// already stored across tables. Rows are created ONLY by the seed file
+// (demo-config/tenants.ts) — there is no public signup and no UI that
+// creates properties. widgetKey is the public embed key (see
+// demo-config/widget-keys.ts).
+model Property {
+  id        String   @id
+  name      String
+  widgetKey String   @unique
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+}
+
+// Credentialed logins (multi-tenant core). Roles: SUPER_ADMIN (the founder,
+// sees every property) and OWNER (sees exactly one property). There is no
+// signup route — rows come from the seed file only, and passwords live in
+// the seeder's environment, never in the repo. passwordHash is scrypt (see
+// lib/auth.ts). A SUPER_ADMIN row has null propertyId; an OWNER row must
+// have one, and login fails closed if the property is missing or inactive.
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  role         String
+  propertyId   String?
+  property     Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+
+  @@index([propertyId, active])
+}
+
 model Conversation {
   id         String         @id @default(cuid())
   propertyId String

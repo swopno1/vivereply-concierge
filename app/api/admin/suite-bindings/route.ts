@@ -1,5 +1,6 @@
-// Suite-binding admin API (adapter Phase 2). Every method requires the
-// admin session cookie. One binding per property.
+// Suite-binding admin API (adapter Phase 2, multi-tenant core). Every method
+// requires the session cookie; owners see and touch only their own
+// property's rows. One binding per property.
 //   GET    -> [{ id, propertyId, suiteBaseUrl, version, secretSet,
 //                lastTestedAt, lastTestOk, createdAt }] (never secrets)
 //   POST   -> { propertyId, suiteBaseUrl, secret? } creates (409 on dup)
@@ -8,15 +9,9 @@
 // URL rule: http(s) only. Secret rule: stored encrypted, shown nowhere.
 
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { getSession, sessionCan } from "@/lib/tenant";
 import { encryptSecret } from "@/lib/secrets";
-
-async function isAdmin(): Promise<boolean> {
-  const store = await cookies();
-  return verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value);
-}
 
 function cleanUrl(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -63,15 +58,20 @@ function shape(row: {
 }
 
 export async function GET() {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
-  const rows = await prisma.propertyBinding.findMany({ orderBy: { createdAt: "asc" } });
+  const rows = await prisma.propertyBinding.findMany({
+    where: session.role === "OWNER" ? { propertyId: session.propertyId ?? "" } : {},
+    orderBy: { createdAt: "asc" },
+  });
   return NextResponse.json(rows.map(shape));
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const body = await req.json().catch(() => null);
@@ -80,6 +80,9 @@ export async function POST(req: NextRequest) {
   const secret = typeof body?.secret === "string" ? body.secret : "";
   if (!propertyId || propertyId.length > 100) {
     return NextResponse.json({ error: "Property ID is required (max 100 characters)." }, { status: 400 });
+  }
+  if (!sessionCan(session, propertyId)) {
+    return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
   }
   if (!suiteBaseUrl) {
     return NextResponse.json(
@@ -112,13 +115,20 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const body = await req.json().catch(() => null);
   const id = typeof body?.id === "string" ? body.id : "";
   if (!id) {
     return NextResponse.json({ error: "Binding id is required." }, { status: 400 });
+  }
+  // Look up first: a row from another property answers 404, never 403 —
+  // the id alone must not reveal that the row exists.
+  const current = await prisma.propertyBinding.findUnique({ where: { id } });
+  if (!current || !sessionCan(session, current.propertyId)) {
+    return NextResponse.json({ error: "Binding not found." }, { status: 404 });
   }
   const updates: { suiteBaseUrl?: string; secretEnc?: string | null } = {};
   if (body?.suiteBaseUrl !== undefined) {
@@ -159,7 +169,8 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const body = await req.json().catch(() => null);
@@ -167,9 +178,10 @@ export async function DELETE(req: NextRequest) {
   if (!id) {
     return NextResponse.json({ error: "Binding id is required." }, { status: 400 });
   }
-  const row = await prisma.propertyBinding.delete({ where: { id } }).catch(() => null);
-  if (!row) {
+  const current = await prisma.propertyBinding.findUnique({ where: { id } });
+  if (!current || !sessionCan(session, current.propertyId)) {
     return NextResponse.json({ error: "Binding not found." }, { status: 404 });
   }
-  return NextResponse.json({ deleted: true, propertyId: row.propertyId });
+  await prisma.propertyBinding.delete({ where: { id } });
+  return NextResponse.json({ deleted: true, propertyId: current.propertyId });
 }

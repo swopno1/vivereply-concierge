@@ -6,12 +6,12 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyBridgeKey } from "@/lib/bridge";
+import { verifyBridgeRequest } from "@/lib/bridge";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await verifyBridgeKey(req.headers.get("authorization"));
+  const auth = await verifyBridgeRequest(req.headers.get("authorization"));
   if (!auth) {
-    return NextResponse.json({ error: "Invalid or missing bridge key." }, { status: 401 });
+    return NextResponse.json({ error: "Invalid or missing bridge credential." }, { status: 401 });
   }
   const { id } = await params;
   const body = await req.json().catch(() => null);

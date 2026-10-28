@@ -1,5 +1,6 @@
-// Bridge-token admin API. Every method requires the admin session
-// cookie — no session, no list, no mints, no revokes.
+// Bridge-token admin API (multi-tenant core). Every method requires the
+// session cookie — no session, no list, no mints, no revokes. Owners see
+// and touch only their own property's keys.
 //   GET   -> [{ id, prefix, name, propertyId, active, createdAt }] (never hashes)
 //   POST  -> { name, propertyId } mints a token; the full token is
 //            returned ONCE here and can never be retrieved again
@@ -9,15 +10,9 @@
 // prefix plus the secret's hash, so a database read cannot call the API.
 
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { getSession, sessionCan } from "@/lib/tenant";
 import { mintBridgeToken } from "@/lib/bridge";
-
-async function isAdmin(): Promise<boolean> {
-  const store = await cookies();
-  return verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value);
-}
 
 function shape(row: {
   id: string;
@@ -38,15 +33,20 @@ function shape(row: {
 }
 
 export async function GET() {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
-  const rows = await prisma.bridgeToken.findMany({ orderBy: { createdAt: "asc" } });
+  const rows = await prisma.bridgeToken.findMany({
+    where: session.role === "OWNER" ? { propertyId: session.propertyId ?? "" } : {},
+    orderBy: { createdAt: "asc" },
+  });
   return NextResponse.json(rows.map(shape));
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const body = await req.json().catch(() => null);
@@ -61,6 +61,9 @@ export async function POST(req: NextRequest) {
   if (!propertyId || propertyId.length > 100) {
     return NextResponse.json({ error: "Property ID is required (max 100 characters)." }, { status: 400 });
   }
+  if (!sessionCan(session, propertyId)) {
+    return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
+  }
   const minted = mintBridgeToken();
   const row = await prisma.bridgeToken.create({
     data: { prefix: minted.prefix, secretHash: minted.secretHash, name, propertyId, active: true },
@@ -69,7 +72,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!(await isAdmin())) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const body = await req.json().catch(() => null);
@@ -78,9 +82,10 @@ export async function PATCH(req: NextRequest) {
   if (!id) {
     return NextResponse.json({ error: "Token id is required." }, { status: 400 });
   }
-  const row = await prisma.bridgeToken.update({ where: { id }, data: { active } }).catch(() => null);
-  if (!row) {
+  const current = await prisma.bridgeToken.findUnique({ where: { id } });
+  if (!current || !sessionCan(session, current.propertyId)) {
     return NextResponse.json({ error: "Token not found." }, { status: 404 });
   }
+  const row = await prisma.bridgeToken.update({ where: { id }, data: { active } });
   return NextResponse.json(shape(row));
 }

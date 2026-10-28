@@ -1,16 +1,26 @@
 // Shared app shell (sidebar + content) for every web-app page in this
-// route group: /, /staff, /admin, /login. The widget (/widget) sits
-// outside the group, so the narrow embed panel stays a bare chat.
-// Server component: it reads the admin session cookie once and hands the
-// result to the client shell, which owns the mobile slide-over, nav
-// highlighting, and the sign-in/sign-out footer.
+// route group: /, /staff, /admin, /login, /settings, /onboarding. The
+// widget (/widget) sits outside the group, so the narrow embed panel
+// stays a bare chat. Server component: it reads the session cookie once
+// and hands the session (who + role + property) to the client shell,
+// which owns the mobile slide-over, role-filtered nav, and the
+// sign-in/sign-out footer. The session shape is passed structurally — the
+// client shell must never import server modules.
 
-import { cookies } from "next/headers";
-import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { getSession } from "@/lib/tenant";
 import AppShell from "../components/AppShell";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
-  const store = await cookies();
-  const signedIn = verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value);
-  return <AppShell signedIn={signedIn}>{children}</AppShell>;
+  const session = await getSession();
+  return (
+    <AppShell
+      session={
+        session
+          ? { email: session.email, role: session.role, propertyId: session.propertyId }
+          : null
+      }
+    >
+      {children}
+    </AppShell>
+  );
 }

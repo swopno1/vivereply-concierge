@@ -1,25 +1,28 @@
-// Onboarding worker re-invoke (RAG engine, admin session only).
+// Onboarding worker re-invoke (RAG engine, session only; owners re-invoke
+// only their own property's run).
 //   POST /api/admin/onboarding/invoke { propertyId }
 // Re-sends a PENDING run to the cloud worker — for when the worker was
 // configured after submit, or a previous invoke failed. Anything past
 // PENDING is rejected: rerunning real work goes through the approval flip.
 
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { getSession, sessionCan } from "@/lib/tenant";
 import { signDownloadUrl, signUploadUrl } from "@/lib/storage";
 import { invokeIngestionWorker } from "@/lib/worker";
 
 export async function POST(req: NextRequest) {
-  const store = await cookies();
-  if (!verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value)) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const body = await req.json().catch(() => null);
   const propertyId = typeof body?.propertyId === "string" ? body.propertyId.trim() : "";
   if (!propertyId) {
     return NextResponse.json({ error: "Property ID is required." }, { status: 400 });
+  }
+  if (!sessionCan(session, propertyId)) {
+    return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
   }
   const run = await prisma.onboardingRun.findUnique({ where: { propertyId } });
   if (!run) {
