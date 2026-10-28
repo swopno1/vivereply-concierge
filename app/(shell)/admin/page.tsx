@@ -9,6 +9,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/tenant";
 import OnboardingApprovals from "../../components/OnboardingApprovals";
+import OwnerActions from "../../components/OwnerActions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export default async function AdminPage() {
 
   const properties = await prisma.property.findMany({
     orderBy: { id: "asc" },
-    include: { users: { select: { email: true, role: true, active: true } } },
+    include: { users: { select: { id: true, email: true, role: true, active: true } } },
   });
   const runRows = await prisma.onboardingRun.findMany({ orderBy: { updatedAt: "desc" } });
   const initialRuns = runRows.map((r) => ({
@@ -97,11 +98,11 @@ export default async function AdminPage() {
               <p className="truncate text-sm font-semibold text-gray-900">
                 {p.name} <span className="font-mono text-xs text-gray-500">({p.id})</span>
               </p>
-              <p className="truncate text-sm text-gray-500">
-                {p.users.length === 0
-                  ? "no owner login yet"
-                  : p.users.map((u) => `${u.email}${u.active ? "" : " (disabled)"}`).join(", ")}
-              </p>
+              {p.users.length === 0 ? (
+                <p className="truncate text-sm text-gray-500">no owner login yet</p>
+              ) : (
+                <OwnerActions initial={p.users} />
+              )}
             </div>
             <span
               className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${

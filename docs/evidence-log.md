@@ -308,6 +308,34 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
 - NOT yet proven live (needs deploy): consolidated settings render, admin
   ops render, seeded-key widget render, nav groups.
 
+## 2026-10-28 — Auth Tier 1 built, static proof green (uncommitted, feature/auth-tier1)
+
+- Server-side session allowlist: cookie keeps signed payload + server-minted
+  sid; live = row exists + unrevoked + unexpired + 24h idle; row must agree
+  with payload on uid/role; lastSeenAt touched every 5 min max. Pre-Tier-1
+  tokens (no sid) rejected — one global logout on deploy.
+- Kill switches: logout revokes one row; password change + admin revoke-all
+  act per user; deactivation revokes too. Fixation impossible (server-minted
+  sids only); multi-device allowed.
+- Login throttling (DB-backed): 5 fails/15min per email OR 20/15min per IP
+  → 429; throttled hits not logged (no self-extending block); attempts +
+  dead sessions pruned opportunistically.
+- Password change (owners): PATCH /api/auth/password, min 12, revokes all
+  sessions + clears cookie (re-login); bootstrap refused with directions.
+  Settings Profile hosts the form + temp-password banner.
+- Registration UI (super-only): /admin/register + POST /api/admin/properties
+  creates property + domains + owner with shown-once temp password (409s on
+  dup id/key/email); seed file stays as bootstrap/recovery path.
+- User controls: PATCH /api/admin/users (deactivate reactivates + revokes),
+  POST .../revoke-sessions; Admin ops list embeds per-owner actions; nav
+  gains super-only Register (prefix-matched filter).
+- STATIC PROOF: tsc green; 19/19 probes on real lib/auth.ts (sid mint/
+  round-trip/refusals ×3, temp format/unique, throttle ×4, slug ×5,
+  email ×3). Allowlist/touch/throttle-count paths need DB — live only.
+- NOT yet proven live (needs PR #7 merge + this branch merge + db push with
+  Session/LoginAttempt/mustChangePassword + deploy): login rows, throttle
+  429s, revoke propagation, register → temp login → change → relogin loop.
+
 ## 2026-10-28 — settings page built (uncommitted, feature/settings-page)
 
 - BUILT /settings (admin-guarded): per-key chat embed snippets + copy (origin from

@@ -1,30 +1,55 @@
-// Login API (multi-tenant core). Two paths, one generic error:
+// Login API (multi-tenant core, auth Tier 1). Two paths, one generic error:
 //   - email + password: a seeded User row (OWNER, or a SUPER_ADMIN row).
 //     Unknown emails still pay one scrypt (dummy hash), so enumeration by
 //     timing buys nothing. An OWNER whose property is missing or inactive
 //     fails closed. Any role string outside the two known ones fails closed.
 //   - password only (empty email): the founder bootstrap — ADMIN_PASSWORD
 //     env, SUPER_ADMIN session. A missing env always fails closed.
-// A correct login sets the signed HttpOnly session cookie (v2: who +
-// which property). There is no signup route; users come from the seed file.
+// Tier 1: attempts are throttled per email + per IP (DB-backed, so it holds
+// across instances); each login mints a fresh server-side Session row and
+// the cookie carries its id (fixation impossible — ids are server-minted
+// only). Throttled hits answer 429 and are NOT logged as failures (else the
+// block would extend itself forever).
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
   ADMIN_SESSION_COOKIE,
   DUMMY_PASSWORD_HASH,
+  THROTTLE_WINDOW_MIN,
   createSessionToken,
+  throttleDecision,
   verifyAdminPassword,
   verifyPassword,
   type Session,
 } from "@/lib/auth";
+import { sessionExpiresAt } from "@/lib/tenant";
+
+function clientIp(req: NextRequest): string {
+  const first = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return (first || "unknown").slice(0, 80);
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const email = typeof body?.email === "string" ? body.email.toLowerCase().trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
+  const ip = clientIp(req);
 
-  let session: Session | null = null;
+  const since = new Date(Date.now() - THROTTLE_WINDOW_MIN * 60 * 1000);
+  const counts = await Promise.all([
+    prisma.loginAttempt.count({ where: { email: email || "(bootstrap)", ok: false, createdAt: { gt: since } } }),
+    prisma.loginAttempt.count({ where: { ip, ok: false, createdAt: { gt: since } } }),
+  ]).catch(() => [0, 0] as [number, number]);
+  if (throttleDecision(counts[0], counts[1])) {
+    return NextResponse.json(
+      { error: "Too many attempts. Try again later." },
+      { status: 429 }
+    );
+  }
+
+  let session: Omit<Session, "sid"> | null = null;
+  let userId: string | null = null;
   if (email) {
     const user = await prisma.user.findUnique({ where: { email } }).catch(() => null);
     const ok = await verifyPassword(
@@ -36,20 +61,40 @@ export async function POST(req: NextRequest) {
         const prop = await prisma.property.findUnique({ where: { id: user.propertyId } }).catch(() => null);
         if (prop && prop.status === "ACTIVE") {
           session = { uid: user.id, email: user.email, role: "OWNER", propertyId: user.propertyId };
+          userId = user.id;
         }
       } else if (user.role === "SUPER_ADMIN" && !user.propertyId) {
         session = { uid: user.id, email: user.email, role: "SUPER_ADMIN", propertyId: null };
+        userId = user.id;
       }
     }
   } else if (verifyAdminPassword(password)) {
     session = { uid: "bootstrap", email: null, role: "SUPER_ADMIN", propertyId: null };
   }
 
+  await prisma.loginAttempt
+    .create({ data: { email: email || "(bootstrap)", ip, ok: session !== null } })
+    .catch(() => null);
+
   if (!session) {
     return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
   }
-  const token = createSessionToken(session);
+  // Opportunistic pruning (best-effort): yesterday's attempts and dead
+  // sessions never accumulate into a large table.
+  await prisma.loginAttempt.deleteMany({ where: { createdAt: { lt: since } } }).catch(() => null);
+  await prisma.session
+    .deleteMany({ where: { OR: [{ expiresAt: { lt: new Date() } }, { revokedAt: { lt: since } }] } })
+    .catch(() => null);
+
+  const row = await prisma.session
+    .create({ data: { userId, role: session.role, expiresAt: sessionExpiresAt() } })
+    .catch(() => null);
+  if (!row) {
+    return NextResponse.json({ error: "Login is unavailable right now." }, { status: 500 });
+  }
+  const token = createSessionToken({ ...session, sid: row.id });
   if (!token) {
+    await prisma.session.delete({ where: { id: row.id } }).catch(() => null);
     return NextResponse.json({ error: "Login is not configured." }, { status: 500 });
   }
   const res = NextResponse.json({ ok: true, role: session.role, propertyId: session.propertyId });

@@ -69,6 +69,16 @@ const NAV_GROUPS: { heading: string; items: { href: string; label: string; icon:
           </svg>
         ),
       },
+      {
+        href: "/admin/register",
+        label: "Register",
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <circle cx="8" cy="8" r="6.2" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        ),
+      },
     ],
   },
   {
@@ -132,7 +142,7 @@ export default function AppShell({
   const isSuper = session?.role === "SUPER_ADMIN";
   const visibleGroups = NAV_GROUPS.map((group) => ({
     ...group,
-    items: isSuper ? group.items : group.items.filter((item) => item.href !== "/admin"),
+    items: isSuper ? group.items : group.items.filter((item) => !item.href.startsWith("/admin")),
   })).filter((group) => group.items.length > 0);
   const whoLabel = !session ? "" : session.role === "SUPER_ADMIN" ? "Super admin" : (session.email ?? "Owner");
   const whoInitial = !session ? "" : (whoLabel.charAt(0).toUpperCase() || "A");
