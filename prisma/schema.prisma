@@ -89,13 +89,38 @@ model BridgeToken {
   @@index([propertyId, active])
 }
 
+// One booking backend per property (Suite adapter). secretEnc holds the
+// backend's bearer key AES-GCM encrypted (see lib/secrets.ts) — the plain
+// secret is never stored and never leaves the server. One binding per
+// property; lastTestedAt records the newest Test connection result.
+// One catalogue row per room per property (Suite adapter). The demo
+// catalogue file seeds these rows; afterwards the database governs for
+// any property that has rows, and the file remains the fallback only for
+// the demo property until it is seeded.
+model RoomMapping {
+  id              String   @id @default(cuid())
+  propertyId      String
+  slug            String
+  name            String
+  basePricePoisha Int
+  suiteRoomId     String
+  highlights      String[]
+  createdAt       DateTime @default(now())
+
+  @@unique([propertyId, slug])
+  @@index([propertyId])
+}
+
 model PropertyBinding {
-  id           String   @id @default(cuid())
-  workspaceId  String   @unique
-  propertyId   String
-  suiteBaseUrl String
-  secretRef    String
-  createdAt    DateTime @default(now())
+  id            String    @id @default(cuid())
+  workspaceId   String?   @unique
+  propertyId    String    @unique
+  suiteBaseUrl  String
+  secretEnc     String?
+  version       Int       @default(1)
+  lastTestedAt  DateTime?
+  lastTestOk    Boolean?
+  createdAt     DateTime  @default(now())
 }
 
 model KnowledgeDocument {

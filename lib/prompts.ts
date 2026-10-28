@@ -2,7 +2,7 @@
 // model can only offer rooms and prices that actually exist. Nothing here
 // may promise a booking, a rate, or availability the tools have not shown.
 
-import { catalogueText } from "@/demo-config/rooms";
+import { catalogueText, DEMO_ROOMS, type DemoRoom } from "@/demo-config/rooms";
 
 const RULES_EN = `You are the Vivereply Concierge, the AI front-of-house for this resort's demo website. You help guests check availability, get quotes, hold a booking draft, or reach staff. You are honest above all: never invent a room, a price, availability, or a booking.
 
@@ -36,7 +36,11 @@ Rules:
 - If you do not know something, say so and offer a handoff to staff (request_handoff) instead of guessing.
 - Keep replies short and warm. Use taka (৳) for prices.`;
 
-export function systemPrompt(language: "en" | "bn", grounding?: string | null): string {
+export function systemPrompt(
+  language: "en" | "bn",
+  grounding?: string | null,
+  rooms: DemoRoom[] = DEMO_ROOMS
+): string {
   const rules = language === "bn" ? RULES_BN : RULES_EN;
   // Step 3 grounding (supporting only): verified property information
   // for this turn, or an explicit no-grounding instruction. Either way
@@ -44,5 +48,5 @@ export function systemPrompt(language: "en" | "bn", grounding?: string | null): 
   const groundingBlock = grounding
     ? `\n\nVerified property information — use ONLY this for property questions (check-in times, food, packages, location). If the answer is not in this block, say you do not know and offer a handoff to staff instead of guessing:\n${grounding}`
     : `\n\nNo verified property information was retrieved for this turn. Do not invent property facts (times, food, packages, location); if asked, say you do not know and offer a handoff to staff.`;
-  return `${rules}\n\nAvailable rooms:\n${catalogueText()}${groundingBlock}`;
+  return `${rules}\n\nAvailable rooms:\n${catalogueText(rooms)}${groundingBlock}`;
 }

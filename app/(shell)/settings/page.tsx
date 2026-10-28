@@ -12,6 +12,8 @@ import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 import { WIDGET_KEYS } from "@/demo-config/widget-keys";
 import CopyButton from "../../components/CopyButton";
 import SignOutButton from "../../components/SignOutButton";
+import SuiteBindings from "../../components/SuiteBindings";
+import RoomCatalogues from "../../components/RoomCatalogues";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +78,45 @@ export default async function SettingsPage() {
   const domains = await prisma.approvedDomain.findMany({ orderBy: { createdAt: "asc" } });
   const activeDomains = domains.filter((d) => d.active);
   const tokenCount = await prisma.bridgeToken.count({ where: { active: true } });
+  const recentLogs = await prisma.toolCallLog.findMany({
+    where: {
+      toolName: {
+        in: [
+          "check_availability",
+          "get_quote",
+          "create_booking_draft",
+          "lookup_booking_by_code",
+          "request_booking_details",
+        ],
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    include: { conversation: { select: { propertyId: true } } },
+  });
+  const backendFailures = recentLogs
+    .filter((l) => {
+      const out = l.output as { error?: unknown } | null;
+      return out !== null && typeof out === "object" && typeof out.error === "string";
+    })
+    .slice(0, 10)
+    .map((l) => ({
+      toolName: l.toolName,
+      error: (l.output as { error: string }).error,
+      propertyId: l.conversation.propertyId,
+      createdAt: l.createdAt.toISOString(),
+    }));
+  const bindingRows = await prisma.propertyBinding.findMany({ orderBy: { createdAt: "asc" } });
+  const initialBindings = bindingRows.map((r) => ({
+    id: r.id,
+    propertyId: r.propertyId,
+    suiteBaseUrl: r.suiteBaseUrl,
+    version: r.version,
+    secretSet: r.secretEnc !== null,
+    lastTestedAt: r.lastTestedAt?.toISOString() ?? null,
+    lastTestOk: r.lastTestOk,
+    createdAt: r.createdAt.toISOString(),
+  }));
 
   const keys = Object.entries(WIDGET_KEYS);
   const bridgeExample = [
@@ -141,6 +182,32 @@ export default async function SettingsPage() {
           </a>
           .
         </p>
+      </Section>
+
+      <Section
+        title="Suite connections"
+        blurb="One booking backend per property. Test runs server-side and never reveals the key. URL and key changes apply on the next chat message."
+      >
+        <SuiteBindings initial={initialBindings} />
+        <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+          <p className="text-sm font-semibold text-gray-900">Recent backend failures</p>
+          {backendFailures.length === 0 ? (
+            <p className="text-sm text-gray-500">None in the last 50 backend calls.</p>
+          ) : (
+            backendFailures.map((f, i) => (
+              <p key={i} className="text-sm text-gray-700">
+                <span className="font-mono">{f.toolName}</span> · {f.propertyId} · {f.error}
+              </p>
+            ))
+          )}
+        </div>
+      </Section>
+
+      <Section
+        title="Room catalogues"
+        blurb="One room list per property. Rows govern chat once present; seed the demo file to start."
+      >
+        <RoomCatalogues />
       </Section>
 
       <Section

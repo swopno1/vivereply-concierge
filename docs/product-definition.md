@@ -86,11 +86,15 @@ check runs. Nothing is faked with timers.
 - Admin page (/admin). The approved-domains list: which websites may embed
   the widget. Deactivating a domain stops its widget on the next message.
   It also mints the bridge tokens below.
-- Settings (/settings — built, going live with the next deploy). Admin-only
+- Settings (/settings). Admin-only
   configuration rooms: copy-paste chat widget codes per key, staff bridge
   server snippets, a live security status board, and the admin profile.
   Secrets and appearance are honest Later placeholders for now.
-- Staff bridge (server API — built, going live with the next deploy). Client
+- Suite adapter (built, going live with the next deploy). Any booking backend
+  implementing docs/suite-api-spec.md plugs in via Settings: one binding
+  (URL + encrypted key) and one room catalogue per property, with Test
+  connection and failure health. demo1 keeps working through the same path.
+- Staff bridge (server API). Client
   dashboards work handoffs from their own servers: list, read with
   transcript, assign, close, follow-up notes — all as JSON, guarded by
   per-property keys. Keys are hashed, revocable instantly, and never leave

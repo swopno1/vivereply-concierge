@@ -36,6 +36,9 @@ resort.
 - **Settings** (`/settings`, admin-only) — copy-paste widget codes, bridge
   snippets, security status, and profile; Secrets and Appearance are
   reserved Later rooms.
+- **Suite adapter** — any backend implementing `docs/suite-api-spec.md` plugs
+  in per property (binding + encrypted key + room catalogue, all in Settings).
+  demo1 is simply the default binding.
 - **RAG grounding (supporting only)** — property questions (check-in
   times, food, packages, location) are answered from seeded demo
   knowledge via pgvector + Gemini embeddings, similarity ≥ 0.45, top 4.

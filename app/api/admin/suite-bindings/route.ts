@@ -1,0 +1,175 @@
+// Suite-binding admin API (adapter Phase 2). Every method requires the
+// admin session cookie. One binding per property.
+//   GET    -> [{ id, propertyId, suiteBaseUrl, version, secretSet,
+//                lastTestedAt, lastTestOk, createdAt }] (never secrets)
+//   POST   -> { propertyId, suiteBaseUrl, secret? } creates (409 on dup)
+//   PATCH  -> { id, suiteBaseUrl?, secret? } updates; secret "" clears
+//   DELETE -> { id } removes the row (chat falls back to env for demo)
+// URL rule: http(s) only. Secret rule: stored encrypted, shown nowhere.
+
+import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
+import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { encryptSecret } from "@/lib/secrets";
+
+async function isAdmin(): Promise<boolean> {
+  const store = await cookies();
+  return verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value);
+}
+
+function cleanUrl(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim().replace(/\/$/, "");
+  if (trimmed.length === 0 || trimmed.length > 500) return null;
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  // Production guardrail (adapter Phase 4): bindings point at real backends.
+  // Plain http and loopback survive only in development, for stub testing.
+  if (process.env.NODE_ENV === "production") {
+    const host = url.hostname.toLowerCase();
+    if (url.protocol !== "https:" || host === "localhost" || host === "127.0.0.1" || host === "::1") {
+      return null;
+    }
+  }
+  return trimmed;
+}
+
+function shape(row: {
+  id: string;
+  propertyId: string;
+  suiteBaseUrl: string;
+  version: number;
+  secretEnc: string | null;
+  lastTestedAt: Date | null;
+  lastTestOk: boolean | null;
+  createdAt: Date;
+}) {
+  return {
+    id: row.id,
+    propertyId: row.propertyId,
+    suiteBaseUrl: row.suiteBaseUrl,
+    version: row.version,
+    secretSet: row.secretEnc !== null,
+    lastTestedAt: row.lastTestedAt?.toISOString() ?? null,
+    lastTestOk: row.lastTestOk,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export async function GET() {
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const rows = await prisma.propertyBinding.findMany({ orderBy: { createdAt: "asc" } });
+  return NextResponse.json(rows.map(shape));
+}
+
+export async function POST(req: NextRequest) {
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const body = await req.json().catch(() => null);
+  const propertyId = typeof body?.propertyId === "string" ? body.propertyId.trim() : "";
+  const suiteBaseUrl = cleanUrl(body?.suiteBaseUrl);
+  const secret = typeof body?.secret === "string" ? body.secret : "";
+  if (!propertyId || propertyId.length > 100) {
+    return NextResponse.json({ error: "Property ID is required (max 100 characters)." }, { status: 400 });
+  }
+  if (!suiteBaseUrl) {
+    return NextResponse.json(
+      { error: "Base URL must be https in production (http loopback allowed in development only)." },
+      { status: 400 }
+    );
+  }
+  const existing = await prisma.propertyBinding.findUnique({ where: { propertyId } });
+  if (existing) {
+    return NextResponse.json(
+      { error: "That property already has a binding — edit it instead." },
+      { status: 409 }
+    );
+  }
+  let secretEnc: string | null = null;
+  if (secret) {
+    try {
+      secretEnc = encryptSecret(secret);
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : "Could not store the secret." },
+        { status: 500 }
+      );
+    }
+  }
+  const row = await prisma.propertyBinding.create({
+    data: { propertyId, suiteBaseUrl, secretEnc, version: 1 },
+  });
+  return NextResponse.json(shape(row), { status: 201 });
+}
+
+export async function PATCH(req: NextRequest) {
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const body = await req.json().catch(() => null);
+  const id = typeof body?.id === "string" ? body.id : "";
+  if (!id) {
+    return NextResponse.json({ error: "Binding id is required." }, { status: 400 });
+  }
+  const updates: { suiteBaseUrl?: string; secretEnc?: string | null } = {};
+  if (body?.suiteBaseUrl !== undefined) {
+    const suiteBaseUrl = cleanUrl(body.suiteBaseUrl);
+    if (!suiteBaseUrl) {
+      return NextResponse.json(
+        { error: "Base URL must be https in production (http loopback allowed in development only)." },
+        { status: 400 }
+      );
+    }
+    updates.suiteBaseUrl = suiteBaseUrl;
+  }
+  if (body?.secret !== undefined) {
+    if (typeof body.secret !== "string") {
+      return NextResponse.json({ error: "Secret must be a string (empty clears it)." }, { status: 400 });
+    }
+    if (body.secret) {
+      try {
+        updates.secretEnc = encryptSecret(body.secret);
+      } catch (e) {
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : "Could not store the secret." },
+          { status: 500 }
+        );
+      }
+    } else {
+      updates.secretEnc = null;
+    }
+  }
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
+  }
+  const row = await prisma.propertyBinding.update({ where: { id }, data: updates }).catch(() => null);
+  if (!row) {
+    return NextResponse.json({ error: "Binding not found." }, { status: 404 });
+  }
+  return NextResponse.json(shape(row));
+}
+
+export async function DELETE(req: NextRequest) {
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const body = await req.json().catch(() => null);
+  const id = typeof body?.id === "string" ? body.id : "";
+  if (!id) {
+    return NextResponse.json({ error: "Binding id is required." }, { status: 400 });
+  }
+  const row = await prisma.propertyBinding.delete({ where: { id } }).catch(() => null);
+  if (!row) {
+    return NextResponse.json({ error: "Binding not found." }, { status: 404 });
+  }
+  return NextResponse.json({ deleted: true, propertyId: row.propertyId });
+}

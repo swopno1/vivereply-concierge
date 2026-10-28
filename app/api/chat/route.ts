@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { runAgent } from "@/lib/agent";
-import { TOOL_DEFINITIONS, createToolExecutor, type ToolDb } from "@/lib/tools";
+import { createToolExecutor, toolDefinitionsFor, type ToolDb } from "@/lib/tools";
+import { adapterForProperty } from "@/lib/suite";
+import { catalogueForProperty } from "@/demo-config/rooms";
 import { systemPrompt } from "@/lib/prompts";
 import { detectLanguage } from "@/lib/language";
 import { buildCards } from "@/lib/cards";
@@ -214,7 +216,25 @@ export async function POST(req: NextRequest) {
           },
         };
 
-        const baseExecute = createToolExecutor(activeConversation.id, db);
+        // Per-property backend + catalogue (adapter Phases 2-3): the
+        // token's property selects its Suite binding and its room list. A
+        // misconfigured property fails this turn honestly instead of
+        // borrowing another property's backend or rooms — the guest gets a
+        // generic line, the real cause goes to the log.
+        let suite;
+        let catalogue;
+        try {
+          suite = await adapterForProperty(activeConversation.propertyId);
+          catalogue = await catalogueForProperty(activeConversation.propertyId);
+        } catch (e) {
+          console.error(
+            "Suite binding failed:",
+            e instanceof Error ? e.message : e
+          );
+          send({ type: "error", error: "The resort's booking connection needs attention. Please try again later." });
+          return;
+        }
+        const baseExecute = createToolExecutor(activeConversation.id, db, suite, catalogue);
         const execute = async (name: string, argsJson: string) => {
           send({ type: "phase", phase: "checking", detail: toolDetail(name, argsJson) });
           const result = await baseExecute(name, argsJson);
@@ -278,7 +298,7 @@ export async function POST(req: NextRequest) {
           messages: [
             {
               role: "system",
-              content: systemPrompt(activeConversation.language === "bn" ? "bn" : "en", grounding),
+              content: systemPrompt(activeConversation.language === "bn" ? "bn" : "en", grounding, catalogue),
             },
             ...history.map(
               (m: { role: string; content: string }): { role: "assistant" | "user"; content: string } => ({
@@ -287,7 +307,7 @@ export async function POST(req: NextRequest) {
               })
             ),
           ],
-          tools: TOOL_DEFINITIONS,
+          tools: toolDefinitionsFor(catalogue),
           execute,
           onModelCall: async (usage) => {
             await prisma.toolCallLog.create({

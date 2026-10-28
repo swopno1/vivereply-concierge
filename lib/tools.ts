@@ -6,9 +6,9 @@
 // Tools are deliberately free of any Prisma import: the route injects a
 // small ToolDb implementation, so this file typechecks anywhere.
 
-import { findRoomBySlug, DEMO_ROOMS } from "@/demo-config/rooms";
+import { DEMO_ROOMS, type DemoRoom } from "@/demo-config/rooms";
 import { isDateString, nightsBetween, quoteForStay, formatTaka } from "@/demo-config/rates";
-import { getAvailability, createBooking, lookupBookingByCode, requestBookingDetails } from "./suite";
+import type { SuiteAdapter } from "./suite";
 import type { ToolDefinition } from "./meta";
 
 export type BookingDraftRecord = {
@@ -33,10 +33,12 @@ export type ToolDb = {
   createHandoff(conversationId: string, reason: string, summary: string): Promise<void>;
 };
 
-const ROOM_ENUM = DEMO_ROOMS.map((r) => r.slug);
 const DATE_DESC = "Exact date in YYYY-MM-DD format.";
 
-export const TOOL_DEFINITIONS: ToolDefinition[] = [
+// Tool schemas built per request from the property's catalogue (adapter
+// Phase 3): the model can only name rooms the property actually has.
+function buildToolDefinitions(roomSlugs: string[]): ToolDefinition[] {
+  return [
   {
     type: "function",
     function: {
@@ -45,7 +47,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       parameters: {
         type: "object",
         properties: {
-          roomSlug: { type: "string", enum: ROOM_ENUM, description: "Room slug from the catalogue." },
+          roomSlug: { type: "string", enum: roomSlugs, description: "Room slug from the catalogue." },
           checkIn: { type: "string", description: DATE_DESC },
           checkOut: { type: "string", description: DATE_DESC },
         },
@@ -61,7 +63,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       parameters: {
         type: "object",
         properties: {
-          roomSlug: { type: "string", enum: ROOM_ENUM, description: "Room slug from the catalogue." },
+          roomSlug: { type: "string", enum: roomSlugs, description: "Room slug from the catalogue." },
           checkIn: { type: "string", description: DATE_DESC },
           checkOut: { type: "string", description: DATE_DESC },
         },
@@ -77,7 +79,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       parameters: {
         type: "object",
         properties: {
-          roomSlug: { type: "string", enum: ROOM_ENUM, description: "Room slug from the catalogue." },
+          roomSlug: { type: "string", enum: roomSlugs, description: "Room slug from the catalogue." },
           checkIn: { type: "string", description: DATE_DESC },
           checkOut: { type: "string", description: DATE_DESC },
           guestName: { type: "string", description: "Guest full name." },
@@ -144,7 +146,16 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       },
     },
   },
-];
+  ];
+}
+
+export const TOOL_DEFINITIONS: ToolDefinition[] = buildToolDefinitions(
+  DEMO_ROOMS.map((r) => r.slug)
+);
+
+export function toolDefinitionsFor(rooms: DemoRoom[]): ToolDefinition[] {
+  return buildToolDefinitions(rooms.map((r) => r.slug));
+}
 
 function err(message: string): Record<string, unknown> {
   return { error: message };
@@ -166,8 +177,8 @@ type StayArgs = {
   checkOut?: unknown;
 };
 
-function resolveRoom(args: StayArgs): ReturnType<typeof findRoomBySlug> | Record<string, unknown> {
-  const room = typeof args.roomSlug === "string" ? findRoomBySlug(args.roomSlug) : undefined;
+function resolveRoom(args: StayArgs, rooms: DemoRoom[]): DemoRoom | Record<string, unknown> {
+  const room = typeof args.roomSlug === "string" ? rooms.find((r) => r.slug === args.roomSlug) : undefined;
   if (!room) return err("That room is not in the catalogue. Offer a listed room instead.");
   if (!room.suiteRoomId) {
     return err(
@@ -177,7 +188,12 @@ function resolveRoom(args: StayArgs): ReturnType<typeof findRoomBySlug> | Record
   return room;
 }
 
-export function createToolExecutor(conversationId: string, db: ToolDb) {
+export function createToolExecutor(
+  conversationId: string,
+  db: ToolDb,
+  suite: SuiteAdapter,
+  catalogue: DemoRoom[]
+) {
   return async function execute(name: string, argsJson: string): Promise<unknown> {
     let args: Record<string, unknown>;
     try {
@@ -216,7 +232,7 @@ export function createToolExecutor(conversationId: string, db: ToolDb) {
       const code = typeof args.code === "string" ? args.code.trim() : "";
       if (!code) return err("A booking code is needed to look a booking up. Ask the guest for their code.");
       try {
-        const found = await lookupBookingByCode(code);
+        const found = await suite.lookupBookingByCode(code);
         return {
           bookingCode: found.bookingCode,
           firstName: found.firstName,
@@ -238,7 +254,7 @@ export function createToolExecutor(conversationId: string, db: ToolDb) {
       const phone = typeof args.phone === "string" ? args.phone.trim() : "";
       if (!email && !phone) return err("An email address or phone number is needed. Ask the guest for one.");
       try {
-        await requestBookingDetails({ ...(email ? { email } : {}), ...(phone ? { phone } : {}) });
+        await suite.requestBookingDetails({ ...(email ? { email } : {}), ...(phone ? { phone } : {}) });
         return {
           sent: true,
           message: "If a booking exists for that contact, its details have been sent to the email address on the booking. For privacy, booking details are never shown in chat. Give the guest exactly this confirmation, and never say whether a booking was found.",
@@ -256,13 +272,13 @@ export function createToolExecutor(conversationId: string, db: ToolDb) {
     const checkIn = stay.checkIn as string;
     const checkOut = stay.checkOut as string;
 
-    const roomOrError = resolveRoom(stay);
+    const roomOrError = resolveRoom(stay, catalogue);
     if ("error" in (roomOrError as Record<string, unknown>)) return roomOrError;
-    const room = roomOrError as NonNullable<ReturnType<typeof findRoomBySlug>>;
+    const room = roomOrError as DemoRoom;
 
     if (name === "check_availability") {
       try {
-        const availability = await getAvailability(room.suiteRoomId, checkIn, checkOut);
+        const availability = await suite.getAvailability(room.suiteRoomId, checkIn, checkOut);
         return { room: room.name, checkIn, checkOut, available: availability.available };
       } catch (e) {
         return err(e instanceof Error ? e.message : "Availability check failed.");
@@ -271,7 +287,7 @@ export function createToolExecutor(conversationId: string, db: ToolDb) {
 
     if (name === "get_quote") {
       try {
-        const availability = await getAvailability(room.suiteRoomId, checkIn, checkOut);
+        const availability = await suite.getAvailability(room.suiteRoomId, checkIn, checkOut);
         if (availability.available <= 0) {
           return err(`The ${room.name} is sold out for ${checkIn} to ${checkOut}. Offer another room or dates.`);
         }
@@ -309,7 +325,7 @@ export function createToolExecutor(conversationId: string, db: ToolDb) {
         return err("This conversation already holds a booking draft. Share its booking code instead of creating another.");
       }
       try {
-        const booking = await createBooking(
+        const booking = await suite.createBooking(
           room.suiteRoomId,
           { guestName, guestEmail, guestPhone },
           checkIn,

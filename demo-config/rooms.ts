@@ -42,8 +42,32 @@ export function findRoomBySlug(slug: string): DemoRoom | undefined {
 
 /** One-line catalogue for the system prompt, so the model never invents a room or price.
  * Highlights are included so the model can match a guest's wish to a real room. */
-export function catalogueText(): string {
-  return DEMO_ROOMS.map(
+export function catalogueText(rooms: DemoRoom[] = DEMO_ROOMS): string {
+  return rooms.map(
     (r) => `- ${r.name} (slug: ${r.slug}) — ৳${(r.basePricePoisha / 100).toLocaleString("en-US")} per night — ${r.highlights.join(", ")}`
   ).join("\n");
+}
+
+// Per-property catalogue (adapter Phase 3). Rows win when present; the demo
+// property falls back to this file until it is seeded; any other property
+// without rows fails honestly instead of borrowing the demo's rooms.
+export async function catalogueForProperty(propertyId: string): Promise<DemoRoom[]> {
+  const { prisma } = await import("@/lib/prisma");
+  const rows = await prisma.roomMapping.findMany({
+    where: { propertyId },
+    orderBy: { createdAt: "asc" },
+  });
+  if (rows.length > 0) {
+    return rows.map((r) => ({
+      slug: r.slug,
+      name: r.name,
+      basePricePoisha: r.basePricePoisha,
+      suiteRoomId: r.suiteRoomId,
+      highlights: r.highlights,
+    }));
+  }
+  if (propertyId === (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat")) {
+    return DEMO_ROOMS;
+  }
+  throw new Error(`Property "${propertyId}" has no room catalogue yet.`);
 }
