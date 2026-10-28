@@ -14,28 +14,36 @@
 // booking agree, and a mismatch is surfaced as a warning, never
 // hidden.
 
+// Highlights are copied VERBATIM from demo1's seed amenities
+// (travel-scaffold@client/demo1 prisma/seed.ts), two per room, so the
+// agent can match a guest's wish ("sea-facing", "garden", "fire pit")
+// to a real room without inventing anything. Only Terracotta Villa
+// has a sea view in the seed — that is why a sea-facing ask maps to
+// it, and to nothing else.
 export type DemoRoom = {
   slug: string;
   name: string;
   basePricePoisha: number;
   suiteRoomId: string;
+  highlights: string[];
 };
 
 export const DEMO_ROOMS: DemoRoom[] = [
-  { slug: "terracotta-villa", name: "Terracotta Villa", basePricePoisha: 1450000, suiteRoomId: "8accd111-64a4-4407-b2c6-2885057e5919" },
-  { slug: "bamboo-cottage", name: "Bamboo Cottage", basePricePoisha: 850000, suiteRoomId: "de4ed2c6-34c7-44a2-b36f-c1b7f0647781" },
-  { slug: "clay-house-suite", name: "Clay House Suite", basePricePoisha: 980000, suiteRoomId: "75a8db71-56d9-442a-b5b9-8efd1151868d" },
-  { slug: "palm-loft", name: "Palm Loft", basePricePoisha: 720000, suiteRoomId: "9cb75e2a-a22f-4538-b4ef-120d30690bec" },
-  { slug: "earth-lodge", name: "Earth Lodge", basePricePoisha: 1680000, suiteRoomId: "e43671ca-6b81-4eef-be53-c3d64dcec0e1" },
+  { slug: "terracotta-villa", name: "Terracotta Villa", basePricePoisha: 1450000, suiteRoomId: "8accd111-64a4-4407-b2c6-2885057e5919", highlights: ["Sea-view terrace", "Private plunge pool"] },
+  { slug: "bamboo-cottage", name: "Bamboo Cottage", basePricePoisha: 850000, suiteRoomId: "de4ed2c6-34c7-44a2-b36f-c1b7f0647781", highlights: ["Outdoor soaking tub", "Private garden"] },
+  { slug: "clay-house-suite", name: "Clay House Suite", basePricePoisha: 980000, suiteRoomId: "75a8db71-56d9-442a-b5b9-8efd1151868d", highlights: ["Courtyard access", "Fire pit evenings"] },
+  { slug: "palm-loft", name: "Palm Loft", basePricePoisha: 720000, suiteRoomId: "9cb75e2a-a22f-4538-b4ef-120d30690bec", highlights: ["Hammock balcony", "Treetop views"] },
+  { slug: "earth-lodge", name: "Earth Lodge", basePricePoisha: 1680000, suiteRoomId: "e43671ca-6b81-4eef-be53-c3d64dcec0e1", highlights: ["Private kitchen garden", "Shaded veranda"] },
 ];
 
 export function findRoomBySlug(slug: string): DemoRoom | undefined {
   return DEMO_ROOMS.find((r) => r.slug === slug);
 }
 
-/** One-line catalogue for the system prompt, so the model never invents a room or price. */
+/** One-line catalogue for the system prompt, so the model never invents a room or price.
+ * Highlights are included so the model can match a guest's wish to a real room. */
 export function catalogueText(): string {
   return DEMO_ROOMS.map(
-    (r) => `- ${r.name} (slug: ${r.slug}) — ৳${(r.basePricePoisha / 100).toLocaleString("en-US")} per night`
+    (r) => `- ${r.name} (slug: ${r.slug}) — ৳${(r.basePricePoisha / 100).toLocaleString("en-US")} per night — ${r.highlights.join(", ")}`
   ).join("\n");
 }
