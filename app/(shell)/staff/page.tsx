@@ -1,7 +1,8 @@
-// Staff handoff view (step 2b, protected since step 4.5). Lists every
-// handoff the agent made, with the full conversation transcript, so
-// staff can pick up where the bot left off. No valid admin session
-// cookie means a redirect to /login, before any handoff is read.
+// Staff handoff view (inside the shell route group: nav lives in the
+// sidebar, so this page keeps only its own content). Lists every handoff
+// the agent made, with the full conversation transcript, so staff can
+// pick up where the bot left off. No valid admin session cookie means a
+// redirect to /login, before any handoff is read.
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -28,20 +29,15 @@ export default async function StaffPage() {
   });
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col p-4">
+    <div className="mx-auto w-full max-w-2xl p-4">
       <header className="border-b pb-3">
         <h1 className="text-xl font-bold">Staff — Handoffs</h1>
         <p className="text-sm text-gray-500">
           Conversations the Concierge passed to staff, newest first.
         </p>
-        <p className="text-sm">
-          <a href="/" className="underline">
-            Back to chat
-          </a>
-        </p>
       </header>
 
-      <div className="flex flex-1 flex-col gap-6 py-4">
+      <div className="flex flex-col gap-6 py-4">
         {handoffs.length === 0 && (
           <p className="text-sm text-gray-500">
             No handoffs yet. Ask for a person, or make a request the tools cannot handle, and it
@@ -75,6 +71,6 @@ export default async function StaffPage() {
       <p className="border-t pt-3 text-sm text-gray-500">
         Protected by admin login since step 4.5.
       </p>
-    </main>
+    </div>
   );
 }
