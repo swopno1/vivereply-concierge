@@ -41,6 +41,12 @@ function LoginInner() {
 
   return (
     <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center p-4">
+      <div className="mb-4 flex items-center gap-3">
+        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0C1222]">
+          <img src="/brand/vivereply-mark.svg" alt="Vivereply logo" className="h-9 w-9" />
+        </span>
+        <span className="text-lg font-bold">Vivereply Concierge</span>
+      </div>
       <h1 className="text-xl font-bold">Admin login</h1>
       <p className="mt-1 text-sm text-gray-500">
         Staff view and domain settings are protected. No signup in v1 — the admin password is set
@@ -67,6 +73,9 @@ function LoginInner() {
       {error && (
         <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
+      <p className="mt-6 text-center text-xs text-gray-400">
+        Vivereply Concierge · ViveScript Solutions LLC
+      </p>
     </main>
   );
 }
