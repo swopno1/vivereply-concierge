@@ -3,9 +3,25 @@
 // Tool calling is native: a standard `tools` array, parallel calls allowed,
 // `tool_choice` omitted (defaults to auto — the only value Meta accepts).
 // No streaming yet (optional polish).
+//
+// Baseten fallback (hackathon demo insurance): when the primary Meta API
+// call fails AND BASETEN_API_KEY is set, the same payload retries once
+// against Baseten's OpenAI-compatible endpoint serving Meta's open-weights
+// model (exactly meta-models/muse-spark-open-1026 — the key works with no
+// other model). Without the key the fallback is inert and behavior is
+// identical to before. Every fallback serve is logged (server log only),
+// and fallback replies may word things slightly differently — same tools,
+// same guards, different weights. Data-flow note: on fallback turns, guest
+// text flows to Baseten instead of Meta (stated in the README, never
+// silent). The contributor-flagged model stays out of the guest path
+// entirely, primary or fallback.
 
 const BASE_URL = process.env.META_API_BASE_URL ?? "https://api.meta.ai/v1";
 const MODEL = process.env.META_MODEL ?? "muse-spark-1.3";
+const BASETEN_URL = "https://inference.baseten.co/v1";
+// Pinned, deliberately not an env override: the hackathon key works ONLY
+// with this exact model, so configurability would be a pure footgun.
+const BASETEN_MODEL = "meta-models/muse-spark-open-1026";
 
 export type ChatMessage = {
   role: "user" | "assistant" | "system" | "tool";
@@ -54,28 +70,65 @@ function apiKey(): string {
   return key;
 }
 
+function basetenKey(): string | null {
+  return process.env.BASETEN_API_KEY ?? null;
+}
+
+// One completions attempt against one backend. Throws on transport, status,
+// or shape failure — the caller decides whether a fallback attempt follows.
+async function attemptCompletions(
+  baseUrl: string,
+  key: string,
+  model: string,
+  payload: Record<string, unknown>
+): Promise<unknown> {
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, model }),
+  });
+  if (!res.ok) {
+    throw new Error(`Completions API responded ${res.status}`);
+  }
+  return res.json();
+}
+
+// Primary then fallback: the Meta API first, always; Baseten's
+// open-weights endpoint second, only when its key is configured. Exactly
+// one fallback attempt — a double failure throws the FALLBACK's error with
+// the primary's attached, so the log shows both.
+async function completionsWithFallback(payload: Record<string, unknown>): Promise<{ data: unknown; via: "meta" | "baseten" }> {
+  try {
+    const data = await attemptCompletions(BASE_URL, apiKey(), MODEL, payload);
+    return { data, via: "meta" };
+  } catch (primaryError) {
+    const fallbackKey = basetenKey();
+    if (!fallbackKey) throw primaryError;
+    try {
+      const data = await attemptCompletions(BASETEN_URL, fallbackKey, BASETEN_MODEL, payload);
+      console.log(
+        `concierge: llm fallback baseten (primary: ${primaryError instanceof Error ? primaryError.message : primaryError})`
+      );
+      return { data, via: "baseten" };
+    } catch (fallbackError) {
+      throw new Error(
+        `Fallback failed (${fallbackError instanceof Error ? fallbackError.message : fallbackError}); primary: ${primaryError instanceof Error ? primaryError.message : primaryError}`
+      );
+    }
+  }
+}
+
 export async function chatCompletion(
   messages: ChatMessage[]
 ): Promise<{ reply: string; usage: Usage }> {
-  const res = await fetch(`${BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey()}`,
-      "Content-Type": "application/json",
-    },
-    // Generous max_tokens: Muse Spark reasons first and reasoning tokens
-    // count against this budget (smoke test: 337 reasoning tokens for one word).
-    body: JSON.stringify({ model: MODEL, messages, max_tokens: 1024 }),
-  });
-  if (!res.ok) {
-    throw new Error(`Meta API responded ${res.status}`);
-  }
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
+  // Generous max_tokens: Muse Spark reasons first and reasoning tokens
+  // count against this budget (smoke test: 337 reasoning tokens for one word).
+  const { data } = await completionsWithFallback({ messages, max_tokens: 1024 });
+  const content = (data as { choices?: { message?: { content?: unknown } }[] })?.choices?.[0]?.message?.content;
   if (typeof content !== "string" || !content) {
     throw new Error("Empty reply from model");
   }
-  return { reply: content, usage: parseUsage(data) };
+  return { reply: content, usage: parseUsage(data as { usage?: Record<string, unknown> }) };
 }
 
 export async function chatCompletionWithTools(
@@ -101,19 +154,10 @@ export async function chatCompletionWithTools(
     return { role: m.role, content: m.content };
   });
 
-  const res = await fetch(`${BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ model: MODEL, messages: wireMessages, tools, max_tokens: 2048 }),
-  });
-  if (!res.ok) {
-    throw new Error(`Meta API responded ${res.status}`);
-  }
-  const data = await res.json();
-  const message = data?.choices?.[0]?.message;
+  const { data } = await completionsWithFallback({ messages: wireMessages, tools, max_tokens: 2048 });
+  const message = (data as { choices?: { message?: unknown }[] })?.choices?.[0]?.message as
+    | { content?: unknown; tool_calls?: { id: string; function?: { name?: string; arguments?: string } }[] }
+    | undefined;
   if (!message) {
     throw new Error("Empty reply from model");
   }
@@ -130,5 +174,5 @@ export async function chatCompletionWithTools(
   if (!content && toolCalls.length === 0) {
     throw new Error("Empty reply from model");
   }
-  return { content, toolCalls, usage: parseUsage(data) };
+  return { content, toolCalls, usage: parseUsage(data as { usage?: Record<string, unknown> }) };
 }

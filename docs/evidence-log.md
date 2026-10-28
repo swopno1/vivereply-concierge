@@ -336,6 +336,30 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
   Session/LoginAttempt/mustChangePassword + deploy): login rows, throttle
   429s, revoke propagation, register → temp login → change → relogin loop.
 
+## 2026-10-28 — Judge-readability pass (uncommitted, feature/auth-tier1)
+
+- Audit: 30/30 source files carry module headers (the 3 apparent gaps were
+  grep artifacts — Python docstring, header below "use client", mid-file
+  comments); the one truly bare file (app/api/chat/route.ts, the file
+  judges open first) now has the turn-pipeline header.
+- README rewritten from the v1 era to current truth: tenants, Tier 1 auth,
+  fixture backend, staff widget, consolidated Settings/Admin, Modal worker,
+  current env list + seed flow, seabreeze demo beat. .env.example gains
+  TENANT_PASSWORD documentation. No behavior changed.
+
+## 2026-10-28 — Baseten fallback added (uncommitted, feature/auth-tier1)
+
+- lib/meta.ts: primary Meta API first, always; on failure + BASETEN_API_KEY
+  set, one retry of the identical payload against Baseten
+  (meta-models/muse-spark-open-1026, exact); each serve logged; double
+  failure throws both errors. Inert without the key. Contributor model
+  stays out of the guest path on both backends.
+- STATIC PROOF: tsc green; 8/8 probes on real meta.ts (fetch stubbed):
+  primary-ok single call, fallback serve + exact URL + exact model +
+  payload repeat, no-key throw, double-failure message, tools-path
+  transport fallback. Live fallback unproven (needs deploy + forced
+  primary failure — a P4 stretch, not a gate).
+
 ## 2026-10-28 — settings page built (uncommitted, feature/settings-page)
 
 - BUILT /settings (admin-guarded): per-key chat embed snippets + copy (origin from
