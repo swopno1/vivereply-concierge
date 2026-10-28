@@ -1,3 +1,14 @@
+// Guest chat API (the product's front door — judges start here).
+//   POST /api/chat { message, token, conversationId? } -> SSE stream
+// One guest turn, streamed honestly: the token (direct or widget) is
+// verified and its propertyId governs everything; the message is saved;
+// the property resolves to its backend + catalogue + voice + knowledge;
+// the agent runs (model → tools → model, max 6 rounds); phases stream
+// WHILE work happens ("thinking" on model calls, "checking + detail" per
+// tool, built only from the tool's real arguments — never timer-faked);
+// the reply saves, cards build from this turn's tool logs only, and the
+// stream closes with { done }. Errors mid-stream are generic lines to the
+// guest; real causes go to the server log.
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { runAgent } from "@/lib/agent";

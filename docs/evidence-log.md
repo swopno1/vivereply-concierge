@@ -308,6 +308,67 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
 - NOT yet proven live (needs deploy): consolidated settings render, admin
   ops render, seeded-key widget render, nav groups.
 
+## 2026-10-28 — Auth Tier 1 built, static proof green (uncommitted, feature/auth-tier1)
+
+- Server-side session allowlist: cookie keeps signed payload + server-minted
+  sid; live = row exists + unrevoked + unexpired + 24h idle; row must agree
+  with payload on uid/role; lastSeenAt touched every 5 min max. Pre-Tier-1
+  tokens (no sid) rejected — one global logout on deploy.
+- Kill switches: logout revokes one row; password change + admin revoke-all
+  act per user; deactivation revokes too. Fixation impossible (server-minted
+  sids only); multi-device allowed.
+- Login throttling (DB-backed): 5 fails/15min per email OR 20/15min per IP
+  → 429; throttled hits not logged (no self-extending block); attempts +
+  dead sessions pruned opportunistically.
+- Password change (owners): PATCH /api/auth/password, min 12, revokes all
+  sessions + clears cookie (re-login); bootstrap refused with directions.
+  Settings Profile hosts the form + temp-password banner.
+- Registration UI (super-only): /admin/register + POST /api/admin/properties
+  creates property + domains + owner with shown-once temp password (409s on
+  dup id/key/email); seed file stays as bootstrap/recovery path.
+- User controls: PATCH /api/admin/users (deactivate reactivates + revokes),
+  POST .../revoke-sessions; Admin ops list embeds per-owner actions; nav
+  gains super-only Register (prefix-matched filter).
+- STATIC PROOF: tsc green; 19/19 probes on real lib/auth.ts (sid mint/
+  round-trip/refusals ×3, temp format/unique, throttle ×4, slug ×5,
+  email ×3). Allowlist/touch/throttle-count paths need DB — live only.
+- NOT yet proven live (needs PR #7 merge + this branch merge + db push with
+  Session/LoginAttempt/mustChangePassword + deploy): login rows, throttle
+  429s, revoke propagation, register → temp login → change → relogin loop.
+
+## 2026-10-28 — Judge-readability pass (uncommitted, feature/auth-tier1)
+
+- Audit: 30/30 source files carry module headers (the 3 apparent gaps were
+  grep artifacts — Python docstring, header below "use client", mid-file
+  comments); the one truly bare file (app/api/chat/route.ts, the file
+  judges open first) now has the turn-pipeline header.
+- README rewritten from the v1 era to current truth: tenants, Tier 1 auth,
+  fixture backend, staff widget, consolidated Settings/Admin, Modal worker,
+  current env list + seed flow, seabreeze demo beat. .env.example gains
+  TENANT_PASSWORD documentation. No behavior changed.
+
+## 2026-10-28 — Baseten fallback added (uncommitted, feature/auth-tier1)
+
+- lib/meta.ts: primary Meta API first, always; on failure + BASETEN_API_KEY
+  set, one retry of the identical payload against Baseten
+  (meta-models/muse-spark-open-1026, exact); each serve logged; double
+  failure throws both errors. Inert without the key. Contributor model
+  stays out of the guest path on both backends.
+- STATIC PROOF: tsc green; 8/8 probes on real meta.ts (fetch stubbed):
+  primary-ok single call, fallback serve + exact URL + exact model +
+  payload repeat, no-key throw, double-failure message, tools-path
+  transport fallback. Live fallback unproven (needs deploy + forced
+  primary failure — a P4 stretch, not a gate).
+
+## 2026-10-28 — .env.example rewritten from audit (uncommitted, feature/auth-tier1)
+
+- Every process.env read in app/lib/demo-config/prisma + the worker's Modal
+  Secret keys audited; template rewritten grouped with proper comments
+  (agent, fallback, embeddings, DB, demo/tenants, auth, binding keys, RAG,
+  Modal Secret reference, client-dashboard var). dotenv parses: 15 keys.
+- DROPPED as wired to nothing: AGENT_SHARED_SECRET, PAYMENT_MODE
+  (pre-existing template cruft, zero code references).
+
 ## 2026-10-28 — settings page built (uncommitted, feature/settings-page)
 
 - BUILT /settings (admin-guarded): per-key chat embed snippets + copy (origin from

@@ -30,9 +30,16 @@
 import { createHmac, createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 
 export const ADMIN_SESSION_COOKIE = "concierge_session";
-const SESSION_DAYS = 7;
 const CHAT_TOKEN_HOURS = 24;
 const EMBED_TOKEN_MINUTES = 15;
+
+// Auth Tier 1 knobs (exported for lib/tenant.ts + routes + probes).
+export const SESSION_ABSOLUTE_DAYS = 7;
+export const SESSION_IDLE_HOURS = 24;
+export const MIN_PASSWORD_LEN = 12;
+export const THROTTLE_WINDOW_MIN = 15;
+export const THROTTLE_MAX_EMAIL_FAILS = 5;
+export const THROTTLE_MAX_IP_FAILS = 20;
 
 function sessionSecret(): string | null {
   const secret = process.env.SESSION_SECRET;
@@ -138,31 +145,38 @@ export async function verifyPassword(password: string, stored: string): Promise<
 export const DUMMY_PASSWORD_HASH =
   "scrypt$1$a81e47d152cf4764e8e651fffc7a9547$f8b778f0a1c7c165bd2f27573b286ba90656874c526d8bdfd089d30884f70621";
 
-// --- Session (v2, role + property) --------------------------------------
-// v1 tokens (boolean admin) are NOT accepted anymore — this deploy logs
-// everyone out exactly once, and every session from here carries who and
-// which property. An OWNER session always carries its propertyId; a
-// SUPER_ADMIN session carries null (all properties).
+// --- Session (v2 + sid allowlist, auth Tier 1) ------------------------------
+// The cookie carries a signed payload (fast gating) PLUS a server-minted
+// session id. A session is live only while its Session row exists,
+// unrevoked, unexpired, and within the idle window (checked in
+// lib/tenant.ts) — logout, password change, and admin revoke all act
+// there. Session ids are server-minted only, so fixation is impossible by
+// construction; each login mints a fresh row (multi-device allowed).
+// Tokens without a sid (pre-Tier-1) are rejected — this deploy logs
+// everyone out exactly once.
 
 export type SessionRole = "SUPER_ADMIN" | "OWNER";
 
 export type Session = {
+  sid: string;
   uid: string;
   email: string | null;
   role: SessionRole;
   propertyId: string | null;
 };
 
-type SessionPayload = { v: number; uid: string; email: string | null; role: string; propertyId: string | null; exp: number };
+type SessionPayload = { v: number; sid: string; uid: string; email: string | null; role: string; propertyId: string | null; exp: number };
 
 export function createSessionToken(session: Session): string | null {
+  if (!session.sid) return null;
   return encodeToken({
     v: 2,
+    sid: session.sid,
     uid: session.uid,
     email: session.email,
     role: session.role,
     propertyId: session.propertyId,
-    exp: Math.floor(Date.now() / 1000) + SESSION_DAYS * 24 * 3600,
+    exp: Math.floor(Date.now() / 1000) + SESSION_ABSOLUTE_DAYS * 24 * 3600,
   });
 }
 
@@ -170,10 +184,36 @@ export function verifySessionToken(token: string | null | undefined): Session | 
   if (!token) return null;
   const payload = decodeToken<SessionPayload>(token);
   if (!payload || payload.v !== 2) return null;
+  if (!payload.sid) return null;
   if (!payload.uid || (payload.role !== "SUPER_ADMIN" && payload.role !== "OWNER")) return null;
   if (payload.role === "OWNER" && !payload.propertyId) return null;
   if (payload.exp <= Math.floor(Date.now() / 1000)) return null;
-  return { uid: payload.uid, email: payload.email ?? null, role: payload.role, propertyId: payload.propertyId };
+  return { sid: payload.sid, uid: payload.uid, email: payload.email ?? null, role: payload.role, propertyId: payload.propertyId };
+}
+
+// --- Tier 1 helpers (pure, probed) ----------------------------------------
+
+// Temporary passwords (admin-issued, shown once): 16 readability-safe chars.
+export function generateTempPassword(): string {
+  return randomBytes(12).toString("base64url");
+}
+
+// Throttle decision from recent-failure counts (window enforced by the
+// caller counting rows newer than THROTTLE_WINDOW_MIN). Either dimension
+// trips the block — per-email stops targeted guessing, per-IP stops spray.
+export function throttleDecision(emailFails: number, ipFails: number): boolean {
+  return emailFails >= THROTTLE_MAX_EMAIL_FAILS || ipFails >= THROTTLE_MAX_IP_FAILS;
+}
+
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export function isValidSlug(value: unknown, maxLen = 100): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= maxLen && SLUG_RE.test(value);
+}
+
+export function isValidEmail(value: unknown, maxLen = 150): value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > maxLen) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 // --- Chat token -----------------------------------------------------

@@ -17,6 +17,7 @@ import SuiteBindings from "../../components/SuiteBindings";
 import RoomCatalogues from "../../components/RoomCatalogues";
 import AdminDomains from "../../components/AdminDomains";
 import BridgeTokens from "../../components/BridgeTokens";
+import PasswordChange from "../../components/PasswordChange";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +79,12 @@ export default async function SettingsPage({
   }
   const params = (await searchParams) ?? {};
   const propertyId = await resolvePropertyId(session, params.property);
+  const me =
+    session.uid === "bootstrap"
+      ? null
+      : await prisma.user
+          .findUnique({ where: { id: session.uid }, select: { mustChangePassword: true } })
+          .catch(() => null);
 
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "app.vivereply.com";
@@ -332,6 +339,7 @@ export default async function SettingsPage({
           </div>
           <SignOutButton />
         </div>
+        {me && <PasswordChange mustChange={me.mustChangePassword} />}
       </Section>
 
       <Section

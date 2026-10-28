@@ -39,9 +39,48 @@ model User {
   propertyId   String?
   property     Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   active       Boolean   @default(true)
+  // True while a temporary (admin-issued) password is in force — the owner
+  // sees a change-password banner until they set their own.
+  mustChangePassword Boolean @default(false)
   createdAt    DateTime  @default(now())
+  sessions     Session[]
 
   @@index([propertyId, active])
+}
+
+// Server-side session allowlist (auth Tier 1). The cookie still carries a
+// signed payload (fast gating), but a session is live ONLY while its row
+// exists, is unrevoked, unexpired, and within the idle window. Logout,
+// password change, and admin revoke all act here — no more "rotate the
+// global secret to kill one session". Bootstrap (env-password) super-admin
+// sessions have a null userId. Rows are small; prune expired ones
+// opportunistically at login.
+model Session {
+  id        String    @id @default(cuid())
+  userId    String?
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String
+  createdAt DateTime  @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  @@index([userId, revokedAt])
+}
+
+// Login attempt log (auth Tier 1 throttling). One row per login POST (both
+// outcomes). Throttle reads recent failures per email / per IP; rows older
+// than an hour are pruned opportunistically at login. No passwords here,
+// ever — only the outcome.
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  ip        String
+  ok        Boolean
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([ip, createdAt])
 }
 
 model Conversation {
