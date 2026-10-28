@@ -100,7 +100,11 @@ export type BookingLookup = {
 export async function lookupBookingByCode(code: string): Promise<BookingLookup> {
   const data = (await suiteFetch(
     `/api/bookings/lookup?code=${encodeURIComponent(code)}`
-  )) as BookingLookup;
+  )) as BookingLookup & { checkInDate?: string; checkOutDate?: string };
+  // Live demo1 returns checkInDate/checkOutDate (verified 2026-10-28);
+  // accept both shapes so the code path never yields undefined dates.
+  data.checkIn = data.checkIn ?? data.checkInDate ?? "";
+  data.checkOut = data.checkOut ?? data.checkOutDate ?? "";
   return data;
 }
 
