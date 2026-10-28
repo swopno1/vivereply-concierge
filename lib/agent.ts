@@ -21,12 +21,14 @@ export async function runAgent(params: {
   tools: ToolDefinition[];
   execute: AgentExecutor;
   onModelCall: (usage: Usage) => Promise<void>;
+  onModelStart?: () => Promise<void>;
   maxTurns?: number;
 }): Promise<{ reply: string }> {
   const { tools, execute, onModelCall, maxTurns = 6 } = params;
   const convo: ChatMessage[] = [...params.messages];
 
   for (let turn = 0; turn < maxTurns; turn++) {
+    if (params.onModelStart) await params.onModelStart();
     const { content, toolCalls, usage } = await chatCompletionWithTools(convo, tools);
     await onModelCall(usage);
 
