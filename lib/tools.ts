@@ -8,7 +8,7 @@
 
 import { findRoomBySlug, DEMO_ROOMS } from "@/demo-config/rooms";
 import { isDateString, nightsBetween, quoteForStay, formatTaka } from "@/demo-config/rates";
-import { getAvailability, createBooking } from "./suite";
+import { getAvailability, createBooking, lookupBookingByCode, requestBookingDetails } from "./suite";
 import type { ToolDefinition } from "./meta";
 
 export type BookingDraftRecord = {
@@ -103,6 +103,35 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "lookup_booking_by_code",
+      description: "Look up a booking by its code. Returns only the stay dates, the guest's first name, and the status — never anything else. Use when the guest has a booking code.",
+      parameters: {
+        type: "object",
+        properties: {
+          code: { type: "string", description: "The booking code, e.g. RES-202610-00001." },
+        },
+        required: ["code"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "request_booking_details",
+      description: "Send a guest's booking details to the email address already on their booking, looked up by email or phone. Details are never shown in chat. The reply is the same whether or not a booking exists — never say whether one was found.",
+      parameters: {
+        type: "object",
+        properties: {
+          email: { type: "string", description: "Guest email address, if given." },
+          phone: { type: "string", description: "Guest phone number, if given." },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "request_handoff",
       description: "Hand the conversation to staff with a summary, when the request is outside what the tools can do or the guest asks for a person.",
       parameters: {
@@ -181,6 +210,44 @@ export function createToolExecutor(conversationId: string, db: ToolDb) {
         totalsMatch: draft.totalsMatch,
         message: "This booking is confirmed as held (status PENDING, no payment taken). Read these details back to the guest exactly as shown.",
       };
+    }
+
+    if (name === "lookup_booking_by_code") {
+      const code = typeof args.code === "string" ? args.code.trim() : "";
+      if (!code) return err("A booking code is needed to look a booking up. Ask the guest for their code.");
+      try {
+        const found = await lookupBookingByCode(code);
+        return {
+          bookingCode: found.bookingCode,
+          firstName: found.firstName,
+          checkIn: found.checkIn,
+          checkOut: found.checkOut,
+          status: found.status,
+          message: "Read back only these details: the stay dates, the guest's first name, and the status. Do not add anything the lookup did not return.",
+        };
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "";
+        if (message === "not_found") return err("No booking found for that code. Ask the guest to check the code and try again.");
+        if (message === "rate_limited") return err("Too many lookup attempts. Ask the guest to try again later.");
+        return err(message || "Booking lookup failed.");
+      }
+    }
+
+    if (name === "request_booking_details") {
+      const email = typeof args.email === "string" ? args.email.trim() : "";
+      const phone = typeof args.phone === "string" ? args.phone.trim() : "";
+      if (!email && !phone) return err("An email address or phone number is needed. Ask the guest for one.");
+      try {
+        await requestBookingDetails({ ...(email ? { email } : {}), ...(phone ? { phone } : {}) });
+        return {
+          sent: true,
+          message: "If a booking exists for that contact, its details have been sent to the email address on the booking. For privacy, booking details are never shown in chat. Give the guest exactly this confirmation, and never say whether a booking was found.",
+        };
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "";
+        if (message === "rate_limited") return err("Too many attempts. Ask the guest to try again later.");
+        return err(message || "Could not request booking details.");
+      }
     }
 
     const stay = args as StayArgs;

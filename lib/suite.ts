@@ -89,3 +89,28 @@ export async function createBooking(
   })) as { booking: BookingDraft };
   return data.booking;
 }
+export type BookingLookup = {
+  bookingCode: string;
+  firstName: string;
+  checkIn: string;
+  checkOut: string;
+  status: string;
+};
+
+export async function lookupBookingByCode(code: string): Promise<BookingLookup> {
+  const data = (await suiteFetch(
+    `/api/bookings/lookup?code=${encodeURIComponent(code)}`
+  )) as BookingLookup;
+  return data;
+}
+
+export async function requestBookingDetails(contact: {
+  email?: string;
+  phone?: string;
+}): Promise<{ sent: boolean }> {
+  const data = (await suiteFetch("/api/bookings/send-details", {
+    method: "POST",
+    body: JSON.stringify(contact),
+  })) as { sent: boolean };
+  return data;
+}
