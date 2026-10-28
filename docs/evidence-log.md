@@ -360,6 +360,15 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
   transport fallback. Live fallback unproven (needs deploy + forced
   primary failure — a P4 stretch, not a gate).
 
+## 2026-10-28 — .env.example rewritten from audit (uncommitted, feature/auth-tier1)
+
+- Every process.env read in app/lib/demo-config/prisma + the worker's Modal
+  Secret keys audited; template rewritten grouped with proper comments
+  (agent, fallback, embeddings, DB, demo/tenants, auth, binding keys, RAG,
+  Modal Secret reference, client-dashboard var). dotenv parses: 15 keys.
+- DROPPED as wired to nothing: AGENT_SHARED_SECRET, PAYMENT_MODE
+  (pre-existing template cruft, zero code references).
+
 ## 2026-10-28 — settings page built (uncommitted, feature/settings-page)
 
 - BUILT /settings (admin-guarded): per-key chat embed snippets + copy (origin from
