@@ -47,14 +47,14 @@ const TENANTS = [
     name: "Krishnachura Retreat",
     widgetKey: "demo-krishnachura",
     domains: ["demo1.vivereply.com"],
-    ownerEmail: "", // <-- founder fills, then re-runs
+    ownerEmail: "krishnachura@test.com",
   },
   {
     id: "seabreeze-test",
     name: "Seabreeze Test Inn",
     widgetKey: "test-seabreeze",
     domains: [], // direct-token chat only until a domain is approved
-    ownerEmail: "", // <-- founder fills, then re-runs
+    ownerEmail: "sabreeze@test.com",
     // PRICE CONTRACT: these MUST equal demo-config/fixture.ts (same slugs,
     // same poisha, same suiteRoomIds). A mismatch surfaces as a totals
     // warning on drafts — visible, never silent.

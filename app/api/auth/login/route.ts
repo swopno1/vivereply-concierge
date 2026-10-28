@@ -1,10 +1,11 @@
 // Login API (multi-tenant core, auth Tier 1). Two paths, one generic error:
-//   - email + password: a seeded User row (OWNER, or a SUPER_ADMIN row).
+//   - ADMIN_EMAIL + ADMIN_PASSWORD (env): the founder bootstrap — a
+//     SUPER_ADMIN session, checked first so recovery is unconditional.
+//     Unset ADMIN_EMAIL disables it (fail closed).
+//   - email + password: a User row (OWNER, or a SUPER_ADMIN row).
 //     Unknown emails still pay one scrypt (dummy hash), so enumeration by
 //     timing buys nothing. An OWNER whose property is missing or inactive
 //     fails closed. Any role string outside the two known ones fails closed.
-//   - password only (empty email): the founder bootstrap — ADMIN_PASSWORD
-//     env, SUPER_ADMIN session. A missing env always fails closed.
 // Tier 1: attempts are throttled per email + per IP (DB-backed, so it holds
 // across instances); each login mints a fresh server-side Session row and
 // the cookie carries its id (fixation impossible — ids are server-minted
@@ -18,6 +19,7 @@ import {
   DUMMY_PASSWORD_HASH,
   THROTTLE_WINDOW_MIN,
   createSessionToken,
+  isBootstrapEmail,
   throttleDecision,
   verifyAdminPassword,
   verifyPassword,
@@ -50,7 +52,11 @@ export async function POST(req: NextRequest) {
 
   let session: Omit<Session, "sid"> | null = null;
   let userId: string | null = null;
-  if (email) {
+  // Bootstrap first: ADMIN_EMAIL + ADMIN_PASSWORD always recovers, even if
+  // a User row exists for that address (never create one — it would shadow).
+  if (email && isBootstrapEmail(email) && verifyAdminPassword(password)) {
+    session = { uid: "bootstrap", email, role: "SUPER_ADMIN", propertyId: null };
+  } else if (email) {
     const user = await prisma.user.findUnique({ where: { email } }).catch(() => null);
     const ok = await verifyPassword(
       password,
@@ -68,8 +74,6 @@ export async function POST(req: NextRequest) {
         userId = user.id;
       }
     }
-  } else if (verifyAdminPassword(password)) {
-    session = { uid: "bootstrap", email: null, role: "SUPER_ADMIN", propertyId: null };
   }
 
   await prisma.loginAttempt
