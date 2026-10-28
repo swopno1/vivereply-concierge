@@ -158,6 +158,47 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
   validation phase-by-phase (suite re-pass, binding-row quote, seed + quote-diff,
   guardrail + health checks).
 
+## 2026-10-28 — RAG onboarding built (uncommitted, feature/rag-onboarding)
+
+- P0: schema (PropertyProfile, OnboardingRun, KnowledgeDocument.propertyId w/ demo
+  backfill default) + lib/onboarding.ts (budgets, sanitize, well-known, overBudget).
+- P1: /onboarding board (property load, profile form, signed-URL uploads, submit,
+  approval box, re-invoke) + admin APIs (status/submit/uploads/approve/invoke).
+- P2: worker contract (lib/worker.ts invoke + shared-secret verify), /api/worker/
+  callback (progress/chunks/complete/failed, pre-embed ceiling, batch upsert),
+  embedMany batch API, worker/onboarding.py Modal app (well-known-or-crawl,
+  7 formats, chunker, stop protocol) + deploy README.
+- P3: retrieval propertyId filter, persona wire-up into systemPrompt, approval flip.
+- P4: docs/onboarding.md operator guide, env template, product/README bullets.
+- STATIC PROOF: tsc green; py_compile OK; 17/17 pure probes (budgets, sanitize,
+  well-known, overBudget, worker secret) on real libs.
+- PENDING founder lift (order): envs (SUPABASE_URL/SERVICE_KEY, WORKER_SHARED_SECRET,
+  MODAL_WORKER_URL) → bucket SQL → db push → Modal deploy → app deploy → live
+  onboarding trial on a test property.
+
+## 2026-10-28 — worker rework built (uncommitted, feature/rag-onboarding)
+
+- Worker owns embed + store: Modal Secret gains GEMINI_API_KEY + WORKER_DB_URL
+  (least-privilege role via docs/worker-db-role.sql, never service-role);
+  chunks staged indexed=false, flipped on completion; raw bundle to Storage.
+- SSRF guard on every fetch (public-only + redirect re-validation + caps);
+  auth via timing-safe payload secret (no implied header security).
+- App trimmed: callback is progress/complete/failed + budget stop-authority;
+  invoke passes storageHost + rawUploadUrl; dashboard polls to terminal.
+- Retrieval filters indexed=true; KnowledgeChunk.indexed defaults true (no
+  backfill; worker always stages false explicitly).
+- DEVIATION from plan: full RLS-with-session-var deferred — enabling RLS
+  without proving the app role bypasses it could break live reads. Shipped
+  least-privilege GRANTs + fail-closed insert helper (re-reads document
+  property) + CHECK constraint; RLS stays a documented, verifiable follow-up.
+- STATIC PROOF: tsc green; py_compile OK; guard probes 33/33 on real worker
+  code via import stubs (11 blocked IPs incl. metadata/link-local/multicast —
+  the probe caught Python's is_global multicast quirk, fixed explicitly;
+  7 URL rejects, chunker, vector format, insert fail-closed ×3).
+- PENDING founder lift (order): role SQL → db push → Modal secret additions →
+  redeploy worker + app → live adversarial trial (metadata-URL run must fail
+  closed with zero chunks; fixture run lands indexed).
+
 ## 2026-10-28 — settings page built (uncommitted, feature/settings-page)
 
 - BUILT /settings (admin-guarded): per-key chat embed snippets + copy (origin from

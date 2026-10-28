@@ -54,3 +54,55 @@ export async function embedText(
   }
   return values as number[];
 }
+
+// Batch embeddings for ingestion (onboarding callback). One HTTP call per
+// 100 texts; order preserved. Same model, same 768 dimensions, document
+// task type — queries keep using embedText above.
+export async function embedMany(
+  texts: string[],
+  taskType: EmbedTaskType = "RETRIEVAL_DOCUMENT"
+): Promise<number[][]> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    throw new Error("GEMINI_API_KEY is not set");
+  }
+  const out: number[][] = [];
+  for (let i = 0; i < texts.length; i += 100) {
+    const batch = texts.slice(i, i + 100);
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_EMBED_MODEL}:batchEmbedContents`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({
+          requests: batch.map((text) => ({
+            model: `models/${GEMINI_EMBED_MODEL}`,
+            content: { parts: [{ text }] },
+            taskType,
+            outputDimensionality: GEMINI_EMBED_DIMENSIONS,
+          })),
+        }),
+      }
+    );
+    if (!res.ok) {
+      throw new Error(`Gemini batch embeddings responded ${res.status}`);
+    }
+    const data = await res.json();
+    const embeddings = data?.embeddings;
+    if (!Array.isArray(embeddings) || embeddings.length !== batch.length) {
+      throw new Error("Unexpected Gemini batch response (count mismatch)");
+    }
+    for (const item of embeddings) {
+      const values = item?.values;
+      if (
+        !Array.isArray(values) ||
+        values.length !== GEMINI_EMBED_DIMENSIONS ||
+        !values.every((n: unknown) => typeof n === "number" && Number.isFinite(n))
+      ) {
+        throw new Error("Unexpected Gemini batch response (expected 768 numbers each)");
+      }
+      out.push(values as number[]);
+    }
+  }
+  return out;
+}

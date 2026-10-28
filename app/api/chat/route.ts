@@ -235,6 +235,10 @@ export async function POST(req: NextRequest) {
           return;
         }
         const baseExecute = createToolExecutor(activeConversation.id, db, suite, catalogue);
+        // Reply identity (onboarding Phase 3): absent profile = default voice.
+        const profile = await prisma.propertyProfile
+          .findUnique({ where: { propertyId: activeConversation.propertyId } })
+          .catch(() => null);
         const execute = async (name: string, argsJson: string) => {
           send({ type: "phase", phase: "checking", detail: toolDetail(name, argsJson) });
           const result = await baseExecute(name, argsJson);
@@ -272,7 +276,7 @@ export async function POST(req: NextRequest) {
             search: async (embedding) => {
               const rows = await prisma.$queryRaw<
                 Array<{ title: string; content: string; similarity: number }>
-              >`SELECT d."title", c."content", 1 - (c."embedding" <=> ${toVectorLiteral(embedding)}::vector) AS "similarity" FROM "KnowledgeChunk" AS c JOIN "KnowledgeDocument" AS d ON d."id" = c."documentId" ORDER BY c."embedding" <=> ${toVectorLiteral(embedding)}::vector ASC LIMIT 4`;
+              >`SELECT d."title", c."content", 1 - (c."embedding" <=> ${toVectorLiteral(embedding)}::vector) AS "similarity" FROM "KnowledgeChunk" AS c JOIN "KnowledgeDocument" AS d ON d."id" = c."documentId" WHERE d."propertyId" = ${activeConversation.propertyId} AND c."indexed" = true ORDER BY c."embedding" <=> ${toVectorLiteral(embedding)}::vector ASC LIMIT 4`;
               return rows;
             },
           });
@@ -298,7 +302,7 @@ export async function POST(req: NextRequest) {
           messages: [
             {
               role: "system",
-              content: systemPrompt(activeConversation.language === "bn" ? "bn" : "en", grounding, catalogue),
+              content: systemPrompt(activeConversation.language === "bn" ? "bn" : "en", grounding, catalogue, profile),
             },
             ...history.map(
               (m: { role: string; content: string }): { role: "assistant" | "user"; content: string } => ({

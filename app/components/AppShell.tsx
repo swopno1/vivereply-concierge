@@ -18,6 +18,7 @@ const NAV = [
   { href: "/staff", label: "Staff handoffs" },
   { href: "/admin", label: "Admin" },
   { href: "/settings", label: "Settings" },
+  { href: "/onboarding", label: "Onboarding" },
 ];
 
 export default function AppShell({
