@@ -1,23 +1,30 @@
 // Staff handoff view (inside the shell route group: nav lives in the
-// sidebar, so this page keeps only its own content). Lists every handoff
-// the agent made, with the full conversation transcript, so staff can
-// pick up where the bot left off. No valid admin session cookie means a
+// sidebar, so this page keeps only its own content). Lists the handoffs
+// the agent made for ONE property, with the full conversation transcript,
+// so staff can pick up where the bot left off. Owners see only their own
+// property; the super-admin may pass ?property=<id>. No session means a
 // redirect to /login, before any handoff is read.
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { getSession, resolvePropertyId } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
-export default async function StaffPage() {
-  const store = await cookies();
-  if (!verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value)) {
+export default async function StaffPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ property?: string }>;
+}) {
+  const session = await getSession();
+  if (!session) {
     redirect("/login?next=/staff");
   }
+  const params = (await searchParams) ?? {};
+  const propertyId = await resolvePropertyId(session, params.property);
 
   const handoffs = await prisma.handoffRecord.findMany({
+    where: { conversation: { propertyId } },
     orderBy: { createdAt: "desc" },
     include: {
       conversation: {
@@ -33,7 +40,7 @@ export default async function StaffPage() {
       <header className="border-b pb-3">
         <h1 className="text-xl font-bold">Staff — Handoffs</h1>
         <p className="text-sm text-gray-500">
-          Conversations the Concierge passed to staff, newest first.
+          Conversations the Concierge passed to staff for {propertyId}, newest first.
         </p>
       </header>
 
@@ -69,7 +76,7 @@ export default async function StaffPage() {
       </div>
 
       <p className="border-t pt-3 text-sm text-gray-500">
-        Protected by admin login since step 4.5.
+        Signed-in owners see only their own property&apos;s handoffs.
       </p>
     </div>
   );

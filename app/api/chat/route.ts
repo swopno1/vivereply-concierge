@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { runAgent } from "@/lib/agent";
 import { createToolExecutor, toolDefinitionsFor, type ToolDb } from "@/lib/tools";
-import { adapterForProperty } from "@/lib/suite";
+import { adapterForProperty, FixtureSuiteAdapter } from "@/lib/suite";
 import { catalogueForProperty } from "@/demo-config/rooms";
 import { systemPrompt } from "@/lib/prompts";
 import { detectLanguage } from "@/lib/language";
@@ -239,6 +239,12 @@ export async function POST(req: NextRequest) {
         const profile = await prisma.propertyProfile
           .findUnique({ where: { propertyId: activeConversation.propertyId } })
           .catch(() => null);
+        // Resolution evidence (multi-tenant core): one log line per turn —
+        // which property resolved to which backend, how many rooms, and
+        // whether the voice is custom. The P4 isolation proof reads these.
+        console.log(
+          `concierge: property=${activeConversation.propertyId} adapter=${suite instanceof FixtureSuiteAdapter ? "fixture" : "http"} rooms=${catalogue.length} persona=${profile ? "custom" : "default"}`
+        );
         const execute = async (name: string, argsJson: string) => {
           send({ type: "phase", phase: "checking", detail: toolDetail(name, argsJson) });
           const result = await baseExecute(name, argsJson);

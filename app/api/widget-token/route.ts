@@ -11,7 +11,7 @@
 // is denied: a real browser embed always sends one.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getWidgetProperty } from "@/demo-config/widget-keys";
+import { resolveWidgetProperty } from "@/demo-config/widget-keys";
 import { createChatToken } from "@/lib/auth";
 import { hostnameFromOrigin, isDomainApproved } from "@/lib/domains";
 
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   }
   const body = await req.json().catch(() => null);
   const key = typeof body?.key === "string" ? body.key : "";
-  const property = getWidgetProperty(key);
+  const property = await resolveWidgetProperty(key);
   if (!property) {
     return NextResponse.json({ error: "Unknown widget key." }, { status: 403, headers });
   }

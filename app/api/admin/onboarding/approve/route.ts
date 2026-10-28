@@ -1,18 +1,21 @@
-// Onboarding re-run approval (RAG engine, admin session only).
+// Onboarding re-run approval (RAG engine, SUPER_ADMIN only — owners must
+// never approve their own reruns).
 //   PATCH /api/admin/onboarding/approve { propertyId, approve: true, approvedBy }
 // Unlocks exactly one more ingestion run for a property that already used
 // its one. The flip is consumed by the next submit. approve: false revokes
 // a pending approval. Who approved is recorded on the run row.
 
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { getSession } from "@/lib/tenant";
 
 export async function PATCH(req: NextRequest) {
-  const store = await cookies();
-  if (!verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value)) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  if (session.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Only the Vivereply team can approve re-runs." }, { status: 403 });
   }
   const body = await req.json().catch(() => null);
   const propertyId = typeof body?.propertyId === "string" ? body.propertyId.trim() : "";

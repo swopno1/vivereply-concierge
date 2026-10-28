@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isBridgeStatus, verifyBridgeKey } from "@/lib/bridge";
+import { isBridgeStatus, verifyBridgeRequest } from "@/lib/bridge";
 
 async function inProperty(propertyId: string, id: string) {
   return prisma.handoffRecord.findFirst({
@@ -45,9 +45,9 @@ function shape(h: NonNullable<Awaited<ReturnType<typeof inProperty>>>, propertyI
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await verifyBridgeKey(req.headers.get("authorization"));
+  const auth = await verifyBridgeRequest(req.headers.get("authorization"));
   if (!auth) {
-    return NextResponse.json({ error: "Invalid or missing bridge key." }, { status: 401 });
+    return NextResponse.json({ error: "Invalid or missing bridge credential." }, { status: 401 });
   }
   const { id } = await params;
   const handoff = await inProperty(auth.propertyId, id);
@@ -58,9 +58,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await verifyBridgeKey(req.headers.get("authorization"));
+  const auth = await verifyBridgeRequest(req.headers.get("authorization"));
   if (!auth) {
-    return NextResponse.json({ error: "Invalid or missing bridge key." }, { status: 401 });
+    return NextResponse.json({ error: "Invalid or missing bridge credential." }, { status: 401 });
   }
   const { id } = await params;
   const body = await req.json().catch(() => null);

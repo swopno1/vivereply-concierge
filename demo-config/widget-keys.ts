@@ -4,10 +4,11 @@
 // conversation with. An unknown key shows an error panel instead of a
 // chat, never a guessed property.
 //
-// V1 limitation, stated plainly: the key only labels the conversation
-// (propertyId) and titles the panel. The catalogue, Suite base URL,
-// and database are still the single demo property's. Adding a key
-// here does not plug in a new property's rooms or bookings.
+// Multi-tenant core: seeded properties carry their own widgetKey in the
+// Property table, resolved by resolveWidgetProperty (static map first, so
+// the demo key works even before the seed runs; database second). An
+// unknown or inactive key shows an error panel instead of a chat, never a
+// guessed property.
 
 export type WidgetProperty = {
   propertyId: string;
@@ -24,4 +25,14 @@ export const WIDGET_KEYS: Record<string, WidgetProperty> = {
 export function getWidgetProperty(key: string | null): WidgetProperty | undefined {
   if (!key) return undefined;
   return WIDGET_KEYS[key];
+}
+
+export async function resolveWidgetProperty(key: string | null): Promise<WidgetProperty | undefined> {
+  const statik = getWidgetProperty(key);
+  if (statik) return statik;
+  if (!key) return undefined;
+  const { prisma } = await import("@/lib/prisma");
+  const row = await prisma.property.findUnique({ where: { widgetKey: key } }).catch(() => null);
+  if (!row || row.status !== "ACTIVE") return undefined;
+  return { propertyId: row.id, title: row.name };
 }

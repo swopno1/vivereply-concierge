@@ -1,5 +1,5 @@
-// Approved-domain checks (step 4.5). A domain is approved when an
-// admin added it in /admin for that property and it is still active.
+// Approved-domain checks (step 4.5). A domain is approved when it was
+// added in Settings for that property and it is still active.
 // Hostnames are compared exactly (lowercased, no port, no scheme):
 // demo1.vivereply.com does not approve www.demo1.vivereply.com or
 // evil-demo1.vivereply.com — the admin must add each host explicitly.

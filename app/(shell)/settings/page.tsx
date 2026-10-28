@@ -1,19 +1,22 @@
-// Settings (inside the shell route group). Admin-protected: no valid
-// session cookie means a redirect to /login. A mix of real rooms and
-// honest placeholders — a section marked Later renders no working
-// controls, only what it will hold. Snippet origins come from the live
-// request headers, so preview deployments show their own URLs, not
-// production's.
+// Settings (inside the shell route group). Session-protected: no valid
+// session cookie means a redirect to /login. Single-property view —
+// owners see only their own property, the super-admin may pass
+// ?property=<id>. A mix of real rooms and honest placeholders: a section
+// marked Later renders no working controls, only what it will hold.
+// Snippet origins come from the live request headers, so preview
+// deployments show their own URLs, not production's.
 
-import { cookies, headers } from "next/headers";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { getSession, resolvePropertyId } from "@/lib/tenant";
 import { WIDGET_KEYS } from "@/demo-config/widget-keys";
 import CopyButton from "../../components/CopyButton";
 import SignOutButton from "../../components/SignOutButton";
 import SuiteBindings from "../../components/SuiteBindings";
 import RoomCatalogues from "../../components/RoomCatalogues";
+import AdminDomains from "../../components/AdminDomains";
+import BridgeTokens from "../../components/BridgeTokens";
 
 export const dynamic = "force-dynamic";
 
@@ -64,22 +67,52 @@ function Snippet({ label, text }: { label: string; text: string }) {
   );
 }
 
-export default async function SettingsPage() {
-  const store = await cookies();
-  if (!verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value)) {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ property?: string }>;
+}) {
+  const session = await getSession();
+  if (!session) {
     redirect("/login?next=/settings");
   }
+  const params = (await searchParams) ?? {};
+  const propertyId = await resolvePropertyId(session, params.property);
 
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "app.vivereply.com";
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const origin = `${proto}://${host}`;
 
-  const domains = await prisma.approvedDomain.findMany({ orderBy: { createdAt: "asc" } });
+  const property = await prisma.property.findUnique({ where: { id: propertyId } }).catch(() => null);
+  const domains = await prisma.approvedDomain.findMany({
+    where: { propertyId },
+    orderBy: { createdAt: "asc" },
+  });
   const activeDomains = domains.filter((d) => d.active);
-  const tokenCount = await prisma.bridgeToken.count({ where: { active: true } });
+  const tokenCount = await prisma.bridgeToken.count({ where: { propertyId, active: true } });
+  const tokenRows = await prisma.bridgeToken.findMany({
+    where: { propertyId },
+    orderBy: { createdAt: "asc" },
+  });
+  const initialTokens = tokenRows.map((r) => ({
+    id: r.id,
+    prefix: r.prefix,
+    name: r.name,
+    propertyId: r.propertyId,
+    active: r.active,
+    createdAt: r.createdAt.toISOString(),
+  }));
+  const initialDomains = domains.map((d) => ({
+    id: d.id,
+    domain: d.domain,
+    propertyId: d.propertyId,
+    active: d.active,
+    createdAt: d.createdAt.toISOString(),
+  }));
   const recentLogs = await prisma.toolCallLog.findMany({
     where: {
+      conversation: { propertyId },
       toolName: {
         in: [
           "check_availability",
@@ -106,7 +139,10 @@ export default async function SettingsPage() {
       propertyId: l.conversation.propertyId,
       createdAt: l.createdAt.toISOString(),
     }));
-  const bindingRows = await prisma.propertyBinding.findMany({ orderBy: { createdAt: "asc" } });
+  const bindingRows = await prisma.propertyBinding.findMany({
+    where: { propertyId },
+    orderBy: { createdAt: "asc" },
+  });
   const initialBindings = bindingRows.map((r) => ({
     id: r.id,
     propertyId: r.propertyId,
@@ -118,10 +154,15 @@ export default async function SettingsPage() {
     createdAt: r.createdAt.toISOString(),
   }));
 
-  const keys = Object.entries(WIDGET_KEYS);
+  // Widget keys for THIS property: static entries plus the seeded row's
+  // key (deduped — the demo key lives in both until the seed runs).
+  const keys = Object.entries(WIDGET_KEYS).filter(([, prop]) => prop.propertyId === propertyId);
+  if (property && !keys.some(([key]) => key === property.widgetKey)) {
+    keys.push([property.widgetKey, { propertyId: property.id, title: property.name }]);
+  }
   const bridgeExample = [
     `# Staff bridge — run from the client SERVER, never the browser.`,
-    `# Mint the key in /admin; it is shown once.`,
+    `# Mint the key in Bridge keys below; it is shown once.`,
     `BRIDGE_KEY='cb.<prefix>.<secret>'`,
     `curl -s "${origin}/api/bridge/handoffs?status=OPEN" \\`,
     `  -H "Authorization: Bearer $BRIDGE_KEY"`,
@@ -133,14 +174,29 @@ export default async function SettingsPage() {
     `});`,
     `const openHandoffs = await res.json();`,
   ].join("\n");
+  const staffWidgetSnippet = [
+    `<!-- Staff widget: mint a token server-side per page load, then embed. -->`,
+    `<!-- Never put the bridge key in the browser. -->`,
+    `<iframe`,
+    `  src="${origin}/staff/embed?token=<embed-token>"`,
+    `  width="100%" height="720" style="border:0; border-radius:12px"`,
+    `  title="Concierge staff handoffs"></iframe>`,
+  ].join("\n");
+  const embedMintSnippet = [
+    `# Mint the <embed-token> above from the client SERVER (tokens live 15 minutes):`,
+    `curl -s -X POST "${origin}/api/bridge/embed-tokens" \\`,
+    `  -H "Authorization: Bearer $BRIDGE_KEY" \\`,
+    `  -H 'Content-Type: application/json' \\`,
+    `  -d '{"origin":"https://dashboard.example.com"}'`,
+  ].join("\n");
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 p-4">
       <header className="border-b border-gray-200 pb-3">
         <h1 className="text-xl font-bold text-gray-900">Settings</h1>
         <p className="text-sm text-gray-500">
-          Configuration rooms for the Concierge. Real rooms work; rooms marked Later are
-          reserved space for upcoming features.
+          Configuration rooms for {property?.name ?? propertyId}. Real rooms work; rooms marked
+          Later are reserved space for upcoming features.
         </p>
       </header>
 
@@ -156,11 +212,9 @@ export default async function SettingsPage() {
               <Snippet label={`${prop.title} (${key})`} text={snippet} />
               <p className="text-sm text-gray-500">
                 Approved domains:{" "}
-                {approved.length > 0 ? approved.map((d) => d.domain).join(", ") : "none yet — add one in "}
-                <a href="/admin" className="underline">
-                  Admin
-                </a>
-                .
+                {approved.length > 0
+                  ? approved.map((d) => d.domain).join(", ")
+                  : "none yet — add one in Widget domains below."}
               </p>
             </div>
           );
@@ -168,19 +222,34 @@ export default async function SettingsPage() {
       </Section>
 
       <Section
+        title="Widget domains"
+        blurb="Only these sites can host this property's chat widget. Deactivating a domain stops its widget on the next chat message."
+      >
+        <AdminDomains initial={initialDomains} initialPropertyId={propertyId} />
+      </Section>
+
+      <Section
         title="Staff bridge codes"
-        blurb="Server-to-server snippets for client dashboards. Keys are minted in Admin and stay on the client server."
+        blurb="Server-to-server snippets for client dashboards. Keys are minted below and stay on the client server."
       >
         <Snippet label="List open handoffs (curl)" text={bridgeExample} />
         <Snippet label="List open handoffs (Node)" text={bridgeNode} />
+        <Snippet label="Staff widget embed (dashboard HTML)" text={staffWidgetSnippet} />
+        <Snippet label="Mint the widget token (server, curl)" text={embedMintSnippet} />
         <p className="text-sm text-gray-500">
-          Full contract (read, assign, close, notes):{" "}
-          <span className="font-mono">docs/bridge-integration.md</span> in the repo.{" "}
-          {tokenCount} active bridge {tokenCount === 1 ? "key" : "keys"} —{" "}
-          <a href="/admin" className="underline">
-            manage in Admin
-          </a>
-          .
+          Full contract (read, assign, close, notes, widget):{" "}
+          <span className="font-mono">docs/bridge-integration.md</span> in the repo.
+        </p>
+      </Section>
+
+      <Section
+        title="Bridge keys"
+        blurb="Server-to-server keys for this property's dashboards and staff widget. A key sees only this property's handoffs; the full token shows once, at mint time."
+      >
+        <BridgeTokens initial={initialTokens} initialPropertyId={propertyId} />
+        <p className="text-sm text-gray-500">
+          {tokenCount} active {tokenCount === 1 ? "key" : "keys"}. Revoking kills a key on its
+          next call.
         </p>
       </Section>
 
@@ -188,7 +257,7 @@ export default async function SettingsPage() {
         title="Suite connections"
         blurb="One booking backend per property. Test runs server-side and never reveals the key. URL and key changes apply on the next chat message."
       >
-        <SuiteBindings initial={initialBindings} />
+        <SuiteBindings initial={initialBindings} initialPropertyId={propertyId} />
         <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
           <p className="text-sm font-semibold text-gray-900">Recent backend failures</p>
           {backendFailures.length === 0 ? (
@@ -207,23 +276,24 @@ export default async function SettingsPage() {
         title="Room catalogues"
         blurb="One room list per property. Rows govern chat once present; seed the demo file to start."
       >
-        <RoomCatalogues />
+        <RoomCatalogues initialPropertyId={propertyId} />
       </Section>
 
       <Section
         title="Secrets"
         blurb="Reserved room for secret configuration. Nothing to configure here yet."
       >
-        <Later what="Secret rooms will live here (bridge keys, webhook signers) once more integrations need them. Bridge keys are managed in Admin today." />
+        <Later what="Secret rooms will live here (webhook signers and future integrations) once more of them need UI. Bridge keys already have their own room above." />
       </Section>
 
       <Section title="Security" blurb="What protects this app right now — live status, not promises.">
         <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm shadow-sm">
           {[
-            ["Admin login (password + signed session cookie)", true],
+            ["Owner + super-admin logins (scrypt / signed session cookie)", true],
             [`Approved widget domains (${activeDomains.length} active)`, activeDomains.length > 0],
             ["Widget token handshake (per-message domain re-check)", true],
             [`Bridge keys (hashed, revocable, ${tokenCount} active)`, true],
+            ["Staff widget tokens (15-minute, origin-bound)", true],
             ["Rate limiting", false],
             ["Two-factor authentication", false],
           ].map(([label, on]) => (
@@ -239,21 +309,25 @@ export default async function SettingsPage() {
             </p>
           ))}
         </div>
-        <p className="text-sm text-gray-500">
-          Domains and bridge keys are managed in{" "}
-          <a href="/admin" className="underline">
-            Admin
-          </a>
-          .
-        </p>
       </Section>
 
-      <Section title="Profile" blurb="The v1 admin account: single admin, no user table yet.">
+      <Section
+        title="Profile"
+        blurb={
+          session.role === "SUPER_ADMIN"
+            ? "Super-admin: every property, approvals, and the Admin page."
+            : "Owner: this property only. Your password was set at registration."
+        }
+      >
         <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
           <div>
-            <p className="text-sm font-semibold text-gray-900">Signed in as Admin</p>
+            <p className="text-sm font-semibold text-gray-900">
+              Signed in as {session.email ?? "Super admin"}
+            </p>
             <p className="text-sm text-gray-500">
-              The admin password lives in the deployment environment, not in the app.
+              {session.role === "SUPER_ADMIN"
+                ? "The bootstrap password lives in the deployment environment, not in the app."
+                : `Sees ${property?.name ?? propertyId} only. No signup — properties are registered by the Vivereply team.`}
             </p>
           </div>
           <SignOutButton />

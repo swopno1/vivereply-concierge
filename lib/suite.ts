@@ -15,6 +15,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "./secrets";
+import { fixtureRoomsFor } from "@/demo-config/fixture";
+import { isDateString, nightsBetween, quoteForStay } from "@/demo-config/rates";
 
 export type SuiteBinding = {
   baseUrl: string;
@@ -182,11 +184,86 @@ export class HttpSuiteAdapter implements SuiteAdapter {
   }
 }
 
-// Per-property adapter (Phase 2). A property WITH a binding row talks to
-// its own backend; the demo property WITHOUT one falls back to the env
-// URL (zero-downtime cutover until its row is seeded); any other property
-// without a row fails honestly instead of silently borrowing demo1.
+// Fixture adapter (multi-tenant core, TEST ONLY). Same SuiteAdapter
+// contract, no HTTP: deterministic availability (rooms always full),
+// totals from the SAME quoteForStay math as the quote tool (so fixture
+// drafts always match their quotes), drafts kept in process memory under
+// FIX- codes. Drafts do NOT survive a server restart — lookup afterwards
+// answers "not found" honestly. Details delivery is a stub ({ sent: true }
+// — a fixture cannot email). Anything this adapter touches is labeled
+// FIXTURE, in codes and in docs.
+const fixtureDrafts = new Map<string, { firstName: string; checkIn: string; checkOut: string }>();
+let fixtureCounter = 0;
+
+export class FixtureSuiteAdapter implements SuiteAdapter {
+  constructor(private propertyId: string) {}
+
+  private room(roomId: string) {
+    const room = fixtureRoomsFor(this.propertyId)?.find((r) => r.suiteRoomId === roomId);
+    if (!room) throw new Error("not found");
+    return room;
+  }
+
+  async getAvailability(roomId: string, checkIn: string, checkOut: string): Promise<Availability> {
+    const room = this.room(roomId);
+    if (!isDateString(checkIn) || !isDateString(checkOut) || nightsBetween(checkIn, checkOut) < 1) {
+      throw new Error("Check-out must be after check-in.");
+    }
+    return { available: room.units.length, units: [...room.units] };
+  }
+
+  async createBooking(
+    roomId: string,
+    guest: BookingGuest,
+    checkIn: string,
+    checkOut: string
+  ): Promise<BookingDraft> {
+    const room = this.room(roomId);
+    if (!guest.guestName.trim() || !guest.guestEmail.trim() || !guest.guestPhone.trim()) {
+      throw new Error("Guest name, email, and phone are required.");
+    }
+    const quote = quoteForStay(room.basePricePoisha, checkIn, checkOut);
+    if (quote.nights < 1) throw new Error("Check-out must be after check-in.");
+    fixtureCounter += 1;
+    const bookingCode = `FIX-${Date.now().toString(36).toUpperCase()}-${fixtureCounter.toString(36).toUpperCase()}`;
+    const firstName = guest.guestName.trim().split(/\s+/)[0] ?? guest.guestName.trim();
+    fixtureDrafts.set(`${this.propertyId}:${bookingCode}`, { firstName, checkIn, checkOut });
+    return { id: bookingCode, bookingCode, totalAmountPoisha: quote.totalPoisha };
+  }
+
+  async lookupBookingByCode(code: string): Promise<BookingLookup> {
+    const draft = fixtureDrafts.get(`${this.propertyId}:${code}`);
+    if (!draft) throw new Error("not found");
+    return {
+      bookingCode: code,
+      firstName: draft.firstName,
+      checkIn: draft.checkIn,
+      checkOut: draft.checkOut,
+      status: "PENDING",
+    };
+  }
+
+  async requestBookingDetails(_contact: { email?: string; phone?: string }): Promise<{ sent: boolean }> {
+    return { sent: true };
+  }
+
+  async ping(): Promise<{ ok: boolean; suiteVersion: number }> {
+    return { ok: true, suiteVersion: SUITE_API_VERSION };
+  }
+}
+
+// Per-property adapter (Phase 2, multi-tenant core). Precedence:
+//   1. Fixture registry — a registered test property NEVER touches HTTP,
+//      even if a binding row exists. Graduate by removing it from
+//      demo-config/fixture.ts (a deliberate commit), then adding its row.
+//   2. Binding row — the property's own HTTP backend.
+//   3. Demo env fallback — the demo property without a row (zero-downtime
+//      cutover until it is seeded).
+//   4. Anything else fails honestly instead of borrowing another backend.
 export async function adapterForProperty(propertyId: string): Promise<SuiteAdapter> {
+  if (fixtureRoomsFor(propertyId)) {
+    return new FixtureSuiteAdapter(propertyId);
+  }
   const row = await prisma.propertyBinding.findUnique({ where: { propertyId } });
   if (!row) {
     if (propertyId === (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat")) {

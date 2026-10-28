@@ -11,7 +11,7 @@ Base URL: `https://app.vivereply.com` (Concierge production).
 1. Apply the schema (additive: two tables, one column):
    `pnpm exec prisma db push` (needs `DIRECT_URL`; run outside any sandbox
    without database access), then deploy.
-2. In Concierge `/admin`, mint a bridge token for the property
+2. In Concierge `/settings`, mint a bridge token for the property
    (e.g. name `demo1 dashboard`, property `krishnachura-retreat`).
 3. Copy the token into the CLIENT SERVER's secrets immediately — it is
    shown once and never again. Format: `cb.<prefix>.<secret>`.
@@ -24,11 +24,11 @@ Every bridge request carries the token server-to-server:
 Authorization: Bearer cb.<prefix>.<secret>
 ```
 
-- Missing or wrong key → `401 { "error": "Invalid or missing bridge key." }`.
+- Missing or wrong credential → `401 { "error": "Invalid or missing bridge credential." }`.
 - A token sees ONLY its own property's handoffs. An id from another
   property returns `404`, exactly like a missing id — callers cannot probe
   across properties by watching status codes.
-- Revoking in `/admin` kills the key on its next call.
+- Revoking in `/settings` kills the key on its next call.
 
 ## Endpoints
 
@@ -137,12 +137,12 @@ await bridge(`/api/bridge/handoffs/${open[0].id}`, {
 3. Every request re-checks the token row and the property scope: revoke is
    instant, and cross-property reads are impossible, not just forbidden.
 4. Honest limits: no rate limiting yet, no IP allowlist. If a key leaks,
-   revoke it in `/admin` and mint a new one — do not keep using it.
+   revoke it in `/settings` and mint a new one — do not keep using it.
 
 ## Testing the integration
 
 ```bash
-KEY='cb.<prefix>.<secret>'  # from /admin mint; export, never paste into chat logs
+KEY='cb.<prefix>.<secret>'  # from /settings mint; export, never paste into chat logs
 curl -s "$BASE/api/bridge/handoffs?status=OPEN" -H "Authorization: Bearer $KEY"
 curl -s -X PATCH "$BASE/api/bridge/handoffs/<id>" -H "Authorization: Bearer $KEY" \
   -H 'Content-Type: application/json' -d '{"status":"IN_PROGRESS","assignee":"Rafi"}'
@@ -150,4 +150,48 @@ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/bridge/handoffs"  # no key -
 ```
 
 With `BASE=https://app.vivereply.com` after deploy. Key owner: whoever
-mints in `/admin` runs these — the secret must not travel over chat.
+mints in `/settings` runs these — the secret must not travel over chat.
+
+## Staff iframe widget (alternative to building dashboard UI)
+
+Instead of building handoff UI, a client dashboard can embed the Concierge
+staff widget. The bridge key STILL never reaches the browser: the dashboard
+SERVER mints a short-lived embed token per page load, then renders the
+iframe.
+
+Mint (server-to-server, bridge-key auth — embed tokens can never mint):
+
+```bash
+curl -s -X POST "$BASE/api/bridge/embed-tokens" -H "Authorization: Bearer $KEY" \
+  -H 'Content-Type: application/json' -d '{"origin":"https://dashboard.example.com"}'
+# -> { "token": "<embed-token>", "expiresAt": "<15 minutes out>" }
+```
+
+Embed (dashboard HTML, token fresh per page load):
+
+```html
+<iframe
+  src="https://app.vivereply.com/staff/embed?token=<embed-token>"
+  width="100%" height="720" style="border:0; border-radius:12px"
+  title="Concierge staff handoffs"></iframe>
+```
+
+Rules the dashboard must follow:
+
+1. Mint on the SERVER on every dashboard page load. Tokens live 15 minutes;
+   an expired widget tells staff to refresh the dashboard page (which mints
+   a fresh token) — it never asks for a key.
+2. `origin` must be the dashboard's full `https` origin. The widget refuses
+   to load from any other origin, and refuses when the browser sends no
+   Referer — do NOT set a `no-referrer` policy on dashboard pages, or the
+   widget shows its error panel. (`http` loopback origins work in
+   development only.)
+3. The widget covers exactly the minting key's property: list/filter,
+   transcript, follow-up notes, assign, close/reopen. It cannot mint keys,
+   see other properties, or outlive its 15 minutes.
+4. Iframe sizing is the dashboard's job (the snippet's 720px height fits the
+   list + one open handoff on desktop; narrower frames scroll internally).
+
+Honest limits: no `frame-ancestors` allowlist in v1 (the token + Referer
+binding is the gate); a token copied out of a URL works from the bound
+origin until it expires — 15 minutes bounds that window.

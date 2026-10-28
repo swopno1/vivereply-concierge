@@ -49,8 +49,14 @@ const EMPTY_PROFILE: Profile = {
 const inputClass =
   "rounded-xl border border-gray-300 px-4 py-2 text-sm outline-none focus:border-black";
 
-export default function OnboardingBoard() {
-  const [propertyId, setPropertyId] = useState("");
+export default function OnboardingBoard({
+  initialPropertyId,
+  canApprove,
+}: {
+  initialPropertyId?: string;
+  canApprove?: boolean;
+}) {
+  const [propertyId, setPropertyId] = useState(initialPropertyId ?? "");
   const [loadedFor, setLoadedFor] = useState("");
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
   const [run, setRun] = useState<RunState | null>(null);
@@ -306,17 +312,23 @@ export default function OnboardingBoard() {
               <p className="text-sm text-gray-700">
                 This property already used its one run. An approval unlocks exactly one more.
               </p>
-              <div className="flex gap-2">
-                <input
-                  value={approver}
-                  onChange={(e) => setApprover(e.target.value)}
-                  placeholder="Approver name"
-                  className={`flex-1 ${inputClass}`}
-                />
-                <button onClick={() => approve(true)} disabled={!approver.trim()} className="rounded-full bg-black px-5 py-2 text-sm font-medium text-white disabled:opacity-40">
-                  Approve re-run
-                </button>
-              </div>
+              {canApprove ? (
+                <div className="flex gap-2">
+                  <input
+                    value={approver}
+                    onChange={(e) => setApprover(e.target.value)}
+                    placeholder="Approver name"
+                    className={`flex-1 ${inputClass}`}
+                  />
+                  <button onClick={() => approve(true)} disabled={!approver.trim()} className="rounded-full bg-black px-5 py-2 text-sm font-medium text-white disabled:opacity-40">
+                    Approve re-run
+                  </button>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  Ask the Vivereply team for a re-run approval — owners cannot approve their own.
+                </p>
+              )}
             </div>
           ) : (
             <button
@@ -327,7 +339,7 @@ export default function OnboardingBoard() {
               {run ? "Submit approved re-run" : "Start ingestion run"}
             </button>
           )}
-          {run?.approvedRerun && (
+          {run?.approvedRerun && canApprove && (
             <button onClick={() => approve(false)} className="self-start text-sm text-gray-500 underline">
               Revoke the pending approval
             </button>

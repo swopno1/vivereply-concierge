@@ -1,4 +1,5 @@
-// Suite-binding connection test (adapter Phase 2, admin session only).
+// Suite-binding connection test (adapter Phase 2, session only; owners test
+// only their own property's binding).
 //   POST /api/admin/suite-bindings/test { id }
 //     -> { ok, ping, latencyMs, detail }
 // Runs fully server-side (the secret never leaves the server) and records
@@ -8,15 +9,14 @@
 // Either way nothing is written to the backend — both probes are reads.
 
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { ADMIN_SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { getSession, sessionCan } from "@/lib/tenant";
 import { decryptSecret } from "@/lib/secrets";
 import { HttpSuiteAdapter, SUITE_API_VERSION } from "@/lib/suite";
 
 export async function POST(req: NextRequest) {
-  const store = await cookies();
-  if (!verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value)) {
+  const session = await getSession();
+  if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const body = await req.json().catch(() => null);
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Binding id is required." }, { status: 400 });
   }
   const row = await prisma.propertyBinding.findUnique({ where: { id } });
-  if (!row) {
+  if (!row || !sessionCan(session, row.propertyId)) {
     return NextResponse.json({ error: "Binding not found." }, { status: 404 });
   }
   let secret: string | null = null;
