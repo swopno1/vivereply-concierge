@@ -1,21 +1,18 @@
-// Demo catalogue for the hackathon showcase (step 2a).
-//
-// These are the rooms in demo1's LIVE database TODAY (from travel-scaffold's
-// old prisma/seed.ts on client/demo1), with their seed prices. The quote the
-// agent shows comes from here; the booking total comes from the Suite,
-// which charges the same DB price — so quote and booking agree.
-//
-// NOTE: demo1's seed has since been rewritten to Krishnachura Retreat's 5
-// theme rooms, but the live DB still holds these generic rooms until
-// `pnpm db:seed` runs against it. When that happens, swap in
-// demo-config/rooms.krishnachura.ts (same shape) and re-copy the UUIDs —
-// re-seeding generates new ones. Until then, this file is the truth.
-// DO NOT rename rooms or change prices here without changing the Suite seed.
-//
-// suiteRoomId is the Suite database UUID for the room. It is NOT in the
-// repo (seed-generated). Fill it from demo1's Supabase Table Editor
-// (Room table, copy the id for each slug). While empty, tools for that
-// room fail with a clear configuration error instead of inventing data.
+// Demo catalogue for the hackathon showcase — FLIPPED to Krishnachura
+// Retreat on 2026-10-28 (post step 5). These are the 5 theme rooms in
+// demo1's LIVE database (new demo1 Supabase DB, Krishnachura seed),
+// with their suiteRoomId UUIDs copied from demo1's Supabase Room
+// table by the founder on 2026-10-28, in this order:
+//   Terracotta Villa, Bamboo Cottage, Clay House Suite, Palm Loft,
+//   Earth Lodge.
+// suiteRoomId is the Suite database UUID for the room. Room IDs are
+// public identifiers (they appear in demo1's public API URLs), not
+// secrets, so committing them here is safe. If demo1 is ever
+// re-seeded, these UUIDs change and this file must be re-flipped.
+// The quote the agent shows comes from here; the booking total comes
+// from the Suite, which charges the same DB price — so quote and
+// booking agree, and a mismatch is surfaced as a warning, never
+// hidden.
 
 export type DemoRoom = {
   slug: string;
@@ -25,14 +22,11 @@ export type DemoRoom = {
 };
 
 export const DEMO_ROOMS: DemoRoom[] = [
-  { slug: "coxs-bazar-oceanfront-deluxe", name: "Oceanfront Deluxe Room", basePricePoisha: 1250000, suiteRoomId: "" },
-  { slug: "coxs-bazar-sunset-royal-villa", name: "Sunset Royal Beach Villa", basePricePoisha: 2200000, suiteRoomId: "" },
-  { slug: "sajek-cloud-view-wooden-cottage", name: "Cloud View Wooden Cottage", basePricePoisha: 850000, suiteRoomId: "" },
-  { slug: "sreemangal-executive-tea-view", name: "Executive Tea Garden View Room", basePricePoisha: 1050000, suiteRoomId: "" },
-  { slug: "sreemangal-presidential-golf-suite", name: "Presidential Golf Suite", basePricePoisha: 2800000, suiteRoomId: "" },
-  { slug: "sundarbans-mangrove-safari-cabin", name: "Mangrove Safari Cabin", basePricePoisha: 750000, suiteRoomId: "" },
-  { slug: "saint-martins-coral-view-cottage", name: "Coral View Beach Cottage", basePricePoisha: 950000, suiteRoomId: "" },
-  { slug: "kuakata-horizon-sunrise-room", name: "Horizon Sunrise Room", basePricePoisha: 650000, suiteRoomId: "" },
+  { slug: "terracotta-villa", name: "Terracotta Villa", basePricePoisha: 1450000, suiteRoomId: "8accd111-64a4-4407-b2c6-2885057e5919" },
+  { slug: "bamboo-cottage", name: "Bamboo Cottage", basePricePoisha: 850000, suiteRoomId: "de4ed2c6-34c7-44a2-b36f-c1b7f0647781" },
+  { slug: "clay-house-suite", name: "Clay House Suite", basePricePoisha: 980000, suiteRoomId: "75a8db71-56d9-442a-b5b9-8efd1151868d" },
+  { slug: "palm-loft", name: "Palm Loft", basePricePoisha: 720000, suiteRoomId: "9cb75e2a-a22f-4538-b4ef-120d30690bec" },
+  { slug: "earth-lodge", name: "Earth Lodge", basePricePoisha: 1680000, suiteRoomId: "e43671ca-6b81-4eef-be53-c3d64dcec0e1" },
 ];
 
 export function findRoomBySlug(slug: string): DemoRoom | undefined {
