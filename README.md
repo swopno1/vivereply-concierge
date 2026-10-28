@@ -39,6 +39,9 @@ resort.
 - **Suite adapter** — any backend implementing `docs/suite-api-spec.md` plugs
   in per property (binding + encrypted key + room catalogue, all in Settings).
   demo1 is simply the default binding.
+- **Onboarding** (`/onboarding`, admin-only) — one budgeted run per property
+  builds its vector knowledge from a business form, website, and uploads.
+  Cloud worker + signed callbacks. See `docs/onboarding.md`.
 - **RAG grounding (supporting only)** — property questions (check-in
   times, food, packages, location) are answered from seeded demo
   knowledge via pgvector + Gemini embeddings, similarity ≥ 0.45, top 4.

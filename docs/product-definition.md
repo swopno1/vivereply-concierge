@@ -90,6 +90,11 @@ check runs. Nothing is faked with timers.
   configuration rooms: copy-paste chat widget codes per key, staff bridge
   server snippets, a live security status board, and the admin profile.
   Secrets and appearance are honest Later placeholders for now.
+- Onboarding (built, going live with the next deploy). One guided run per
+  property fills its knowledge base: business form + reply identity, website
+  (fixed knowledge endpoint or polite crawl), document uploads. Hard token
+  budget, one run per client unless an admin approves more. See
+  docs/onboarding.md.
 - Suite adapter (built, going live with the next deploy). Any booking backend
   implementing docs/suite-api-spec.md plugs in via Settings: one binding
   (URL + encrypted key) and one room catalogue per property, with Test

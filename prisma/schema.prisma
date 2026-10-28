@@ -124,12 +124,52 @@ model PropertyBinding {
 }
 
 model KnowledgeDocument {
-  id        String           @id @default(cuid())
-  title     String
-  source    String           @default("demo-seed")
-  content   String
-  createdAt DateTime         @default(now())
-  chunks    KnowledgeChunk[]
+  id         String           @id @default(cuid())
+  propertyId String           @default("krishnachura-retreat")
+  title      String
+  source     String           @default("demo-seed")
+  content    String
+  createdAt  DateTime         @default(now())
+  chunks     KnowledgeChunk[]
+
+  @@index([propertyId])
+}
+
+// Business profile captured at onboarding: facts + the reply identity
+// (assistant name, tone, languages, greeting) the property wants.
+model PropertyProfile {
+  id            String   @id @default(cuid())
+  propertyId    String   @unique
+  businessName  String
+  address       String?
+  phone         String?
+  email         String?
+  website       String?
+  assistantName String?
+  tone          String?
+  languages     String[]
+  greeting      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// One ingestion run per property (RAG onboarding). Status: PENDING (queued,
+// worker not finished), RUNNING, COMPLETE, PARTIAL (budget abort, with
+// stats), FAILED. A second run is rejected unless approvedRerun was flipped
+// by an admin — the flip is consumed by the next submit.
+model OnboardingRun {
+  id            String    @id @default(cuid())
+  propertyId    String    @unique
+  status        String    @default("PENDING")
+  filePaths     String[]
+  website       String?
+  stats         Json?
+  error         String?
+  approvedRerun Boolean   @default(false)
+  approvedBy    String?
+  approvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model KnowledgeChunk {

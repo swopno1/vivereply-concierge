@@ -158,6 +158,24 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
   validation phase-by-phase (suite re-pass, binding-row quote, seed + quote-diff,
   guardrail + health checks).
 
+## 2026-10-28 — RAG onboarding built (uncommitted, feature/rag-onboarding)
+
+- P0: schema (PropertyProfile, OnboardingRun, KnowledgeDocument.propertyId w/ demo
+  backfill default) + lib/onboarding.ts (budgets, sanitize, well-known, overBudget).
+- P1: /onboarding board (property load, profile form, signed-URL uploads, submit,
+  approval box, re-invoke) + admin APIs (status/submit/uploads/approve/invoke).
+- P2: worker contract (lib/worker.ts invoke + shared-secret verify), /api/worker/
+  callback (progress/chunks/complete/failed, pre-embed ceiling, batch upsert),
+  embedMany batch API, worker/onboarding.py Modal app (well-known-or-crawl,
+  7 formats, chunker, stop protocol) + deploy README.
+- P3: retrieval propertyId filter, persona wire-up into systemPrompt, approval flip.
+- P4: docs/onboarding.md operator guide, env template, product/README bullets.
+- STATIC PROOF: tsc green; py_compile OK; 17/17 pure probes (budgets, sanitize,
+  well-known, overBudget, worker secret) on real libs.
+- PENDING founder lift (order): envs (SUPABASE_URL/SERVICE_KEY, WORKER_SHARED_SECRET,
+  MODAL_WORKER_URL) → bucket SQL → db push → Modal deploy → app deploy → live
+  onboarding trial on a test property.
+
 ## 2026-10-28 — settings page built (uncommitted, feature/settings-page)
 
 - BUILT /settings (admin-guarded): per-key chat embed snippets + copy (origin from
