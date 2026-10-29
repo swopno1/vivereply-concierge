@@ -11,10 +11,10 @@ datasource db {
 
 // Tenant registry (multi-tenant core). One row per resort. The id is the
 // property slug (e.g. krishnachura-retreat) matching the propertyId strings
-// already stored across tables. Rows are created ONLY by the seed file
-// (demo-config/tenants.ts) — there is no public signup and no UI that
-// creates properties. widgetKey is the public embed key (see
-// demo-config/widget-keys.ts).
+// already stored across tables. Rows are created ONLY by the Vivereply
+// team — the seed file (prisma/seed-tenants.mjs) or /admin/register
+// (super-admin). There is no public signup. widgetKey is the public
+// embed key (see demo-config/widget-keys.ts).
 model Property {
   id        String   @id
   name      String

@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/tenant";
 import OnboardingApprovals from "../../components/OnboardingApprovals";
 import OwnerActions from "../../components/OwnerActions";
+import PropertyStatusToggle from "../../components/PropertyStatusToggle";
 
 export const dynamic = "force-dynamic";
 
@@ -104,13 +105,7 @@ export default async function AdminPage() {
                 <OwnerActions initial={p.users} />
               )}
             </div>
-            <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                p.status === "ACTIVE" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-500"
-              }`}
-            >
-              {p.status}
-            </span>
+            <PropertyStatusToggle propertyId={p.id} initialStatus={p.status} />
           </div>
         ))}
       </section>

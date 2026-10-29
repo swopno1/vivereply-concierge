@@ -6,6 +6,10 @@
 // this response — it is never stored or shown again, and the owner must
 // replace it (banner + Settings form) before it counts as theirs.
 // Refuses duplicates (property id, widget key, owner email) with 409s.
+//   PATCH /api/admin/properties { id, status } — suspend (INACTIVE) or
+// resume (ACTIVE) a tenant. Suspension is the kill-switch: widget
+// issuance, chat, bridge keys, and owner sessions all refuse a
+// non-ACTIVE property on next use (see isPropertyActive).
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -100,4 +104,31 @@ export async function POST(req: NextRequest) {
   // The temp password travels here once, in this response body, over the
   // super-admin's own TLS session — never logged, never stored.
   return NextResponse.json({ propertyId: id, ownerEmail, tempPassword }, { status: 201 });
+}
+
+const SUSPEND_STATUSES = ["ACTIVE", "INACTIVE"] as const;
+
+export async function PATCH(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  if (session.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Only the Vivereply team can suspend properties." }, { status: 403 });
+  }
+  const body = await req.json().catch(() => null);
+  const id = typeof body?.id === "string" ? body.id.trim() : "";
+  const status = body?.status;
+  if (!id) {
+    return NextResponse.json({ error: "Property id is required." }, { status: 400 });
+  }
+  if (!SUSPEND_STATUSES.includes(status)) {
+    return NextResponse.json({ error: "Status must be ACTIVE or INACTIVE." }, { status: 400 });
+  }
+  const row = await prisma.property.findUnique({ where: { id } });
+  if (!row) {
+    return NextResponse.json({ error: "Property not found." }, { status: 404 });
+  }
+  await prisma.property.update({ where: { id }, data: { status } });
+  return NextResponse.json({ id, status });
 }

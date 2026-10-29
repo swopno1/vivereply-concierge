@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveWidgetProperty } from "@/demo-config/widget-keys";
 import { createChatToken } from "@/lib/auth";
 import { hostnameFromOrigin, isDomainApproved } from "@/lib/domains";
+import { isPropertyActive } from "@/lib/tenant";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   if (!origin) return {};
@@ -47,6 +48,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unknown widget key." }, { status: 403, headers });
   }
   if (!(await isDomainApproved(property.propertyId, hostname))) {
+    return NextResponse.json(
+      { error: "This site is not approved to host this chat." },
+      { status: 403, headers }
+    );
+  }
+  // Tenant kill-switch: no token for a suspended property. Same generic
+  // message as an unapproved site, so callers cannot tell them apart.
+  if (!(await isPropertyActive(property.propertyId))) {
     return NextResponse.json(
       { error: "This site is not approved to host this chat." },
       { status: 403, headers }

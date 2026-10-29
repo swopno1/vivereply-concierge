@@ -22,6 +22,7 @@ import { embedText } from "@/lib/embeddings";
 import { retrieveGrounding, toVectorLiteral } from "@/lib/rag";
 import { verifyChatToken } from "@/lib/auth";
 import { isDomainApproved } from "@/lib/domains";
+import { isPropertyActive } from "@/lib/tenant";
 
 /**
  * Human one-liners for the streamed "Checking…" status. Built ONLY from
@@ -104,6 +105,15 @@ export async function POST(req: NextRequest) {
   if (!chatToken) {
     return NextResponse.json(
       { error: "Chat token expired or invalid. Please reload the page." },
+      { status: 403 }
+    );
+  }
+  // Tenant kill-switch: a suspended (or deleted) property gets no chat
+  // on any scope, before any row is written. Generic wording — guests
+  // must not learn tenant state.
+  if (!(await isPropertyActive(chatToken.propertyId))) {
+    return NextResponse.json(
+      { error: "Chat is unavailable right now. Please try again in a moment." },
       { status: 403 }
     );
   }

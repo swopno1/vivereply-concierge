@@ -10,7 +10,8 @@
     "postinstall": "prisma generate",
     "seed:tenants": "node prisma/seed-tenants.mjs",
     "eval": "node eval/run.mjs",
-    "eval:dashboard": "node eval/dashboard.mjs"
+    "eval:dashboard": "node eval/dashboard.mjs",
+    "probes": "node probes/run.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7",

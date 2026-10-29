@@ -12,6 +12,7 @@ import Chat from "../components/Chat";
 import { resolveWidgetProperty } from "@/demo-config/widget-keys";
 import { verifyChatToken } from "@/lib/auth";
 import { isDomainApproved } from "@/lib/domains";
+import { isPropertyActive } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,10 @@ export default async function WidgetPage({
   }
   if (!(await isDomainApproved(token.propertyId, token.domain))) {
     return <ErrorPanel message="This site is not approved to host this chat." />;
+  }
+  // Tenant kill-switch: a suspended property renders no chat panel.
+  if (!(await isPropertyActive(token.propertyId))) {
+    return <ErrorPanel message="Chat is unavailable right now. Please try again in a moment." />;
   }
   return <Chat compact title={property.title} token={params.token ?? ""} source="widget" />;
 }

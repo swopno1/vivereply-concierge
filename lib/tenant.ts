@@ -48,6 +48,12 @@ export async function getSession(): Promise<Session | null> {
   if (now.getTime() - row.lastSeenAt.getTime() > TOUCH_EVERY_MS) {
     await prisma.session.update({ where: { id: row.id }, data: { lastSeenAt: now } }).catch(() => null);
   }
+  // Suspension bites existing sessions too: an OWNER whose property is no
+  // longer ACTIVE loses the session on next use. SUPER_ADMIN (no property)
+  // skips this check.
+  if (session.role === "OWNER") {
+    if (!session.propertyId || !(await isPropertyActive(session.propertyId))) return null;
+  }
   return session;
 }
 
@@ -74,6 +80,16 @@ export function sessionCan(session: Session | null, propertyId: string): boolean
 
 export function demoPropertyId(): string {
   return process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat";
+}
+
+// Tenant kill-switch predicate. ACTIVE means live; anything else (or a
+// missing row for a non-demo property) means suspended. The demo property
+// keeps its no-row fallback so a fresh DB still serves the demo; every
+// other property fails closed.
+export async function isPropertyActive(propertyId: string): Promise<boolean> {
+  const row = await prisma.property.findUnique({ where: { id: propertyId } }).catch(() => null);
+  if (!row) return propertyId === demoPropertyId();
+  return row.status === "ACTIVE";
 }
 
 export async function resolvePropertyId(
