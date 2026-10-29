@@ -98,17 +98,35 @@ function basetenKey(): string | null {
 
 // One completions attempt against one backend. Throws on transport, status,
 // or shape failure — the caller decides whether a fallback attempt follows.
+// Bounded at 60s per attempt: a hung provider must fail the turn (and
+// trigger the single Baseten fallback), never hang the guest's request
+// until the serverless function itself dies. 60s, not the Suite's 15s,
+// because reasoning models legitimately take longer than a booking API.
+const COMPLETIONS_TIMEOUT_MS = 60_000;
+
 async function attemptCompletions(
   baseUrl: string,
   key: string,
   model: string,
   payload: Record<string, unknown>
 ): Promise<unknown> {
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ ...payload, model }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, model }),
+      signal: AbortSignal.timeout(COMPLETIONS_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw new Error(
+      e instanceof Error && e.name === "TimeoutError"
+        ? `Completions API timed out after ${COMPLETIONS_TIMEOUT_MS / 1000}s`
+        : e instanceof Error
+          ? e.message
+          : "Completions API request failed"
+    );
+  }
   if (!res.ok) {
     throw new Error(`Completions API responded ${res.status}`);
   }

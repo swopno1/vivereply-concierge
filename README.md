@@ -30,19 +30,30 @@ core. The demo properties are fictional, not real resorts.
   - `request_handoff` — passes the conversation to staff with a summary
   - `lookup_booking_by_code`, `request_booking_details`, `verify_booking`
     — the privacy-safe verification loop
+  - `create_payment_link`, `check_payment_status` — booking payments
+    (flag-gated, Suite properties only; see below)
 - **Cards** — quote, draft (with booking code, plus a "Suite total
-  governs" warning if it ever differs from the quote), and handoff
-  cards, built only from that turn's tool logs.
+  governs" warning if it ever differs from the quote), payment, and
+  handoff cards, built only from that turn's tool logs.
 - **Tenants** — each resort is isolated by property: rooms, backend,
   knowledge, voice, staff, logins. Owners touch only their property
-  (cross-property reads answer 404); registration is Vivereply-team-only,
-  there is no public signup.
+  (cross-property reads answer 404). Resorts join via public signup
+  (email verification + Turnstile spam defense); configuration stays
+  locked until the email is verified.
+- **Booking payments** (off by default, `PAYMENTS_ENABLED`) — the
+  chatbot insists on payment for every held draft but never takes
+  payment itself: it mints a server-side `/pay` deep link (Stripe
+  card or manual transfer), the guest pays standalone, webhook or
+  staff confirmation flips the row to paid, and the bot re-reads the
+  row on "is it paid?". Suite properties only. See `docs/payments.md`.
 - **Suite backends** — any backend implementing `docs/suite-api-spec.md`
   plugs in per property (URL + encrypted key + catalogue, Test
   connection, failure health). Test properties run on the labeled
   fixture backend (`FIX-` codes, deterministic, in-memory).
-- **Staff page** (`/staff`) — one property's handoffs, newest first,
-  with the full transcript. Login-protected, owner-scoped.
+- **Staff page** (`/staff`) — triage board for one property's
+  handoffs: status filters with counts, compact list, one transcript
+  at a time, notes, assignment, resolve/reopen. Login-protected,
+  owner-scoped, verified email required.
 - **Staff bridge (server API)** — client dashboards list, read, assign,
   close, and annotate handoffs as JSON, guarded by per-property keys
   minted in Settings. See `docs/bridge-integration.md`.
@@ -52,13 +63,11 @@ core. The demo properties are fictional, not real resorts.
   the browser.
 - **Settings** (`/settings`) — the single configuration surface, one
   property at a time: widget codes, domains, bridge codes + widget
-  snippets, keys, Suite connections, catalogues, security board,
-  profile + password change. Secrets and Appearance are honest Later
-  rooms.
-- **Admin** (`/admin`, super-admin only) — cross-property oversight:
-  properties & owners, onboarding re-run approvals, backend failures.
-  Registration UI (`/admin/register`) creates property + owner login
-  with a shown-once temporary password.
+  snippets, keys, booking system connection, catalogues, booking
+  payments, security board, profile + password change. Secrets and
+  Appearance are honest Later rooms. There is no separate admin page:
+  super-admins additionally see Tenants (cross-property owners,
+  suspend/resume) and Onboarding re-runs (approvals) at the top.
 - **Onboarding** (`/onboarding`) — one budgeted run per property builds
   its vector knowledge from a business form, website, and uploads.
   A Modal Python worker owns fetch/parse/chunk/embed/store behind
@@ -78,16 +87,43 @@ Suite total governs on any mismatch; anything unknown goes to staff.
 Verification shows dates + first name + status by code, and nothing by
 contact — details go only to the email already on the booking.
 
+## Impact (worked example, real prices — no invented stats)
+
+Independent resorts with no night front desk lose guest enquiries that
+arrive after hours, and a wrong answer costs more than silence. The
+Concierge answers at night and holds booking value: one held Terracotta
+Villa draft for 2 weeknights = ৳14,500 × 2 = **৳29,000 of booking value**
+that an unanswered enquiry would have lost. Presented as booking value
+held, never as profit or ROI — no pilot has run yet, so no conversion
+rates, revenue, or testimonials exist or are claimed. The demo (a real
+property, real data, real prices) is proof point #1; a pilot is next.
+
+## How Meta's model is used (meaningful use, not a wrapper)
+
+Muse Spark (`muse-spark-1.3` via the Meta Model API) IS the product's
+decision-maker: every guest turn runs a hand-rolled tool-use loop
+(`lib/agent.ts`, max 6 rounds) where the model picks room-scoped tools
+built per request from the property's own catalogue, reads live Suite
+results, and either answers or calls again. Model budget: `max_tokens`
+2048 with tools / 1024 plain — generous because Muse Spark reasons
+first and reasoning tokens count against the cap (observed: 337
+reasoning tokens for one word). Token usage (prompt/completion/
+reasoning, per backend) is logged on every call; `pnpm eval:dashboard`
+aggregates it. On primary failure the same payload retries exactly
+once against Baseten-hosted Muse Spark Open
+(`meta-models/muse-spark-open-1026`) — same tools, same guards,
+different weights — and every fallback serve is logged. Data-flow
+consequence, stated plainly: on fallback turns, guest text flows to
+Baseten instead of Meta.
+
 ## Stack
 
 Next.js (App Router) + TypeScript + Tailwind. Supabase Postgres +
 Prisma 7 + pgvector, the Concierge's own database — it never shares
 a Suite database, it talks to backends over HTTP only. Answering model:
-Muse Spark via the Meta Model API, with an env-gated fallback to
-Baseten-hosted Muse Spark Open (`meta-models/muse-spark-open-1026`) when
-the primary errors — one retry, logged, inert without `BASETEN_API_KEY`.
-Embeddings only: Gemini gemini-embedding-001 at 768 dimensions (the Meta
-API lists no embedding model). Ingestion worker: Modal (Python, CPU).
+Muse Spark via the Meta Model API (see above). Embeddings only: Gemini
+gemini-embedding-001 at 768 dimensions (the Meta API lists no embedding
+model). Ingestion worker: Modal (Python, CPU).
 
 ## Setup
 
@@ -132,6 +168,20 @@ Standalone scripts must import `lib/env` first, before `lib/prisma` —
 `tsx` does not load `.env` files by itself, and the Prisma Pool is
 created at import time.
 
+## Tests
+
+```bash
+pnpm test        # unit tests: rates, language, cards, tool guards, prompts, payment pure legs
+pnpm typecheck   # strict tsc
+pnpm eval        # 12-case live referee against the fixture backend (needs API keys)
+pnpm probes      # 10 tenant-isolation probes against a live app (needs tenant creds)
+```
+
+`pnpm test` needs nothing but node: it runs `tests/*.test.mjs` on the
+real TypeScript modules via node's type-stripping — no framework, no
+database, no network. Anything needing those lives in `eval/` or
+`probes/`, not in `tests/`.
+
 ## Widget (embed on any site)
 
 ```html
@@ -148,13 +198,15 @@ panel, never a guessed property.
 
 ## Security
 
-- **Logins**: owners sign in with email + scrypt password (seeded or
-  registered by super-admin, temp password shown once, must-change
-  banner until replaced). The founder bootstrap is `ADMIN_EMAIL` +
-  `ADMIN_PASSWORD` (env, checked first). Sessions are signed cookies bound to
-  server-side rows — revocable per session (logout), per user
-  (password change, admin kill-switch), with 7-day absolute + 24-hour
-  idle expiry. The founder bootstrap is password-only via env.
+- **Logins**: owners join via public signup (email verification +
+  Turnstile spam defense; configuration locked until verified) and
+  sign in with email + scrypt password. Seed tenants carry inline
+  test passwords (committed deliberately, rotation forced at first
+  human login — see `docs/seed-users.md`). The founder bootstrap is
+  `ADMIN_EMAIL` + `ADMIN_PASSWORD` (env, checked first). Sessions are
+  signed cookies bound to server-side rows — revocable per session
+  (logout), per user (password change, owner kill-switch), with
+  7-day absolute + 24-hour idle expiry.
 - **Login throttle**: 5 failures/15 min per email or 20 per IP → 429.
 - **Approved domains (Settings)**: only hosts listed there (and still
   active) can embed the widget for a property. Deactivating a domain
@@ -170,11 +222,12 @@ panel, never a guessed property.
   never in the browser. Staff widget tokens live 15 minutes and are
   origin-bound (strict Referer check at iframe load).
 
-Honest limits: no 2FA, no public signup (by design — registration is
-team-only), no frame-ancestors allowlist on the staff widget (token +
-origin binding is the gate). Localhost is approved automatically in
-development only. Post-hackathon: Supabase Auth migration, 2FA, audit
-log, per-domain frame-ancestors.
+Honest limits: no 2FA, no password reset-by-email, no rate limit on
+`/api/chat` yet (login/signup throttle only), no frame-ancestors
+allowlist on the staff widget (token + origin binding is the gate).
+Localhost is approved automatically in development only.
+Post-hackathon: Supabase Auth migration, 2FA, audit log, per-domain
+frame-ancestors, chat quotas.
 
 ## Demo flow to try
 
@@ -187,3 +240,9 @@ log, per-domain frame-ancestors.
 4. Second property (Seabreeze, fixture backend): Harbor Suite 2 nights
    → ৳25,000 quote → `FIX-` draft → lookup round-trip — then confirm
    neither property sees the other's data.
+
+## License
+
+Copyright (c) 2026 ViveScript Solutions. All rights reserved — see
+`LICENSE`. Source is visible for hackathon evaluation; reuse requires
+written permission.
