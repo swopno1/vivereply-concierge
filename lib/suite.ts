@@ -279,6 +279,28 @@ export async function adapterForProperty(propertyId: string): Promise<SuiteAdapt
   });
 }
 
+export type BackendSource = "settings" | "demo-env" | "fixture" | "none";
+
+// Read-only mirror of adapterForProperty's decision (same order, same
+// demo scoping) for the Settings status banner. NEVER returns a secret
+// — base URL only. Keep the two in sync: if the precedence below ever
+// changes, adapterForProperty changes with it.
+export async function describeBackendResolution(
+  propertyId: string
+): Promise<{ source: BackendSource; baseUrl: string | null }> {
+  if (fixtureRoomsFor(propertyId)) return { source: "fixture", baseUrl: null };
+  const row = await prisma.propertyBinding.findUnique({
+    where: { propertyId },
+    select: { suiteBaseUrl: true },
+  });
+  if (row) return { source: "settings", baseUrl: row.suiteBaseUrl };
+  if (propertyId === (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat")) {
+    const env = process.env.SUITE_API_BASE_URL ?? "";
+    return env ? { source: "demo-env", baseUrl: env.replace(/\/$/, "") } : { source: "none", baseUrl: null };
+  }
+  return { source: "none", baseUrl: null };
+}
+
 // Default-binding path (Phase 1 behavior: identical to the old module).
 // A fresh adapter per call keeps env reads lazy, exactly like before.
 export async function getAvailability(

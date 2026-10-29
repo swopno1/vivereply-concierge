@@ -71,3 +71,19 @@ export async function catalogueForProperty(propertyId: string): Promise<DemoRoom
   }
   throw new Error(`Property "${propertyId}" has no room catalogue yet.`);
 }
+
+export type CatalogueSource = "settings" | "demo-file" | "none";
+
+// Read-only mirror of catalogueForProperty's decision for the Settings
+// status banner. Keep in sync with the resolver above.
+export async function describeCatalogueResolution(
+  propertyId: string
+): Promise<{ source: CatalogueSource; rooms: number }> {
+  const { prisma } = await import("@/lib/prisma");
+  const count = await prisma.roomMapping.count({ where: { propertyId } });
+  if (count > 0) return { source: "settings", rooms: count };
+  if (propertyId === (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat")) {
+    return { source: "demo-file", rooms: DEMO_ROOMS.length };
+  }
+  return { source: "none", rooms: 0 };
+}

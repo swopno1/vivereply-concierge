@@ -60,6 +60,16 @@ path); demo1 seeded as default binding; local dev and the demo flow work
 untouched throughout. Rejected alternative: big-bang cutover — unnecessary
 risk with zero benefit given the fallback costs ~5 lines.
 
+**Recorded precedence (backend resolution, `lib/suite.ts`):** 1) Settings
+connection row for the token's property (URL + encrypted key, per-tenant);
+2) env (`SUITE_API_BASE_URL` + suite key), demo property only — the suite's
+fixture/demo tier, never a global fallback for real tenants; 3) fixture files
+or hardcoded stub, whichever the resolved layer points at (demo fixture for
+the documented fixture ids; explicit "not connected" error otherwise — a
+tenant without its own row never borrows another property's backend).
+Catalogue precedence (`demo-config/rooms.ts`) mirrors it: 1) Settings
+`RoomMapping` rows; 2) demo file, demo property only; 3) honest error.
+
 ## Steps
 
 - **Phase 0 — spec doc only.** Write `docs/suite-api-spec.md` v1 from proven

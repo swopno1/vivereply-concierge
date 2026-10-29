@@ -269,8 +269,8 @@ export default async function SettingsPage({
       </Section>
 
       <Section
-        title="Suite connections"
-        blurb="One booking backend per property. Test runs server-side and never reveals the key. URL and key changes apply on the next chat message."
+        title="Booking system"
+        blurb="One connection per property: the address above is what answers your guests' price and availability questions. Test runs server-side and never reveals the key. Changes apply on the next chat message."
       >
         <SuiteBindings initial={initialBindings} initialPropertyId={propertyId} />
         <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
