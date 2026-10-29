@@ -431,7 +431,7 @@ export default async function SettingsPage({
       {session.role === "SUPER_ADMIN" && (
         <Section
           title="Chatbot exam"
-          blurb="The 12-case eval, runnable from here. Demo hotel only — a run can never touch real bookings. Same exam as the terminal runner."
+          blurb="The 18-case eval, runnable from here. Demo hotel only — a run can never touch real bookings. Same exam as the terminal runner."
         >
           <EvalRunner
             cases={(CASES as { id: string; category: string; turns: unknown[] }[]).map((c) => ({

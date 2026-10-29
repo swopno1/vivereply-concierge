@@ -11,12 +11,13 @@
 // token's propertyId is the fixture property. Eval drafts are in-memory
 // FIX- codes — no real Suite writes are possible on this path.
 //
-// Cost: ~12 cases, ~20 turns, ~30-40 model calls per full run.
+// Cost: ~18 cases, ~27 turns, ~40-55 model calls per full run.
 
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CASES, CATEGORIES, EVAL_PROPERTY_ID } from "./cases.mjs";
+import { PROMPT_VERSION } from "../lib/prompts.ts";
 
 // Import-guarded (same pattern as prisma/seed-tenants.mjs): importing this
 // file runs nothing — the /tmp harness test imports the helpers below.
@@ -234,7 +235,7 @@ async function main() {
   const startedAt = new Date().toISOString();
   const hash = commitHash();
 
-  console.log(`eval: ${BASE_URL} @ ${hash} — ${selected.length} case(s), property ${EVAL_PROPERTY_ID}`);
+  console.log(`eval: ${BASE_URL} @ ${hash} — ${selected.length} case(s), property ${EVAL_PROPERTY_ID}, prompt v${PROMPT_VERSION}`);
   const cookie = await loginCookie();
   const token = await directToken(cookie);
   console.log(`eval: logged in as ${EVAL_EMAIL}, fixture token minted`);
@@ -282,7 +283,7 @@ async function main() {
   const outPath = `eval/results/${stamp}-${hash}.json`;
   writeFileSync(
     outPath,
-    JSON.stringify({ startedAt, baseUrl: BASE_URL, commit: hash, property: EVAL_PROPERTY_ID, results }, null, 2)
+    JSON.stringify({ startedAt, baseUrl: BASE_URL, commit: hash, property: EVAL_PROPERTY_ID, promptVersion: PROMPT_VERSION, results }, null, 2)
   );
   console.log(`results: ${outPath}`);
 

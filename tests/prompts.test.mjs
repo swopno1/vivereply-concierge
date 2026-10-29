@@ -3,7 +3,14 @@
 // exactly the resort's accepted methods — never leaked verbatim.
 import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
-import { systemPrompt } from "@/lib/prompts";
+import { PROMPT_VERSION, systemPrompt } from "@/lib/prompts";
+
+describe("PROMPT_VERSION", () => {
+  it("is a positive integer the eval runner stamps", () => {
+    assert.equal(Number.isInteger(PROMPT_VERSION), true);
+    assert.ok(PROMPT_VERSION >= 1);
+  });
+});
 
 const ROOMS = [
   { slug: "test-villa", name: "Test Villa", basePricePoisha: 1450000, suiteRoomId: "suite-1", highlights: ["Sea view"] },

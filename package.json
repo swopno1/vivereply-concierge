@@ -11,10 +11,11 @@
     "start": "next start",
     "postinstall": "prisma generate",
     "seed:tenants": "node prisma/seed-tenants.mjs",
-    "eval": "node eval/run.mjs",
+    "eval": "node --no-warnings --experimental-transform-types --loader ./scripts/esm-alias-loader.mjs eval/run.mjs",
     "eval:dashboard": "node eval/dashboard.mjs",
     "probes": "node probes/run.mjs",
-    "test": "node --no-warnings --experimental-transform-types --loader ./tests/helpers/alias-loader.mjs --test \"tests/*.test.mjs\"",
+    "funnel": "node eval/funnel.mjs",
+    "test": "node --no-warnings --experimental-transform-types --loader ./scripts/esm-alias-loader.mjs --test \"tests/*.test.mjs\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -1,0 +1,52 @@
+# PR gates: typecheck + unit tests + production build on every push
+# and pull request. Live suites (eval, probes, dashboard, funnel) stay
+# manual — they need tenant credentials and cost model calls — and run
+# from the founder's machine per docs/pre-deploy-checklist.md.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build --webpack
+        env:
+          # Build-only placeholders: the build must not need real secrets.
+          DATABASE_URL: postgresql://user:pass@localhost:5432/db
+          SESSION_SECRET: ci-build-placeholder-not-a-secret
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Advisory, not blocking: a new CVE must not freeze a hotfix, but
+      # it must be visible on every run.
+      - run: pnpm audit --audit-level=high
+        continue-on-error: true

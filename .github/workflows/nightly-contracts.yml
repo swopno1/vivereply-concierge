@@ -1,0 +1,25 @@
+# Nightly Suite contract checks vs live demo1: catches silent backend
+# drift (shape changes, 404/400 regressions) without touching data —
+# the script checks reads only, never bookings POST or send-details.
+# Needs repo secrets: SUITE_API_BASE_URL, SUITE_CONTRACT_ROOM_ID,
+# and SUITE_API_KEY if the backend requires one.
+name: nightly-contracts
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node scripts/check-contracts.mjs
+        env:
+          SUITE_API_BASE_URL: ${{ secrets.SUITE_API_BASE_URL }}
+          SUITE_CONTRACT_ROOM_ID: ${{ secrets.SUITE_CONTRACT_ROOM_ID }}
+          SUITE_API_KEY: ${{ secrets.SUITE_API_KEY }}

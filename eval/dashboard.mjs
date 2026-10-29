@@ -1,8 +1,9 @@
 // Eval dashboard: weekly aggregates from the logs we already keep.
-// Tokens/turn, calls/turn, fallback rate, tool mix, RAG hit rate —
-// the "Observe" half of the optimization loop. No cost math: there are
-// no verified per-token prices for Muse Spark, and an invented price
-// would be worse than no number.
+// Tokens/turn, calls/turn, fallback rate, turn latency p50/p95, tool
+// mix, grounded-vs-silent split, helpful votes — the "Observe" half of
+// the optimization loop. No cost math: there are no verified
+// per-token prices for Muse Spark, and an invented price would be
+// worse than no number.
 //
 //   pnpm eval:dashboard            # last 7 days
 //   pnpm eval:dashboard -- --days=30
@@ -36,10 +37,11 @@ async function main() {
     const since = new Date(Date.now() - DAYS * 24 * 60 * 60 * 1000);
     console.log(`dashboard: last ${DAYS} day(s), since ${since.toISOString()}`);
 
-    const [userMessages, logs] = await Promise.all([
+    const [messages, logs, votes] = await Promise.all([
       prisma.message.findMany({
-        where: { role: "user", createdAt: { gte: since } },
-        select: { conversationId: true },
+        where: { createdAt: { gte: since } },
+        select: { role: true, conversationId: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
       }),
       prisma.toolCallLog.findMany({
         where: { createdAt: { gte: since } },
@@ -53,7 +55,13 @@ async function main() {
           conversation: { select: { propertyId: true } },
         },
       }),
+      prisma.chatRating.groupBy({
+        by: ["helpful"],
+        where: { updatedAt: { gte: since } },
+        _count: { helpful: true },
+      }).catch(() => []),
     ]);
+    const userMessages = messages.filter((m) => m.role === "user");
 
     const turns = userMessages.length;
     const convs = new Set(userMessages.map((m) => m.conversationId)).size;
@@ -101,8 +109,38 @@ async function main() {
     for (const [t, n] of [...toolMix.entries()].sort((a, b) => b[1] - a[1])) {
       console.log(`  ${t}: ${n}`);
     }
-    const ragRows = toolMix.get("rag_retrieval") ?? 0;
-    console.log(`rag retrieval logged on ${ragRows}/${turns} turn(s)`);
+    const ragAttempts = logs.filter((l) => l.toolName === "rag_retrieval");
+    const ragGrounded = ragAttempts.filter((l) => ((l.output ?? {}).chunks ?? []).length > 0).length;
+    console.log(
+      `rag: attempted ${ragAttempts.length}/${turns} turn(s), grounded ${ragGrounded}, silent ${ragAttempts.length - ragGrounded}`
+    );
+
+    // Turn latency: each user message paired with the NEXT assistant
+    // message in the same conversation (unpaired trailing users are
+    // dropped, not zeroed). Measures user-message to saved-reply —
+    // model + tools + stream, end to end.
+    const latMs = [];
+    const byConvMsgs = new Map();
+    for (const m of messages) {
+      if (!byConvMsgs.has(m.conversationId)) byConvMsgs.set(m.conversationId, []);
+      byConvMsgs.get(m.conversationId).push(m);
+    }
+    for (const rows of byConvMsgs.values()) {
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i].role !== "user") continue;
+        const next = rows.slice(i + 1).find((r) => r.role === "assistant");
+        if (next) latMs.push(next.createdAt.getTime() - rows[i].createdAt.getTime());
+      }
+    }
+    latMs.sort((a, b) => a - b);
+    const pct = (p) => (latMs.length ? Math.round(latMs[Math.min(latMs.length - 1, Math.floor((p / 100) * latMs.length))] / 100) / 10 : "-");
+    console.log(`turn latency (user msg → saved reply): n=${latMs.length}, p50=${pct(50)}s, p95=${pct(95)}s`);
+
+    // Helpful votes: one row per conversation, freely changeable —
+    // counts are current ballots, not vote events.
+    const yes = votes.find((v) => v.helpful)?._count.helpful ?? 0;
+    const no = votes.find((v) => !v.helpful)?._count.helpful ?? 0;
+    console.log(`helpful votes: ${yes} yes / ${no} no${yes + no ? ` (${((100 * yes) / (yes + no)).toFixed(0)}% yes)` : ""}`);
 
     // Heaviest conversations by completion tokens (where to look first).
     const byConv = new Map();

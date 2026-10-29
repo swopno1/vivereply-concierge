@@ -1,0 +1,11 @@
+# Gitleaks config: the seed file + seed docs carry INLINE TEST
+# PASSWORDS deliberately (docs/seed-users.md: committed, test tenants
+# only, rotation forced at first human login). Everything else scans.
+title = "vivereply-concierge"
+
+[allowlist]
+description = "documented test-only seed credentials"
+paths = [
+  '''prisma/seed-tenants\.mjs''',
+  '''docs/seed-users\.md''',
+]

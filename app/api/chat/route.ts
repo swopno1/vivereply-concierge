@@ -446,16 +446,17 @@ export async function POST(req: NextRequest) {
               },
             });
             grounding = retrieved.text;
-            if (retrieved.chunks.length > 0) {
-              await prisma.toolCallLog.create({
-                data: {
-                  conversationId: activeConversation.id,
-                  toolName: "rag_retrieval",
-                  input: { query: message } as never,
-                  output: { chunks: retrieved.chunks } as never,
-                },
-              });
-            }
+            // Always logged on attempt (chunks may be empty): the
+            // dashboard splits grounded vs silent turns from these
+            // rows, and silent retrieval is a signal, not an absence.
+            await prisma.toolCallLog.create({
+              data: {
+                conversationId: activeConversation.id,
+                toolName: "rag_retrieval",
+                input: { query: message } as never,
+                output: { chunks: retrieved.chunks } as never,
+              },
+            });
           } catch (e) {
             console.error(
               "RAG retrieval failed, continuing without grounding:",

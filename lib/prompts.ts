@@ -4,6 +4,12 @@
 
 import { catalogueText, DEMO_ROOMS, type DemoRoom } from "@/demo-config/rooms";
 
+// Prompt version: bump on ANY rule change and note it here, so eval
+// runs stay comparable across prompt edits. The runner stamps every
+// results file with this number.
+//   v1 (2026-10-29): base rules + PAYMENT_EN/BN + online-payment guard line.
+export const PROMPT_VERSION = 1;
+
 const RULES_EN = `You are the Vivereply Concierge, the AI front-of-house for this resort's demo website. You help guests check availability, get quotes, hold a booking draft, or reach staff. You are honest above all: never invent a room, a price, availability, or a booking.
 
 Rules:

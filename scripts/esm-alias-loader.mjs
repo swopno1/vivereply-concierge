@@ -1,13 +1,12 @@
-// ESM loader for `pnpm test`: resolves the `@/` TS alias to the repo
-// root and allows extensionless `.ts` imports, so node --test can run
-// TypeScript test subjects directly (with --experimental-transform-types).
-// No framework, no build step — pure modules only. Anything needing a
-// database, network, or Next.js runtime does not belong in tests/.
+// Shared ESM loader for node-run repo scripts (`pnpm test`, `pnpm eval`):
+// resolves the `@/` TS alias to the repo root and allows extensionless
+// `.ts` imports, so plain node (with --experimental-transform-types) can
+// run TypeScript modules directly. No framework, no build step.
 import { existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..") + "/";
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..") + "/";
 
 export async function resolve(specifier, context, next) {
   if (specifier.startsWith("@/")) {

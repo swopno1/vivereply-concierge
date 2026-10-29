@@ -173,7 +173,7 @@ created at import time.
 ```bash
 pnpm test        # unit tests: rates, language, cards, tool guards, prompts, payment pure legs
 pnpm typecheck   # strict tsc
-pnpm eval        # 12-case live referee against the fixture backend (needs API keys)
+pnpm eval        # 18-case live referee against the fixture backend (needs API keys)
 pnpm probes      # 10 tenant-isolation probes against a live app (needs tenant creds)
 ```
 
