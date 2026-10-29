@@ -2,6 +2,8 @@
   "name": "vivereply-concierge",
   "version": "0.1.0",
   "private": true,
+  "author": "ViveScript Solutions",
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "dev": "next dev",
@@ -11,7 +13,9 @@
     "seed:tenants": "node prisma/seed-tenants.mjs",
     "eval": "node eval/run.mjs",
     "eval:dashboard": "node eval/dashboard.mjs",
-    "probes": "node probes/run.mjs"
+    "probes": "node probes/run.mjs",
+    "test": "node --no-warnings --experimental-transform-types --loader ./tests/helpers/alias-loader.mjs --test \"tests/*.test.mjs\"",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7",
