@@ -11,6 +11,10 @@ import Link from "next/link";
 import { useState } from "react";
 import TurnstileWidget from "../../components/TurnstileWidget";
 
+type FieldErrors = { resort?: string; email?: string; password?: string; token?: string };
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function SignupPage() {
   const [resortName, setResortName] = useState("");
   const [email, setEmail] = useState("");
@@ -18,10 +22,25 @@ export default function SignupPage() {
   const [token, setToken] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [sending, setSending] = useState(false);
 
+  // The button stays enabled: instead of a cryptic dead button, every
+  // unmet rule explains itself inline (server re-validates strictly).
+  function validate(): FieldErrors {
+    const errs: FieldErrors = {};
+    if (!resortName.trim()) errs.resort = "Resort name is required.";
+    if (!EMAIL_RE.test(email.trim())) errs.email = "Enter a valid email address.";
+    if (password.length < 12) errs.password = `Password must be at least 12 characters (now ${password.length}).`;
+    if (!token) errs.token = "Complete the human check to continue.";
+    return errs;
+  }
+
   async function submit() {
-    if (!resortName.trim() || !email.trim() || password.length < 12 || !token || sending) return;
+    if (sending) return;
+    const errs = validate();
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) return;
     setError("");
     setSending(true);
     try {
@@ -42,8 +61,6 @@ export default function SignupPage() {
     }
   }
 
-  const valid = resortName.trim() && email.trim() && password.length >= 12 && token && !sending;
-
   return (
     <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center p-4">
       <div className="mb-4 flex items-center gap-3">
@@ -58,39 +75,62 @@ export default function SignupPage() {
         configuring rooms, backend, and widget.
       </p>
       <div className="mt-4 flex flex-col gap-2">
-        <input
-          value={resortName}
-          onChange={(e) => setResortName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder="Resort name"
-          autoComplete="organization"
-          aria-label="Resort name"
-          className="rounded-full border px-4 py-2 text-sm outline-none focus:border-black focus-visible:ring-2 focus-visible:ring-gray-900"
-        />
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder="Work email"
-          autoComplete="email"
-          aria-label="Work email"
-          className="rounded-full border px-4 py-2 text-sm outline-none focus:border-black focus-visible:ring-2 focus-visible:ring-gray-900"
-        />
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder="Password (min 12 characters)"
-          autoComplete="new-password"
-          aria-label="Password"
-          className="rounded-full border px-4 py-2 text-sm outline-none focus:border-black focus-visible:ring-2 focus-visible:ring-gray-900"
-        />
-        <TurnstileWidget key={attempt} onVerify={setToken} />
+        <div>
+          <input
+            value={resortName}
+            onChange={(e) => setResortName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="Resort name"
+            autoComplete="organization"
+            aria-label="Resort name"
+            aria-invalid={!!fieldErrors.resort}
+            className="w-full rounded-full border px-4 py-2 text-sm outline-none focus:border-black focus-visible:ring-2 focus-visible:ring-gray-900"
+          />
+          {fieldErrors.resort && <p className="mt-1 px-4 text-xs text-red-700">{fieldErrors.resort}</p>}
+        </div>
+        <div>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="Work email"
+            autoComplete="email"
+            aria-label="Work email"
+            aria-invalid={!!fieldErrors.email}
+            className="w-full rounded-full border px-4 py-2 text-sm outline-none focus:border-black focus-visible:ring-2 focus-visible:ring-gray-900"
+          />
+          {fieldErrors.email && <p className="mt-1 px-4 text-xs text-red-700">{fieldErrors.email}</p>}
+        </div>
+        <div>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="Password (min 12 characters)"
+            autoComplete="new-password"
+            aria-label="Password"
+            aria-invalid={!!fieldErrors.password}
+            aria-describedby="signup-password-hint"
+            className="w-full rounded-full border px-4 py-2 text-sm outline-none focus:border-black focus-visible:ring-2 focus-visible:ring-gray-900"
+          />
+          <p id="signup-password-hint" className="mt-1 px-4 text-xs text-gray-500">
+            {password.length === 0
+              ? "At least 12 characters."
+              : password.length < 12
+                ? `${password.length} / 12 minimum.`
+                : "Length looks good."}
+          </p>
+          {fieldErrors.password && <p className="mt-1 px-4 text-xs text-red-700">{fieldErrors.password}</p>}
+        </div>
+        <div>
+          <TurnstileWidget key={attempt} onVerify={setToken} />
+          {fieldErrors.token && <p className="mt-1 px-4 text-xs text-red-700">{fieldErrors.token}</p>}
+        </div>
         <button
           onClick={submit}
-          disabled={!valid}
+          disabled={sending}
           className="rounded-full bg-black px-5 py-2 text-sm font-medium text-white disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
         >
           Create account
