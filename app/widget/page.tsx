@@ -41,10 +41,13 @@ export default async function WidgetPage({
   const property = await resolveWidgetProperty(params.key ?? null);
   const token = verifyChatToken(params.token);
   if (!property || !token) {
-    return <ErrorPanel message="This demo widget is not configured. Check the embed script's data-key." />;
+    // Technical cause stays server-side: guests get a plain line, not embed jargon.
+    console.error("Widget rejected: missing property or invalid token.");
+    return <ErrorPanel message="Chat is unavailable right now. Please try again in a moment." />;
   }
   if (token.scope !== "widget" || token.propertyId !== property.propertyId || !token.domain) {
-    return <ErrorPanel message="This demo widget is not configured. Check the embed script's data-key." />;
+    console.error("Widget rejected: token scope/property/domain mismatch.");
+    return <ErrorPanel message="Chat is unavailable right now. Please try again in a moment." />;
   }
   if (!(await isDomainApproved(token.propertyId, token.domain))) {
     return <ErrorPanel message="This site is not approved to host this chat." />;

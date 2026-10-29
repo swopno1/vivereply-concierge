@@ -63,13 +63,69 @@ const SUGGESTIONS = [
   "I need help from a person",
 ];
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function parseDay(s: string): { y: number; m: number; d: number } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return { y, m: mo, d };
+}
+
+// Guest-facing stay range: "Dec 1–3, 2026" for same-month stays, wider
+// spans spelled out. Unparseable input falls back to the raw strings —
+// a card must never render blank dates.
+function formatStay(checkIn: string, checkOut: string): string {
+  const a = parseDay(checkIn);
+  const b = parseDay(checkOut);
+  if (!a || !b) return `${checkIn} → ${checkOut}`;
+  const ma = MONTHS[a.m - 1];
+  const mb = MONTHS[b.m - 1];
+  if (a.y === b.y && a.m === b.m) return `${ma} ${a.d}–${b.d}, ${a.y}`;
+  if (a.y === b.y) return `${ma} ${a.d} – ${mb} ${b.d}, ${a.y}`;
+  return `${ma} ${a.d}, ${a.y} – ${mb} ${b.d}, ${b.y}`;
+}
+
+function CopyCode({ code }: { code: string }) {
+  const [done, setDone] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = code;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
+    }
+    setDone(true);
+    setTimeout(() => setDone(false), 1500);
+  }
+
+  return (
+    <button
+      onClick={copy}
+      aria-label={done ? "Booking code copied" : `Copy booking code ${code}`}
+      title="Tap to copy"
+      className="inline-flex min-h-[44px] items-center rounded-md bg-gray-100 px-3 py-1 font-mono font-semibold hover:bg-gray-200 active:bg-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
+    >
+      {done ? "Copied" : code}
+    </button>
+  );
+}
+
 function CardView({ card }: { card: Card }) {
   if (card.kind === "quote") {
     return (
       <div className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
         <p className="text-sm font-semibold text-gray-900">Quote — {card.room}</p>
         <p className="mt-0.5 text-sm text-gray-700">
-          {card.checkIn} → {card.checkOut} · {card.nights} night{card.nights === 1 ? "" : "s"} ·{" "}
+          {formatStay(card.checkIn, card.checkOut)} · {card.nights} night{card.nights === 1 ? "" : "s"} ·{" "}
           {card.available} available
         </p>
         <p className="mt-1 text-base font-bold text-gray-900">Total: {card.total}</p>
@@ -81,13 +137,10 @@ function CardView({ card }: { card: Card }) {
       <div className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
         <p className="text-sm font-semibold text-gray-900">Booking draft held — {card.room}</p>
         <p className="mt-0.5 text-sm text-gray-700">
-          {card.checkIn} → {card.checkOut}
+          {formatStay(card.checkIn, card.checkOut)}
         </p>
         <p className="mt-1 text-sm text-gray-900">
-          Booking code:{" "}
-          <span className="rounded-md bg-gray-100 px-2 py-0.5 font-mono font-semibold">
-            {card.bookingCode}
-          </span>
+          Booking code: <CopyCode code={card.bookingCode} />
         </p>
         <p className="mt-1 text-base font-bold text-gray-900">Total: {card.suiteTotal}</p>
         {!card.totalsMatch && (
@@ -127,6 +180,10 @@ export default function Chat({
   const [phaseDetail, setPhaseDetail] = useState("");
   const [reassurance, setReassurance] = useState("");
   const [error, setError] = useState("");
+  const [failedText, setFailedText] = useState<string | null>(null);
+  // Screen-reader announcer: set ONLY when a reply completes, so assistive
+  // tech announces finished messages once — never per typing tick.
+  const [announced, setAnnounced] = useState("");
   const [queuedCount, setQueuedCount] = useState(0);
   const idCounter = useRef(0);
   const busyRef = useRef(false);
@@ -158,6 +215,7 @@ export default function Chat({
     setPhaseDetail("");
     setReassurance("");
     setError("");
+    setAnnounced("");
   }
 
   // The shell sidebar's New chat button dispatches this; the widget has
@@ -187,6 +245,7 @@ export default function Chat({
         window.matchMedia("(prefers-reduced-motion: reduce)").matches
       ) {
         setMessages((m) => [...m, { role: "assistant", text: fullText, cards, id }]);
+        setAnnounced(fullText);
         resolve();
         return;
       }
@@ -202,6 +261,7 @@ export default function Chat({
         timer = null;
         skipTypingRef.current = null;
         setMessages((m) => m.map((msg) => (msg.id === id ? { ...msg, text: fullText, typing: false } : msg)));
+        setAnnounced(fullText);
         resolve();
       };
       timer = setInterval(() => {
@@ -220,6 +280,7 @@ export default function Chat({
     setPhaseDetail("");
     setReassurance("");
     setError("");
+    setFailedText(null);
     // Patience line: only after a genuinely long wait, and only once —
     // a rotating spinner of reassurances would feel more robotic, not less.
     const reassureTimer = setTimeout(() => {
@@ -304,6 +365,9 @@ export default function Chat({
       setPhase("idle");
       busyRef.current = false;
       setError(e instanceof Error ? e.message : "Something went wrong.");
+      // Keep the failed message so Retry resends it — without this the
+      // guest's turn is silently lost and must be retyped.
+      setFailedText(text);
       return;
     }
     setPhase("idle");
@@ -334,6 +398,16 @@ export default function Chat({
     }
     // Empty input + a queued message = retry the queued message (after an error).
     startNextFromQueue();
+  }
+
+  function retry() {
+    // Resends the failed turn WITHOUT adding a second user bubble — the
+    // original message is already on screen.
+    if (!failedText || busyRef.current) return;
+    const text = failedText;
+    setError("");
+    setFailedText(null);
+    void runTurn(text);
   }
 
   const busy = phase !== "idle";
@@ -369,6 +443,9 @@ export default function Chat({
         </header>
       )}
 
+      <p aria-live="polite" className="sr-only">
+        {announced}
+      </p>
       <div
         ref={listRef}
         onScroll={(e) => {
@@ -388,16 +465,22 @@ export default function Chat({
               </div>
             ) : (
               <div key={m.id} className="flex flex-col items-start gap-2">
-                <div
-                  onClick={() => {
-                    if (m.typing) skipTypingRef.current?.();
-                  }}
-                  title={m.typing ? "Tap to show the full reply" : undefined}
-                  className={`w-full whitespace-pre-wrap text-[15px] leading-7 text-gray-900 ${m.typing ? "cursor-pointer" : ""}`}
-                >
-                  {m.text}
-                  {m.typing && <span className="motion-safe:animate-pulse">▍</span>}
-                </div>
+                {m.typing ? (
+                  <button
+                    type="button"
+                    onClick={() => skipTypingRef.current?.()}
+                    title="Tap to show the full reply"
+                    aria-label="Show the full reply now"
+                    className="w-full cursor-pointer whitespace-pre-wrap rounded-lg text-left text-[15px] leading-7 text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
+                  >
+                    {m.text}
+                    <span className="motion-safe:animate-pulse">▍</span>
+                  </button>
+                ) : (
+                  <div className="w-full whitespace-pre-wrap text-[15px] leading-7 text-gray-900">
+                    {m.text}
+                  </div>
+                )}
                 {m.typing && <p className="text-xs text-gray-500">Tap to show the full reply</p>}
                 {!m.typing && (m.cards ?? []).map((card, j) => <CardView key={j} card={card} />)}
               </div>
@@ -427,7 +510,7 @@ export default function Chat({
                 <button
                   key={s}
                   onClick={() => submit(s)}
-                  className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 shadow-sm hover:bg-gray-50"
+                  className="min-h-[44px] rounded-full border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 shadow-sm hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
                 >
                   {s}
                 </button>
@@ -439,7 +522,26 @@ export default function Chat({
 
       {error && (
         <div className={`px-4 ${columnWidth}`}>
-          <p className="mb-2 rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-700">{error}</p>
+          <div
+            role="alert"
+            className="mb-2 flex items-center gap-3 rounded-xl bg-red-50 px-4 py-2.5"
+          >
+            <p className="flex-1 text-sm text-red-700">
+              {error}{" "}
+              {failedText
+                ? "Tap Retry to send your last message again, or rephrase it below."
+                : "Please try again in a moment."}
+            </p>
+            {failedText && (
+              <button
+                onClick={retry}
+                aria-label="Retry last message"
+                className="min-h-[44px] shrink-0 rounded-full bg-red-700 px-4 py-1.5 text-sm font-medium text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-800 focus-visible:ring-offset-2 focus-visible:ring-offset-red-50"
+              >
+                Retry
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -452,13 +554,13 @@ export default function Chat({
               onKeyDown={(e) => e.key === "Enter" && handleSend()}
               placeholder={busy ? "Type a follow-up — I'll send it next…" : "Message the Concierge…"}
               aria-label="Message the Concierge"
-              className="flex-1 bg-transparent px-3 py-2 text-[15px] text-gray-900 outline-none placeholder:text-gray-400"
+              className="flex-1 rounded-xl bg-transparent px-3 py-2 text-[15px] text-gray-900 outline-none placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-gray-900"
             />
             <button
               onClick={handleSend}
               disabled={!input.trim() && queuedCount === 0}
               aria-label="Send message"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white disabled:opacity-30"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                 <path
@@ -471,8 +573,9 @@ export default function Chat({
               </svg>
             </button>
           </div>
-          <p className="mt-2 text-center text-xs text-gray-400">
-            The Concierge answers from live resort data — staff confirm every booking.
+          <p className="mt-2 text-center text-xs text-gray-500">
+            The Concierge answers from live resort data — staff confirm every booking. Details
+            you share are used only to hold your booking.
           </p>
         </div>
       </div>

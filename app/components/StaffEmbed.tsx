@@ -178,7 +178,7 @@ export default function StaffEmbed({ token, propertyId }: { token: string; prope
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
+              className={`min-h-[44px] rounded-full px-4 py-1 text-xs font-medium ${
                 filter === f ? "bg-black text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
@@ -224,7 +224,7 @@ export default function StaffEmbed({ token, propertyId }: { token: string; prope
                 <button
                   key={f}
                   onClick={() => setStatus(f)}
-                  className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200"
+                  className="min-h-[44px] rounded-full bg-gray-100 px-4 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200"
                 >
                   → {f.replace("_", " ")}
                 </button>

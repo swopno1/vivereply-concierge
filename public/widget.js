@@ -24,11 +24,24 @@
   var origin = src.replace(/\/widget\.js.*$/, "");
   var key = current.getAttribute("data-key") || "demo-krishnachura";
 
+  // /admin pages are staff screens, not guest surfaces — the guest chat
+  // button must never render there.
+  if (window.location && /^\/admin(\/|$)/.test(window.location.pathname || "")) return;
+
+  // Visible keyboard focus that survives any host site's styles.
+  var focusStyle = document.createElement("style");
+  focusStyle.textContent =
+    "#vivereply-concierge-button:focus-visible{outline:3px solid #2563eb;outline-offset:2px;}";
+  document.head.appendChild(focusStyle);
+
   var button = document.createElement("button");
+  button.id = "vivereply-concierge-button";
   button.setAttribute("aria-label", "Open Vivereply Concierge chat");
+  button.setAttribute("aria-expanded", "false");
+  button.setAttribute("aria-controls", "vivereply-concierge-panel");
   button.style.cssText =
     "position:fixed;right:20px;bottom:20px;z-index:2147483647;" +
-    "display:flex;align-items:center;" +
+    "display:flex;align-items:center;min-height:44px;" +
     "background:#111827;color:#fff;border:0;border-radius:9999px;" +
     "padding:11px 22px 11px 14px;font-size:14px;font-weight:600;cursor:pointer;" +
     "box-shadow:0 8px 24px rgba(0,0,0,0.22),0 2px 6px rgba(0,0,0,0.12);font-family:inherit;";
@@ -42,6 +55,7 @@
   button.appendChild(label);
 
   var panel = document.createElement("div");
+  panel.id = "vivereply-concierge-panel";
   panel.style.cssText =
     "position:fixed;right:20px;bottom:76px;z-index:2147483647;" +
     "width:380px;max-width:calc(100vw - 40px);height:560px;max-height:calc(100vh - 100px);" +
@@ -52,6 +66,11 @@
   button.addEventListener("click", function () {
     open = !open;
     panel.style.display = open ? "block" : "none";
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+    button.setAttribute(
+      "aria-label",
+      open ? "Close Vivereply Concierge chat" : "Open Vivereply Concierge chat"
+    );
     label.textContent = open ? "Close" : "Chat";
   });
 
