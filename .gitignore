@@ -152,6 +152,9 @@ vite.config.ts.timestamp-*
 wip-script.py
 /notes_checklists
 
+# macOS cruft (untracked 2026-10-29; never commit)
+.DS_Store
+
 # Python bytecode (Modal worker)
 __pycache__/
 *.pyc

@@ -1,8 +1,9 @@
-# Submission impact narrative — DRAFT (2026-10-29)
+# Submission impact narrative — DRAFT (2026-10-29, rev 2)
 
 One page. Every claim below pins to evidence in brackets; anything
 without a pin is not claimed. No customers, revenue, conversion rates,
 percentages, or testimonials exist yet — none are stated or implied.
+Built during the hackathon window (first commit Oct 27, 2026).
 
 ## Problem (one line)
 
@@ -17,8 +18,8 @@ and disputes.
   codes, waiting in its admin for morning confirmation.
 - The guest: answered at night, in Bengali or English, with real prices
   from live data — never brochure guesses.
-- The staff: a morning queue of drafts and handoffs with full context
-  instead of missed calls.
+- The staff: a morning triage board — drafts and handoffs with full
+  context, assignable, notable, resolvable — instead of missed calls.
 
 ## The proven chain (the demo IS the evidence)
 
@@ -39,7 +40,15 @@ chats with the Concierge [https://app.vivereply.com]:
    whether or not a booking exists; details go only to the email
    already on the booking.
 5. Asks the impossible (25-person wedding) → the agent refuses to
-   invent a rate and hands the full summary to staff [/staff record].
+   invent a rate and hands the full summary to staff [/staff triage
+   board: assign, note, resolve].
+6. Holds a draft → the agent presses for payment in the same reply
+   and mints a server-side /pay link (Stripe card or manual
+   transfer); the guest pays standalone, webhook/staff confirmation
+   flips the row to paid, and "is it paid?" re-reads the row.
+   [BUILT, trial pending — presented as built, not as live, until
+   the docs/payments.md trial passes. The bot never takes payment
+   itself and never invents a payment URL.]
 
 Worked example with REAL prices only: a held Terracotta Villa draft
 for 2 weeknights = ৳14,500 × 2 = ৳29,000 of booking value that an
@@ -52,6 +61,8 @@ The chat UI anyone can copy. What they cannot copy in a weekend: the
 Suite integration (live availability, unit assignment, real booking
 codes, PENDING holds), the no-invent guard system (quote-first, one
 draft per conversation, Suite total governs over the quote), the
+payment insistence (booking-bound deep links the model cannot invent,
+server-side money, fraud-safety copy in every surface), the
 privacy-safe verification design, and Bengali support with exact
 totals. The product is a front desk on live data, not a prompt over
 a knowledge base.
@@ -59,8 +70,9 @@ a knowledge base.
 ## What's next (pilot, not promises)
 
 Demo-proven, pilot-pending: the next step is a pilot with independent
-resorts measuring drafts created from after-hours chats against a
-before-period baseline of missed enquiries (phone logs, messages).
+resorts under docs/pilot-plan.md — success criteria, a kill rule
+(unexplained trust incident unfixed in 48h pauses the resort), and a
+before-period baseline captured at onboarding (phone logs, messages).
 Staff reply-into-chat and alerts are the first product additions —
 today the solution saves the guest's night; the pilot must also save
 the staff's morning.
@@ -68,7 +80,8 @@ the staff's morning.
 ## What we do NOT claim
 
 No customer counts, no revenue, no conversion rates, no "X% more
-bookings", no testimonials. No payment-in-chat (a draft is a hold, not
-a payment). No WhatsApp channel, no change/cancel flow, no
-multi-property production — one live property. Anything listed here as
-missing is roadmap, not hidden fine print.
+bookings", no testimonials. Payments are built and trial-pending, not
+live (a draft is a hold until the paid row says otherwise). No
+WhatsApp channel, no change/cancel flow, no multi-property production
+— one live property. Anything listed here as missing is roadmap, not
+hidden fine print.
