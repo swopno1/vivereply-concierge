@@ -14,6 +14,11 @@ export function rateLimitPerMinute(): number {
   return Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : 60;
 }
 
+export function ipRateLimitPerMinute(): number {
+  const raw = Number(process.env.CHAT_RATE_LIMIT_IP_PER_MIN ?? "30");
+  return Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : 30;
+}
+
 // Pure bucket math (unit-tested): the window a timestamp falls in.
 export function windowStartOf(now: Date): Date {
   return new Date(Math.floor(now.getTime() / RATE_WINDOW_MS) * RATE_WINDOW_MS);
@@ -36,6 +41,27 @@ export async function checkChatRate(propertyId: string, now = new Date()): Promi
     select: { count: true },
   });
   prisma.rateBucket
+    .deleteMany({ where: { windowStart: { lt: new Date(now.getTime() - 2 * 3600_000) } } })
+    .catch(() => null);
+  if (row.count <= limit) return { allowed: true };
+  const retryAfterSec = Math.max(1, Math.ceil((windowStart.getTime() + RATE_WINDOW_MS - now.getTime()) / 1000));
+  return { allowed: false, retryAfterSec };
+}
+
+// Same shape, keyed by client IP. A single scraper behind one address
+// gets cut off long before it can spend the property's whole budget.
+export async function checkChatRateByIp(ip: string, now = new Date()): Promise<RateDecision> {
+  const limit = ipRateLimitPerMinute();
+  if (limit === 0 || !ip) return { allowed: true };
+  const windowStart = windowStartOf(now);
+  const key = ip.slice(0, 80);
+  const row = await prisma.ipRateBucket.upsert({
+    where: { ip_windowStart: { ip: key, windowStart } },
+    create: { ip: key, windowStart, count: 1 },
+    update: { count: { increment: 1 } },
+    select: { count: true },
+  });
+  prisma.ipRateBucket
     .deleteMany({ where: { windowStart: { lt: new Date(now.getTime() - 2 * 3600_000) } } })
     .catch(() => null);
   if (row.count <= limit) return { allowed: true };

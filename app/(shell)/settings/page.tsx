@@ -24,6 +24,7 @@ import Payments from "../../components/Payments";
 import OnboardingApprovals from "../../components/OnboardingApprovals";
 import OwnerActions from "../../components/OwnerActions";
 import PropertyStatusToggle from "../../components/PropertyStatusToggle";
+import AuditTrail from "../../components/AuditTrail";
 import { paymentsEnabledGlobal } from "@/lib/payments";
 import { CASES } from "@/eval/cases.mjs";
 
@@ -175,6 +176,18 @@ export default async function SettingsPage({
   }));
   // Booking payments (flag-gated): recent links, tokens never leave the server.
   const paymentsOn = paymentsEnabledGlobal();
+  // Stripe mode indicator (server-computed; the key itself never leaves
+  // the server). Test vs live comes from the key prefix; an unrecognized
+  // prefix is shown as-is rather than guessed.
+  const stripeKey = process.env.STRIPE_SECRET_KEY ?? "";
+  const stripeMode = !stripeKey
+    ? ("unset" as const)
+    : stripeKey.startsWith("sk_test_")
+      ? ("test" as const)
+      : stripeKey.startsWith("sk_live_")
+        ? ("live" as const)
+        : ("unrecognized" as const);
+  const stripeWebhook = Boolean(process.env.STRIPE_WEBHOOK_SECRET);
   const paymentRows = paymentsOn
     ? await prisma.paymentLink
         .findMany({ where: { propertyId }, orderBy: { createdAt: "desc" }, take: 50 })
@@ -308,6 +321,15 @@ export default async function SettingsPage({
         </Section>
       )}
 
+      {isSuper && (
+        <Section
+          title="Recent activity"
+          blurb="Who signed in, changed domains/keys/connections, or confirmed payments. Names and outcomes only — never secrets."
+        >
+          <AuditTrail properties={allProperties.map((p) => ({ id: p.id, name: p.name }))} />
+        </Section>
+      )}
+
       <Section
         title="Chat widget codes"
         blurb="One script tag per key. It only runs on that property's approved domains."
@@ -385,7 +407,11 @@ export default async function SettingsPage({
           title="Booking payments"
           blurb="Payment links the chatbot minted for held drafts. Confirm manual transfers here after verifying them; card links flip automatically when Stripe confirms."
         >
-          <Payments initial={initialPayments} initialPropertyId={propertyId} />
+          <Payments
+            initial={initialPayments}
+            initialPropertyId={propertyId}
+            stripe={{ mode: stripeMode, webhook: stripeWebhook }}
+          />
         </Section>
       )}
 

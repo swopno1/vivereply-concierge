@@ -26,13 +26,28 @@ function taka(poisha: number): string {
   return `৳${(poisha / 100).toLocaleString("en-US")}`;
 }
 
+export type StripeStatus = {
+  mode: "test" | "live" | "unset" | "unrecognized";
+  webhook: boolean;
+};
+
+const MODE_COPY: Record<StripeStatus["mode"], { label: string; tone: string }> = {
+  test: { label: "Stripe: TEST mode — safe to click through, no real charges.", tone: "bg-blue-50 text-blue-800 border-blue-200" },
+  live: { label: "Stripe: LIVE — card links take real money.", tone: "bg-red-50 text-red-800 border-red-200" },
+  unset: { label: "Stripe: not configured — manual transfers only.", tone: "bg-gray-100 text-gray-700 border-gray-200" },
+  unrecognized: { label: "Stripe: key prefix unrecognized — check STRIPE_SECRET_KEY.", tone: "bg-amber-50 text-amber-800 border-amber-200" },
+};
+
 export default function Payments({
   initial,
   initialPropertyId,
+  stripe,
 }: {
   initial: PaymentRow[];
   initialPropertyId: string;
+  stripe: StripeStatus;
 }) {
+  const mode = MODE_COPY[stripe.mode];
   const [rows, setRows] = useState<PaymentRow[]>(initial);
   const [reference, setReference] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -72,17 +87,23 @@ export default function Payments({
     void reload();
   }
 
-  if (rows.length === 0) {
-    return (
-      <p className="text-sm text-gray-500">
-        No payment links yet for <span className="font-mono">{initialPropertyId}</span>. Links the
-        chatbot mints for held drafts appear here.
-      </p>
-    );
-  }
+  const empty = (
+    <p className="text-sm text-gray-500">
+      No payment links yet for <span className="font-mono">{initialPropertyId}</span>. Links the
+      chatbot mints for held drafts appear here.
+    </p>
+  );
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
+      <div className={`rounded-xl border px-4 py-2 text-sm ${mode.tone}`}>
+        <p>{mode.label}</p>
+        <p>
+          Webhook secret: {stripe.webhook ? "configured." : "MISSING — card links can never flip to paid until it is set."}
+        </p>
+      </div>
+      {rows.length === 0 && empty}
+      {rows.length > 0 && <div className="flex flex-col gap-2">
       {rows.map((p) => (
         <div
           key={p.id}
@@ -137,6 +158,7 @@ export default function Payments({
           {msg}
         </p>
       )}
+      </div>}
     </div>
   );
 }

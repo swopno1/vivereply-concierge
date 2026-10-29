@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
 import { normalizeHostname } from "@/lib/domains";
+import { clientIp, logAudit } from "@/lib/audit";
 
 export async function GET() {
   const session = await getSession();
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
     );
   }
   const row = await prisma.approvedDomain.create({ data: { domain, propertyId, active: true } });
+  await logAudit({ actorEmail: session.email, action: "domain.add", propertyId, detail: { domain }, ip: clientIp(req) });
   return NextResponse.json(row, { status: 201 });
 }
 
@@ -82,5 +84,12 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Domain not found." }, { status: 404 });
   }
   const row = await prisma.approvedDomain.update({ where: { id }, data: { active } });
+  await logAudit({
+    actorEmail: session.email,
+    action: active ? "domain.activate" : "domain.deactivate",
+    propertyId: current.propertyId,
+    detail: { domain: current.domain },
+    ip: clientIp(req),
+  });
   return NextResponse.json(row);
 }

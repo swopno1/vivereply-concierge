@@ -25,6 +25,8 @@ SELECT * FROM "ApprovedDomain" WHERE "propertyId" = 'TENANT';
 -- payments + ratings (financial records: export even when deleting)
 SELECT * FROM "PaymentLink" WHERE "propertyId" = 'TENANT';
 SELECT r.* FROM "ChatRating" r JOIN "Conversation" c ON c.id = r."conversationId" WHERE c."propertyId" = 'TENANT';
+-- audit trail (keep the export if the contract needs a post-deletion trail)
+SELECT * FROM "AuditLog" WHERE "propertyId" = 'TENANT';
 ```
 
 Deliver or archive per the tenant's contract, then proceed.
@@ -51,6 +53,9 @@ DELETE FROM "RoomMapping" WHERE "propertyId" = 'TENANT';
 DELETE FROM "PropertyBinding" WHERE "propertyId" = 'TENANT';
 DELETE FROM "PropertyProfile" WHERE "propertyId" = 'TENANT';
 DELETE FROM "OnboardingRun" WHERE "propertyId" = 'TENANT';
+-- audit rows (no FK — plain delete; keep the export from step 1
+-- if the contract needs a trail after deletion)
+DELETE FROM "AuditLog" WHERE "propertyId" = 'TENANT';
 -- logins (cascades sessions), then the property itself
 DELETE FROM "User" WHERE "propertyId" = 'TENANT';
 DELETE FROM "Property" WHERE id = 'TENANT';
@@ -71,6 +76,7 @@ SELECT 'Message(orphan)', COUNT(*) FROM "Message" m LEFT JOIN "Conversation" c O
 SELECT 'Chunk(orphan)', COUNT(*) FROM "KnowledgeChunk" k LEFT JOIN "KnowledgeDocument" d ON d.id = k."documentId" WHERE d.id IS NULL UNION ALL
 SELECT 'PaymentLink(orphan)', COUNT(*) FROM "PaymentLink" p LEFT JOIN "Conversation" c ON c.id = p."conversationId" WHERE c.id IS NULL UNION ALL
 SELECT 'PaymentLink(tenant)', COUNT(*) FROM "PaymentLink" WHERE "propertyId" = 'TENANT' UNION ALL
+SELECT 'AuditLog(tenant)', COUNT(*) FROM "AuditLog" WHERE "propertyId" = 'TENANT' UNION ALL
 SELECT 'ChatRating(orphan)', COUNT(*) FROM "ChatRating" r LEFT JOIN "Conversation" c ON c.id = r."conversationId" WHERE c.id IS NULL;
 ```
 

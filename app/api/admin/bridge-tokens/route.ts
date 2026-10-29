@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
 import { mintBridgeToken } from "@/lib/bridge";
+import { clientIp, logAudit } from "@/lib/audit";
 
 function shape(row: {
   id: string;
@@ -74,6 +75,8 @@ export async function POST(req: NextRequest) {
   const row = await prisma.bridgeToken.create({
     data: { prefix: minted.prefix, secretHash: minted.secretHash, name, propertyId, active: true },
   });
+  // Prefix + name only — the secret is never logged (it is unrecoverable by design).
+  await logAudit({ actorEmail: session.email, action: "bridge.mint", propertyId, detail: { prefix: row.prefix, name }, ip: clientIp(req) });
   return NextResponse.json({ ...shape(row), token: minted.token }, { status: 201 });
 }
 
@@ -96,5 +99,12 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Token not found." }, { status: 404 });
   }
   const row = await prisma.bridgeToken.update({ where: { id }, data: { active } });
+  await logAudit({
+    actorEmail: session.email,
+    action: active ? "bridge.reactivate" : "bridge.revoke",
+    propertyId: current.propertyId,
+    detail: { prefix: current.prefix, name: current.name },
+    ip: clientIp(req),
+  });
   return NextResponse.json(shape(row));
 }

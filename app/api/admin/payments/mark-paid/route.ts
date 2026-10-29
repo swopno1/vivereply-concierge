@@ -7,6 +7,7 @@ import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
 import { formatTaka } from "@/demo-config/rates";
 import { sendPaymentConfirmationEmail } from "@/lib/email";
 import { markManualPaid, paymentsEnabledGlobal } from "@/lib/payments";
+import { clientIp, logAudit } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -33,6 +34,13 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+  await logAudit({
+    actorEmail: session.email,
+    action: "payment.confirm",
+    propertyId,
+    detail: { bookingCode: paid.bookingCode, reference: paid.manualReference ?? null },
+    ip: clientIp(req),
+  });
   if (paid.guestEmail) {
     try {
       await sendPaymentConfirmationEmail({

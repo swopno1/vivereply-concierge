@@ -37,3 +37,15 @@ describe("systemPrompt payments section", () => {
     assert.ok(p.includes("create_payment_link"));
   });
 });
+
+describe("systemPrompt card-details rule", () => {
+  it("is present in both languages with payments on or off", () => {
+    for (const lang of ["en", "bn"]) {
+      for (const payments of [false, true]) {
+        const p = systemPrompt(lang, null, ROOMS, null, { payments, methods: ["card"] });
+        assert.ok(p.includes("NEVER repeat, confirm, or process them"), `${lang}/${payments}`);
+        assert.ok(p.includes("chat is not a payment channel"), `${lang}/${payments}`);
+      }
+    }
+  });
+});

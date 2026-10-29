@@ -377,3 +377,33 @@ model RateBucket {
   @@id([propertyId, windowStart])
   @@index([windowStart])
 }
+
+// Per-IP chat throttle: the second dimension. The per-property bucket
+// guards neighbours from each other; this one guards the shared model
+// budget from one bot hammering a single property. Same fixed windows,
+// same DB-backed atomic upsert. IPv6 addresses fit (45 chars max).
+model IpRateBucket {
+  ip          String   @db.VarChar(80)
+  windowStart DateTime
+  count       Int      @default(1)
+
+  @@id([ip, windowStart])
+  @@index([windowStart])
+}
+
+// Admin audit trail (append-only in practice; nothing deletes these
+// rows except tenant offboarding). actorEmail is whoever acted (or
+// the attempted email on login failure); detail carries names/ids/
+// outcomes only — never secrets, hashes, or keys.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorEmail String?
+  action     String
+  propertyId String?
+  detail     Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([propertyId, createdAt])
+}

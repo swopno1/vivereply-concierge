@@ -89,6 +89,11 @@ function decodeToken<T>(token: string): T | null {
 }
 
 // --- Admin password -------------------------------------------------
+// Why SHA-256 and not scrypt here: the bootstrap secret lives in an
+// env var, not a database row, so there is no stored salt to verify
+// against — both sides are hashed only to normalize length for the
+// timing-safe compare. This is secret comparison, not password
+// storage; owner passwords (stored rows) are scrypt below.
 
 export function verifyAdminPassword(password: string): boolean {
   const expected = process.env.ADMIN_PASSWORD;

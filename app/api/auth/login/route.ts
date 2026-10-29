@@ -32,6 +32,7 @@ import {
 } from "@/lib/auth";
 import { sessionExpiresAt } from "@/lib/tenant";
 import { turnstileConfigured, verifyTurnstileToken } from "@/lib/turnstile";
+import { logAudit } from "@/lib/audit";
 
 function clientIp(req: NextRequest): string {
   const first = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
@@ -100,14 +101,24 @@ export async function POST(req: NextRequest) {
     .catch(() => null);
 
   if (!session) {
+    await logAudit({ actorEmail: email || null, action: "login.fail", ip });
     return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
   }
-  // Opportunistic pruning (best-effort): yesterday's attempts and dead
-  // sessions never accumulate into a large table.
+  await logAudit({
+    actorEmail: session.email,
+    action: "login.success",
+    propertyId: session.propertyId,
+    detail: { role: session.role },
+    ip,
+  });
+  // Opportunistic pruning (best-effort): yesterday's attempts, dead
+  // sessions, and spent verification tokens never accumulate into
+  // large tables. Full retention table: docs/key-rotation.md.
   await prisma.loginAttempt.deleteMany({ where: { createdAt: { lt: since } } }).catch(() => null);
   await prisma.session
     .deleteMany({ where: { OR: [{ expiresAt: { lt: new Date() } }, { revokedAt: { lt: since } }] } })
     .catch(() => null);
+  await prisma.emailVerificationToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(() => null);
 
   const row = await prisma.session
     .create({ data: { userId, role: session.role, expiresAt: sessionExpiresAt() } })

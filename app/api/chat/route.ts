@@ -22,7 +22,7 @@ import { embedText } from "@/lib/embeddings";
 import { retrieveGrounding, toVectorLiteral } from "@/lib/rag";
 import { verifyChatToken } from "@/lib/auth";
 import { isDomainApproved } from "@/lib/domains";
-import { checkChatRate } from "@/lib/ratelimit";
+import { checkChatRate, checkChatRateByIp } from "@/lib/ratelimit";
 import { isPropertyActive } from "@/lib/tenant";
 import {
   availableMethods,
@@ -141,11 +141,17 @@ export async function POST(req: NextRequest) {
       );
     }
   }
-  // Per-tenant throttle (noisy-neighbour guard): counted before any
-  // row is written, so a throttled turn costs one bucket write and no
-  // model call. 429 + Retry-After; guest wording stays generic.
+  // Throttles (counted before any row is written, so a throttled
+  // turn costs bucket writes and no model call). Two dimensions: per
+  // tenant (noisy neighbours) and per IP (one bot can't spend a whole
+  // property's budget). 429 + Retry-After; wording stays generic.
   {
-    const decision = await checkChatRate(chatToken.propertyId);
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
+    const [tenant, byIp] = await Promise.all([
+      checkChatRate(chatToken.propertyId),
+      checkChatRateByIp(ip),
+    ]);
+    const decision = !tenant.allowed ? tenant : byIp;
     if (!decision.allowed) {
       return NextResponse.json(
         { error: "Too many messages right now. Please wait a moment and try again." },

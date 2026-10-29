@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
 import { encryptSecret } from "@/lib/secrets";
+import { clientIp, logAudit } from "@/lib/audit";
 
 function cleanUrl(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -117,6 +118,14 @@ export async function POST(req: NextRequest) {
   const row = await prisma.propertyBinding.create({
     data: { propertyId, suiteBaseUrl, secretEnc, version: 1 },
   });
+  // URL + whether a secret was set — never the secret itself.
+  await logAudit({
+    actorEmail: session.email,
+    action: "binding.save",
+    propertyId,
+    detail: { suiteBaseUrl, hasSecret: secretEnc !== null },
+    ip: clientIp(req),
+  });
   return NextResponse.json(shape(row), { status: 201 });
 }
 
@@ -174,6 +183,16 @@ export async function PATCH(req: NextRequest) {
   if (!row) {
     return NextResponse.json({ error: "Binding not found." }, { status: 404 });
   }
+  await logAudit({
+    actorEmail: session.email,
+    action: "binding.edit",
+    propertyId: current.propertyId,
+    detail: {
+      ...(updates.suiteBaseUrl !== undefined ? { suiteBaseUrl: updates.suiteBaseUrl } : {}),
+      ...("secretEnc" in updates ? { secret: updates.secretEnc === null ? "cleared" : "rotated" } : {}),
+    },
+    ip: clientIp(req),
+  });
   return NextResponse.json(shape(row));
 }
 
@@ -195,5 +214,12 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Binding not found." }, { status: 404 });
   }
   await prisma.propertyBinding.delete({ where: { id } });
+  await logAudit({
+    actorEmail: session.email,
+    action: "binding.remove",
+    propertyId: current.propertyId,
+    detail: { suiteBaseUrl: current.suiteBaseUrl },
+    ip: clientIp(req),
+  });
   return NextResponse.json({ deleted: true, propertyId: current.propertyId });
 }

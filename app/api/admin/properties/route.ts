@@ -21,6 +21,7 @@ import {
 } from "@/lib/auth";
 import { getSession } from "@/lib/tenant";
 import { normalizeHostname } from "@/lib/domains";
+import { clientIp, logAudit } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -131,5 +132,11 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Property not found." }, { status: 404 });
   }
   await prisma.property.update({ where: { id }, data: { status } });
+  await logAudit({
+    actorEmail: session.email,
+    action: status === "ACTIVE" ? "property.resume" : "property.suspend",
+    propertyId: id,
+    ip: clientIp(req),
+  });
   return NextResponse.json({ id, status });
 }

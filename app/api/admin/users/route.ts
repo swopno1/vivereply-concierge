@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, revokeUserSessions } from "@/lib/tenant";
+import { clientIp, logAudit } from "@/lib/audit";
 
 export async function PATCH(req: NextRequest) {
   const session = await getSession();
@@ -33,5 +34,12 @@ export async function PATCH(req: NextRequest) {
   if (!active) {
     revoked = await revokeUserSessions(id);
   }
+  await logAudit({
+    actorEmail: session.email,
+    action: active ? "user.activate" : "user.deactivate",
+    propertyId: user.propertyId,
+    detail: { target: user.email, sessionsRevoked: revoked },
+    ip: clientIp(req),
+  });
   return NextResponse.json({ id, active, sessionsRevoked: revoked });
 }

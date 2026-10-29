@@ -14,11 +14,12 @@ and how to verify it.
 - Verify: property row `ACTIVE`, owner row present, `emailVerified`
   set after the link click.
 
-## 2. Owner first login + password (owner)
+## 2. Owner first login (owner)
 
-- Owner logs in, is forced through the password banner, replaces the
-  temp password in Settings. Old sessions die on change.
-- Verify: banner gone; login works with the new password.
+- Owner logs in with the password they chose at signup. (The old temp-
+  password banner applies only to seed-file test accounts, never to
+  signup owners — if a signup owner sees it, something is wrong.)
+- Verify: login works; no password banner for signup owners.
 
 ## 3. Business profile (owner, `/onboarding`)
 
@@ -54,4 +55,11 @@ and how to verify it.
   works, widget handshake green, one real quote + one handoff in
   `/staff`, RAG answers grounded (no "I don't know" on documented
   facts).
-- Record: property id, go-live date, owner email in the evidence log.
+- No seed users in prod: the seed file's test logins
+  (`docs/seed-users.md`) must NOT exist in the production database.
+  Check with `SELECT email FROM "User" WHERE email LIKE '%@test.com';`
+  — expect zero rows. If a seed login exists, rotate its password
+  immediately (Settings → Tenants → deactivate, then have the owner
+  re-register via `/signup`) and record the rotation below.
+- Record: property id, go-live date, owner email, seed-check result
+  in the evidence log.

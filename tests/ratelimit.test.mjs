@@ -3,13 +3,16 @@
 // by probes against live data, not here.
 import { describe, it, afterEach } from "node:test";
 import { strict as assert } from "node:assert";
-import { rateLimitPerMinute, windowStartOf, RATE_WINDOW_MS } from "@/lib/ratelimit";
+import { rateLimitPerMinute, ipRateLimitPerMinute, windowStartOf, RATE_WINDOW_MS } from "@/lib/ratelimit";
 
 const SAVED = process.env.CHAT_RATE_LIMIT_PER_MIN;
+const SAVED_IP = process.env.CHAT_RATE_LIMIT_IP_PER_MIN;
 
 afterEach(() => {
   if (SAVED === undefined) delete process.env.CHAT_RATE_LIMIT_PER_MIN;
   else process.env.CHAT_RATE_LIMIT_PER_MIN = SAVED;
+  if (SAVED_IP === undefined) delete process.env.CHAT_RATE_LIMIT_IP_PER_MIN;
+  else process.env.CHAT_RATE_LIMIT_IP_PER_MIN = SAVED_IP;
 });
 
 describe("windowStartOf", () => {
@@ -33,5 +36,18 @@ describe("rateLimitPerMinute", () => {
     assert.equal(rateLimitPerMinute(), 0);
     process.env.CHAT_RATE_LIMIT_PER_MIN = "nonsense";
     assert.equal(rateLimitPerMinute(), 60);
+  });
+});
+
+describe("ipRateLimitPerMinute", () => {
+  it("defaults to 30, honors env, 0 disables", () => {
+    delete process.env.CHAT_RATE_LIMIT_IP_PER_MIN;
+    assert.equal(ipRateLimitPerMinute(), 30);
+    process.env.CHAT_RATE_LIMIT_IP_PER_MIN = "5";
+    assert.equal(ipRateLimitPerMinute(), 5);
+    process.env.CHAT_RATE_LIMIT_IP_PER_MIN = "0";
+    assert.equal(ipRateLimitPerMinute(), 0);
+    process.env.CHAT_RATE_LIMIT_IP_PER_MIN = "nonsense";
+    assert.equal(ipRateLimitPerMinute(), 30);
   });
 });

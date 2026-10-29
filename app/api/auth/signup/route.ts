@@ -27,6 +27,7 @@ import {
 import { sendVerificationEmail } from "@/lib/email";
 import { sessionExpiresAt } from "@/lib/tenant";
 import { verifyTurnstileToken } from "@/lib/turnstile";
+import { logAudit } from "@/lib/audit";
 
 function clientIp(req: NextRequest): string {
   const first = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
@@ -144,6 +145,7 @@ export async function POST(req: NextRequest) {
   }
   await logAttempt(true);
   await prisma.signupAttempt.deleteMany({ where: { createdAt: { lt: since } } }).catch(() => null);
+  await logAudit({ actorEmail: email, action: "signup.success", propertyId: ids.id, detail: { resortName }, ip });
 
   const row = await prisma.session
     .create({ data: { userId: user.id, role: "OWNER", expiresAt: sessionExpiresAt() } })
