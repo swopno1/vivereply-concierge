@@ -173,7 +173,7 @@ created at import time.
 ```bash
 pnpm test        # unit tests: rates, language, cards, tool guards, prompts, payment pure legs
 pnpm typecheck   # strict tsc
-pnpm eval        # 18-case live referee against the fixture backend (needs API keys)
+pnpm eval        # 19-case live referee against the fixture backend (needs API keys)
 pnpm probes      # 10 tenant-isolation probes against a live app (needs tenant creds)
 ```
 
@@ -222,12 +222,16 @@ panel, never a guessed property.
   never in the browser. Staff widget tokens live 15 minutes and are
   origin-bound (strict Referer check at iframe load).
 
-Honest limits: no 2FA, no password reset-by-email, no rate limit on
-`/api/chat` yet (login/signup throttle only), no frame-ancestors
-allowlist on the staff widget (token + origin binding is the gate).
-Localhost is approved automatically in development only.
-Post-hackathon: Supabase Auth migration, 2FA, audit log, per-domain
-frame-ancestors, chat quotas.
+Honest limits: no 2FA, no password reset-by-email, no per-tenant
+spend quotas yet. Chat is throttled per property (60 turns/min) and
+per IP (30/min) → 429 + Retry-After. Clickjacking: middleware sets
+`frame-ancestors 'self'` everywhere except `/widget` and
+`/staff/embed`, which rely on token + origin binding instead (they
+must embed on client sites). Admin actions land in the audit log
+(Settings → Recent activity, super-admin only). Localhost is approved
+automatically in development only.
+Post-hackathon: Supabase Auth migration, 2FA, per-domain
+frame-ancestors, spend quotas.
 
 ## Demo flow to try
 

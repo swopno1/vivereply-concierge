@@ -16,7 +16,7 @@ EVAL_PASSWORD='<sabreeze current password — see docs/seed-users.md>' pnpm eval
   in-memory `FIX-` codes — no real Suite writes are possible on this path.
 - `-- --case=<id>` runs one case; `-- --list` prints the set (no network);
   `-- --base-url=` targets local dev (`pnpm dev`) instead of production.
-- Full run: ~18 cases, ~27 turns, ~40–55 model calls. Results save to
+- Full run: 19 cases, ~28 turns, ~40–60 model calls. Results save to
   `eval/results/<date>-<commit>.json` with the commit hash baked in.
 - Exit code is non-zero on any hard failure. Soft warnings (fixture-memory
   lookups on serverless) print but never fail the run — the reason is
