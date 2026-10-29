@@ -289,6 +289,11 @@ export function verifyStripeSignature(rawBody: string, header: string, secret: s
 // Idempotent paid marking from the webhook: first writer wins; replays
 // return the same row. Returns null when the session is unknown (never
 // throw — unknown sessions get a 200 so Stripe stops retrying).
+// Tenant safety: the lookup is global BY DESIGN and safe — session ids
+// are unguessable Stripe secrets, the webhook is signature-authenticated
+// (no tenant input anywhere on this path), and each id maps to exactly
+// one link row carrying its own propertyId. There is no tenant parameter
+// to forge, so there is nothing to cross.
 export async function markPaidByStripeSession(sessionId: string): Promise<PaymentLink | null> {
   const link = await prisma.paymentLink.findUnique({ where: { stripeSessionId: sessionId } });
   if (!link || link.status === "paid") return link;

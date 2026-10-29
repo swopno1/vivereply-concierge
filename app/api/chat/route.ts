@@ -22,6 +22,7 @@ import { embedText } from "@/lib/embeddings";
 import { retrieveGrounding, toVectorLiteral } from "@/lib/rag";
 import { verifyChatToken } from "@/lib/auth";
 import { isDomainApproved } from "@/lib/domains";
+import { checkChatRate } from "@/lib/ratelimit";
 import { isPropertyActive } from "@/lib/tenant";
 import {
   availableMethods,
@@ -137,6 +138,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "This site is no longer approved to host this chat." },
         { status: 403 }
+      );
+    }
+  }
+  // Per-tenant throttle (noisy-neighbour guard): counted before any
+  // row is written, so a throttled turn costs one bucket write and no
+  // model call. 429 + Retry-After; guest wording stays generic.
+  {
+    const decision = await checkChatRate(chatToken.propertyId);
+    if (!decision.allowed) {
+      return NextResponse.json(
+        { error: "Too many messages right now. Please wait a moment and try again." },
+        { status: 429, headers: { "Retry-After": String(decision.retryAfterSec) } }
       );
     }
   }

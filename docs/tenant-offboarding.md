@@ -22,6 +22,9 @@ SELECT * FROM "KnowledgeDocument" WHERE "propertyId" = 'TENANT';
 SELECT * FROM "RoomMapping" WHERE "propertyId" = 'TENANT';
 SELECT * FROM "PropertyBinding" WHERE "propertyId" = 'TENANT';
 SELECT * FROM "ApprovedDomain" WHERE "propertyId" = 'TENANT';
+-- payments + ratings (financial records: export even when deleting)
+SELECT * FROM "PaymentLink" WHERE "propertyId" = 'TENANT';
+SELECT r.* FROM "ChatRating" r JOIN "Conversation" c ON c.id = r."conversationId" WHERE c."propertyId" = 'TENANT';
 ```
 
 Deliver or archive per the tenant's contract, then proceed.
@@ -36,7 +39,8 @@ Deliver or archive per the tenant's contract, then proceed.
 ## 3. Delete (order matters — children before parents)
 
 ```sql
--- transcripts (cascades messages, tool logs, handoffs, handoff notes)
+-- transcripts (cascades messages, tool logs, handoffs, handoff notes,
+-- payment links, ratings — all FK'd to Conversation)
 DELETE FROM "Conversation" WHERE "propertyId" = 'TENANT';
 -- knowledge (cascades chunks)
 DELETE FROM "KnowledgeDocument" WHERE "propertyId" = 'TENANT';
@@ -64,7 +68,10 @@ SELECT 'KnowledgeDocument', COUNT(*) FROM "KnowledgeDocument" WHERE "propertyId"
 SELECT 'User', COUNT(*) FROM "User" WHERE "propertyId" = 'TENANT' UNION ALL
 SELECT 'BridgeToken', COUNT(*) FROM "BridgeToken" WHERE "propertyId" = 'TENANT' UNION ALL
 SELECT 'Message(orphan)', COUNT(*) FROM "Message" m LEFT JOIN "Conversation" c ON c.id = m."conversationId" WHERE c.id IS NULL UNION ALL
-SELECT 'Chunk(orphan)', COUNT(*) FROM "KnowledgeChunk" k LEFT JOIN "KnowledgeDocument" d ON d.id = k."documentId" WHERE d.id IS NULL;
+SELECT 'Chunk(orphan)', COUNT(*) FROM "KnowledgeChunk" k LEFT JOIN "KnowledgeDocument" d ON d.id = k."documentId" WHERE d.id IS NULL UNION ALL
+SELECT 'PaymentLink(orphan)', COUNT(*) FROM "PaymentLink" p LEFT JOIN "Conversation" c ON c.id = p."conversationId" WHERE c.id IS NULL UNION ALL
+SELECT 'PaymentLink(tenant)', COUNT(*) FROM "PaymentLink" WHERE "propertyId" = 'TENANT' UNION ALL
+SELECT 'ChatRating(orphan)', COUNT(*) FROM "ChatRating" r LEFT JOIN "Conversation" c ON c.id = r."conversationId" WHERE c.id IS NULL;
 ```
 
 Record the deletion (date, tenant, export location) in the evidence log.

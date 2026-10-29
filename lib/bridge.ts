@@ -69,10 +69,8 @@ export async function verifyBridgeKey(header: string | null): Promise<BridgeAuth
     return null;
   }
   // Tenant kill-switch: a suspended property's keys stop working on next
-  // use. (Embed tokens already minted expire within 15 minutes, and mint
-  // requires a key — so the bridge goes fully dark right behind this.)
-  // Dynamic import: lib/tenant pulls next/headers, which must stay out of
-  // this module's top level so the pure functions stay importable
+  // use. Dynamic import: lib/tenant pulls next/headers, which must stay
+  // out of this module's top level so the pure functions stay importable
   // without a Next runtime.
   const { isPropertyActive } = await import("@/lib/tenant");
   if (!(await isPropertyActive(row.propertyId))) return null;
@@ -93,6 +91,11 @@ export async function verifyBridgeRequest(header: string | null): Promise<Bridge
   if (keyAuth) return { ...keyAuth, via: "key" };
   const embed = verifyEmbedToken(bearerToken(header));
   if (!embed) return null;
+  // Same kill-switch as keys: embed tokens verify on every call, so a
+  // suspended property's dashboards go dark immediately — no 15-minute
+  // tail (the tail was the old documented behavior; this closes it).
+  const { isPropertyActive } = await import("@/lib/tenant");
+  if (!(await isPropertyActive(embed.propertyId))) return null;
   return { tokenId: "embed", propertyId: embed.propertyId, via: "embed" };
 }
 

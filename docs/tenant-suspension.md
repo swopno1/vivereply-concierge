@@ -13,9 +13,8 @@ first; resuming is one click back.
   message, before any row is written (generic "unavailable" message).
 - Bridge keys: refused on next call (per-request re-read).
 - Owner logins: refused; LIVE owner sessions die on next use.
-- Staff-embed tokens already minted: expire within 15 minutes (mint
-  needs a key, so no new ones). This is the only tail — accept it,
-  or rotate the bridge key for an instant cut.
+- Staff-embed tokens already minted: refused on next use (every
+  embed call re-checks the property is ACTIVE — no tail).
 
 ## Suspend procedure
 

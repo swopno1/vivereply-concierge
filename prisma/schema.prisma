@@ -11,10 +11,10 @@ datasource db {
 
 // Tenant registry (multi-tenant core). One row per resort. The id is the
 // property slug (e.g. krishnachura-retreat) matching the propertyId strings
-// already stored across tables. Rows are created ONLY by the Vivereply
-// team — the seed file (prisma/seed-tenants.mjs) or /admin/register
-// (super-admin). There is no public signup. widgetKey is the public
-// embed key (see demo-config/widget-keys.ts).
+// already stored across tables. Rows are created by public signup
+// (/api/auth/signup: Property + OWNER + verification token, one tx) or,
+// for test tenants only, the seed file (prisma/seed-tenants.mjs).
+// widgetKey is the public embed key (see demo-config/widget-keys.ts).
 model Property {
   id        String   @id
   name      String
@@ -26,9 +26,10 @@ model Property {
 }
 
 // Credentialed logins (multi-tenant core). Roles: SUPER_ADMIN (the founder,
-// sees every property) and OWNER (sees exactly one property). There is no
-// signup route — rows come from the seed file only, and passwords live in
-// the seeder's environment, never in the repo. passwordHash is scrypt (see
+// sees every property) and OWNER (sees exactly one property). OWNER rows
+// come from public signup (email verification + Turnstile) or, for test
+// tenants only, the seed file (inline test passwords, committed
+// deliberately — see docs/seed-users.md). passwordHash is scrypt (see
 // lib/auth.ts). A SUPER_ADMIN row has null propertyId; an OWNER row must
 // have one, and login fails closed if the property is missing or inactive.
 model User {
@@ -39,12 +40,12 @@ model User {
   propertyId   String?
   property     Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   active       Boolean   @default(true)
-  // True while a temporary (admin-issued) password is in force — the owner
+  // True while a temporary (seed-issued) password is in force — the owner
   // sees a change-password banner until they set their own.
   mustChangePassword Boolean @default(false)
-  // Null until the owner proves the email (self-signup link). Team-created
-  // owners (seed, /admin/register) are attested: verified at creation.
-  // Config surfaces (Settings, onboarding, their APIs) require this.
+  // Null until the owner proves the email (self-signup link). Seed
+  // owners are attested: verified at creation. Config surfaces
+  // (Settings, onboarding, their APIs) require this.
   emailVerifiedAt DateTime?
   createdAt    DateTime  @default(now())
   sessions     Session[]
@@ -128,6 +129,8 @@ model Conversation {
   messages   Message[]
   toolCalls  ToolCallLog[]
   handoffs   HandoffRecord[]
+  paymentLinks PaymentLink[]
+  rating     ChatRating?
 }
 
 model Message {
@@ -324,6 +327,7 @@ model PaymentLink {
   id             String    @id @default(cuid())
   propertyId     String
   conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   bookingCode    String
   method         String // "stripe" | "manual"
   token          String    @unique
@@ -355,7 +359,21 @@ model PaymentLink {
 model ChatRating {
   id             String   @id @default(cuid())
   conversationId String   @unique
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   helpful        Boolean
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+// Per-tenant chat throttle (noisy-neighbour guard): fixed one-minute
+// windows, one row per property per window. DB-backed, not in-memory —
+// serverless instances share nothing, so only the database counts
+// globally. Best-effort prune of old windows rides on the check.
+model RateBucket {
+  propertyId  String
+  windowStart DateTime
+  count       Int      @default(1)
+
+  @@id([propertyId, windowStart])
+  @@index([windowStart])
 }

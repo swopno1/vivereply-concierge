@@ -2,16 +2,19 @@
 // (shell) route group: an iframe must render bare, with no sidebar. The
 // client dashboard embeds <iframe src="…/staff/embed?token=<embed-token>">
 // after minting the token server-side (POST /api/bridge/embed-tokens).
-// Two gates, both server-side, before anything renders:
+// Three gates, all server-side, before anything renders:
 //   1. The token verifies (signature + 15-minute expiry + property).
 //   2. The request's Referer matches the token's bound origin (fail
 //      closed — a missing or mismatched Referer shows the error panel).
-// Either failure renders an honest error panel, never the widget, and the
-// widget's own API calls re-verify the token on every request.
+//   3. The property is ACTIVE (suspend kills dashboards immediately —
+//      no 15-minute tail on already-minted tokens).
+// Any failure renders an honest error panel, never the widget, and the
+// widget's own API calls re-verify token + property on every request.
 
 import { headers } from "next/headers";
 import { verifyEmbedToken } from "@/lib/auth";
 import { refererMatchesOrigin } from "@/lib/bridge";
+import { isPropertyActive } from "@/lib/tenant";
 import StaffEmbed from "../../components/StaffEmbed";
 
 export const dynamic = "force-dynamic";
@@ -26,11 +29,14 @@ export default async function StaffEmbedPage({
   const h = await headers();
   const referer = h.get("referer");
   const bound = embed ? refererMatchesOrigin(referer, embed.origin) : false;
+  const live = embed ? await isPropertyActive(embed.propertyId) : false;
 
-  if (!embed || !bound) {
+  if (!embed || !bound || !live) {
     const reason = !embed
       ? "This staff widget link is missing, invalid, or expired (links last 15 minutes)."
-      : "This staff widget is bound to a different dashboard. Dashboards must send a Referer — a no-referrer policy cannot host the widget.";
+      : !bound
+        ? "This staff widget is bound to a different dashboard. Dashboards must send a Referer — a no-referrer policy cannot host the widget."
+        : "This staff widget is unavailable right now.";
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center bg-white p-6 font-sans text-gray-900 antialiased">
         <div className="flex items-center gap-3">
