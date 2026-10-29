@@ -16,6 +16,13 @@ export default function OwnerActions({ initial }: { initial: OwnerLoginRow[] }) 
   const [sending, setSending] = useState<string | null>(null);
 
   async function toggle(row: OwnerLoginRow) {
+    if (
+      row.active &&
+      !window.confirm(
+        `Deactivate ${row.email}? They are signed out everywhere immediately. Undo: Reactivate below (old sessions stay dead — they log in fresh).`
+      )
+    )
+      return;
     setMessage("");
     setSending(row.id);
     try {
@@ -35,6 +42,12 @@ export default function OwnerActions({ initial }: { initial: OwnerLoginRow[] }) 
   }
 
   async function revoke(row: OwnerLoginRow) {
+    if (
+      !window.confirm(
+        `Sign ${row.email} out on every device? They just log in again — nothing else changes.`
+      )
+    )
+      return;
     setMessage("");
     setSending(row.id);
     try {

@@ -64,7 +64,7 @@ function LoginInner() {
           onKeyDown={(e) => e.key === "Enter" && submit()}
           placeholder="Owner email"
           autoComplete="username"
-          className="rounded-full border px-4 py-2 text-sm outline-none focus:border-black"
+          className="rounded-full border px-4 py-2 text-sm outline-none focus:border-black focus-visible:ring-2 focus-visible:ring-gray-900"
         />
         <input
           type="password"
@@ -73,12 +73,12 @@ function LoginInner() {
           onKeyDown={(e) => e.key === "Enter" && submit()}
           placeholder="Password"
           autoComplete="current-password"
-          className="rounded-full border px-4 py-2 text-sm outline-none focus:border-black"
+          className="rounded-full border px-4 py-2 text-sm outline-none focus:border-black focus-visible:ring-2 focus-visible:ring-gray-900"
         />
         <button
           onClick={submit}
           disabled={sending || !email.trim() || !password}
-          className="rounded-full bg-black px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
+          className="rounded-full bg-black px-5 py-2 text-sm font-medium text-white disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
         >
           Log in
         </button>
@@ -86,7 +86,7 @@ function LoginInner() {
       {error && (
         <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
-      <p className="mt-6 text-center text-xs text-gray-400">
+      <p className="mt-6 text-center text-xs text-gray-500">
         Vivereply Concierge · ViveScript Solutions LLC
       </p>
     </main>

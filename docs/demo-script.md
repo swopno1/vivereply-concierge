@@ -5,7 +5,8 @@ chats on the resort's website"). Admin proofs in separate tabs: demo1 /admin
 (drafts), app /staff (handoffs). Rule: film with proven dates only — re-probe the
 exact windows below the morning of filming (Suite seed changed once already; assume
 it can change again). If a live check differs on camera, use the fallback line —
-never fake the result in editing. Caption everything.
+never fake the result in editing. Caption everything, and narrate key visuals
+aloud (lines marked AD) so the video stands alone as audio.
 
 ## Candidate windows (re-probe morning-of; quotes consume nothing, drafts consume one unit)
 
@@ -30,7 +31,10 @@ front-of-house you are about to see."
    a recording. Let me try the backup window." → use alt window.
 2. Type: "Yes, hold it. [name], [email], [phone]."
    Expect: draft card with NEW booking code, suiteTotal = quotedTotal.
+   AD: "The quote card shows Terracotta Villa, November 10 to 12, total
+   ৳29,000 — then the draft card shows the booking code."
 3. Cut to demo1 /admin: show the code, Terracotta, dates, PENDING.
+   AD: "In the resort's own admin: the same code, Terracotta Villa, PENDING."
    Fallback (admin slow): narrate "the draft lands in the resort's own admin" over
    the draft card; show /admin in a pickup shot, same code, no edits to the chat take.
 
@@ -48,7 +52,9 @@ a missing beat scores better than a staged one.
 
 1. Type (fresh chat): "We are 25 colleagues coming for a retreat. What group rate can you give us?"
    Expect: no invented rate, handoff card.
+   AD: "No invented rate — a handoff card instead."
 2. Cut to app /staff: show the record + full transcript.
+   AD: "In /staff, the same handoff with the full transcript."
    Fallback (model answers instead of handing off): follow up "I need a person to
    arrange this." → handoff. If it still answers, cut the beat.
 
@@ -57,6 +63,8 @@ a missing beat scores better than a staged one.
 1. Type (fresh chat): "I have a booking code [CODE]. Can you check it?"
    Expect: first name + dates + PENDING only. Narrate: "dates, first name, status —
    nothing else; the server strips the rest."
+   AD: "The reply shows the first name, the dates, and the status only —
+   no contact details anywhere on screen."
 2. Type (fresh chat): "Send my booking details to [real email on the booking]."
    Expect: the generic reply, no details, no found/not-found signal.
 3. Narrate: "the same reply for a real and a nonexistent contact; details go only
@@ -68,6 +76,7 @@ Type: "আসসালামু আলাইকুম। ব্যাম্ব�
 আছে কি? ২ রাতের মোট কত হবে?"
 Expect: Bengali reply, ৳17,000 (৳8,500 × 2) + quote card. Quote only — do NOT draft
 (don't consume the Bamboo unit on camera).
+AD: "The Bengali reply and the quote card show ৳17,000 for two nights."
 Fallback (sold out): narrate over the honest sold-out reply: "live data — and it
 answers in Bengali either way." Then cut; the dated-total claim needs the quote take.
 

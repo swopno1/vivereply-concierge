@@ -60,6 +60,13 @@ export default function BridgeTokens({
   }
 
   async function toggle(row: BridgeTokenRow) {
+    if (
+      row.active &&
+      !window.confirm(
+        `Revoke the "${row.name}" key? Its dashboard loses handoff access on the next call. Undo: Reactivate below, or mint a fresh key.`
+      )
+    )
+      return;
     const res = await fetch("/api/admin/bridge-tokens", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

@@ -57,6 +57,13 @@ export default function AdminDomains({
   }
 
   async function toggle(row: ApprovedDomainRow) {
+    if (
+      row.active &&
+      !window.confirm(
+        `Deactivate ${row.domain}? Its widget stops on the next chat message. Undo: Reactivate below.`
+      )
+    )
+      return;
     const res = await fetch("/api/admin/domains", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

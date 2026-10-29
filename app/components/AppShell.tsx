@@ -200,7 +200,7 @@ export default function AppShell({
         <nav aria-label="Concierge" className="mt-3 flex flex-col gap-4 overflow-y-auto">
           {visibleGroups.map((group) => (
             <div key={group.heading} className="flex flex-col gap-1">
-              <p className="px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+              <p className="px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                 {group.heading}
               </p>
               {group.items.map((item) =>
