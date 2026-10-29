@@ -16,6 +16,10 @@ SSRF is the critical gate: EVERY fetch goes through guarded_get(), which
 allows public IPs only, re-validates each redirect hop, and caps bytes.
 """
 
+# Deferred annotations: `list | None` syntax imports on older local Pythons
+# (3.9) that only collect the Modal app definition; remote runs 3.11.
+from __future__ import annotations
+
 import ipaddress
 import os
 import re
@@ -460,7 +464,7 @@ def run_ingestion(payload: dict, env: dict) -> dict:
 # ---------------------------------------------------------- thin wrapper ---
 
 if HAVE_MODAL:
-    modal_app = modal.App("vivereply-onboarding")
+    app = modal.App("vivereply-onboarding")
     modal_image = modal.Image.debian_slim(python_version="3.11").pip_install(
         "httpx",
         "beautifulsoup4",
@@ -470,14 +474,15 @@ if HAVE_MODAL:
         "openpyxl",
         "pandas",
         "psycopg[binary]",
+        "fastapi[standard]",
     )
 
-    @modal_app.function(
+    @app.function(
         image=modal_image,
         secrets=[modal.Secret.from_name("vivereply-onboarding")],
         timeout=1800,
     )
-    @modal.web_endpoint(method="POST")
+    @modal.fastapi_endpoint(method="POST")
     def ingest(payload: dict) -> dict:
         return run_ingestion(payload, dict(os.environ))
 

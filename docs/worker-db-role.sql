@@ -12,7 +12,9 @@
 -- rolname = current_user` is true for the app's connection user. Until
 -- then, cross-tenant safety inside the knowledge tables rests on the
 -- worker's fail-closed insert helper (propertyId required, must equal the
--- job's property) plus the CHECK below.
+-- job's property) plus the CHECK below. (Note: the SQL editor role cannot
+-- read pg_roles flag columns, so confirm bypass-RLS status from the
+-- Dashboard role settings when that day comes, not from pg_roles.)
 --
 -- Usage: replace <STRONG_RANDOM_PASSWORD>, run the whole file, then put
 --   postgresql://onboarding_worker:<password>@<pooler-host>:6543/postgres
@@ -46,6 +48,15 @@ BEGIN
 END
 $$;
 
--- 4. Verify (expect: 1 row, f, f, f, f — login only, nothing else).
-SELECT rolname, rolsuperuser, rolbypassrls, rolcreatedb, rolcreaterole
-FROM pg_roles WHERE rolname = 'onboarding_worker';
+-- 4. Verify (portable: Supabase does not expose the pg_roles flag
+-- columns to the SQL editor role, so check existence + grants instead).
+-- Expect: 1 row from each query; the grants list must show ONLY the
+-- three knowledge tables with SELECT/INSERT (+UPDATE for the flip).
+SELECT 1 AS worker_role_exists
+WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'onboarding_worker');
+SELECT grantee, table_name, privilege_type
+FROM information_schema.role_table_grants
+WHERE grantee = 'onboarding_worker'
+ORDER BY table_name, privilege_type;
+SELECT conname FROM pg_constraint
+WHERE conname = 'KnowledgeDocument_propertyId_nonempty';

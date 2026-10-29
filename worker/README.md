@@ -5,9 +5,11 @@ Next.js app — the app invokes it over HTTPS and receives signed callbacks.
 
 ## What it owns
 
-Crawling, parsing, chunking. Nothing else: keys, budgets, embeddings, and
-the database stay in the app. It stops the moment any callback answers
-`{"stop": true}`.
+Fetch, parse, chunk, embed, and store (worker v2: chunks land tagged with
+the job's propertyId and flip visible on clean completion). The app keeps
+budget authority: the worker stops the moment any callback answers
+`{"stop": true}`. Runtime secrets (Gemini key, worker DB URL, shared
+secret) live in the `vivereply-onboarding` Modal Secret, never the repo.
 
 ## Deploy (founder, one sitting)
 
