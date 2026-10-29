@@ -5,8 +5,9 @@
 // multi-step state live there); every API call re-checks the session.
 
 import { redirect } from "next/navigation";
-import { getSession, resolvePropertyId } from "@/lib/tenant";
+import { getSession, resolvePropertyId, sessionOwnerVerified } from "@/lib/tenant";
 import OnboardingBoard from "../../components/OnboardingBoard";
+import VerifyPrompt from "../../components/VerifyPrompt";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,10 @@ export default async function OnboardingPage({
   const session = await getSession();
   if (!session) {
     redirect("/login?next=/onboarding");
+  }
+  // Config lock: same rule as Settings (super-admins bypass).
+  if (!(await sessionOwnerVerified(session))) {
+    return <VerifyPrompt email={session.email} />;
   }
   const params = (await searchParams) ?? {};
   const propertyId = await resolvePropertyId(session, params.property);

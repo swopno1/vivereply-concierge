@@ -10,7 +10,12 @@
 // across instances); each login mints a fresh server-side Session row and
 // the cookie carries its id (fixation impossible — ids are server-minted
 // only). Throttled hits answer 429 and are NOT logged as failures (else the
-// block would extend itself forever).
+// block would extend itself forever). Adaptive human check: at 3 recent
+// failures for the email (below the throttle trip), a Turnstile token is
+// required — the client shows the widget on the 403 needCaptcha answer.
+// If Turnstile is unconfigured when demanded, login stays available and
+// alarms (accounts must never lock on a missing key; signup, by contrast,
+// fails closed).
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -26,6 +31,7 @@ import {
   type Session,
 } from "@/lib/auth";
 import { sessionExpiresAt } from "@/lib/tenant";
+import { turnstileConfigured, verifyTurnstileToken } from "@/lib/turnstile";
 
 function clientIp(req: NextRequest): string {
   const first = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
@@ -48,6 +54,19 @@ export async function POST(req: NextRequest) {
       { error: "Too many attempts. Try again later." },
       { status: 429 }
     );
+  }
+  if (counts[0] >= 3) {
+    if (!turnstileConfigured()) {
+      console.error("LOGIN: failures demand a human check but Turnstile is unconfigured — allowing without it.");
+    } else {
+      const t = typeof body?.turnstileToken === "string" ? body.turnstileToken : "";
+      if (!t || !(await verifyTurnstileToken(t, ip))) {
+        return NextResponse.json(
+          { error: "Please complete the human check.", needCaptcha: true },
+          { status: 403 }
+        );
+      }
+    }
   }
 
   let session: Omit<Session, "sid"> | null = null;

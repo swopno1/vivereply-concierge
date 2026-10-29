@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession, sessionCan } from "@/lib/tenant";
+import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -76,6 +76,9 @@ export async function GET(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
+  if (!(await sessionOwnerVerified(session))) {
+    return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
+  }
   const propertyId = req.nextUrl.searchParams.get("propertyId") ?? "";
   if (!propertyId) {
     return NextResponse.json({ error: "propertyId query is required." }, { status: 400 });
@@ -94,6 +97,9 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  if (!(await sessionOwnerVerified(session))) {
+    return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
   }
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   const propertyId =
@@ -125,6 +131,9 @@ export async function PATCH(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  if (!(await sessionOwnerVerified(session))) {
+    return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
   }
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   const id = body && typeof body.id === "string" ? body.id : "";
@@ -162,6 +171,9 @@ export async function DELETE(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  if (!(await sessionOwnerVerified(session))) {
+    return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
   }
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   const id = body && typeof body.id === "string" ? body.id : "";

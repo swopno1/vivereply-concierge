@@ -78,6 +78,21 @@ export function sessionCan(session: Session | null, propertyId: string): boolean
   return session.propertyId === propertyId;
 }
 
+// Verification gate (public signup). SUPER_ADMIN (bootstrap or row) is
+// always verified — the team attests itself. OWNERs must have proven
+// their email via the signup link. Config surfaces (Settings,
+// onboarding, owner admin APIs) call this AFTER the session/can
+// checks; reading surfaces (chat, /staff) do not.
+export async function sessionOwnerVerified(session: Session | null): Promise<boolean> {
+  if (!session) return false;
+  if (session.role === "SUPER_ADMIN") return true;
+  if (!session.uid || session.uid === "bootstrap") return false;
+  const user = await prisma.user
+    .findUnique({ where: { id: session.uid }, select: { emailVerifiedAt: true } })
+    .catch(() => null);
+  return user?.emailVerifiedAt != null;
+}
+
 export function demoPropertyId(): string {
   return process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat";
 }

@@ -6,7 +6,7 @@
 // straight to Supabase Storage — file bytes never transit Vercel.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSession, sessionCan } from "@/lib/tenant";
+import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
 import { ONBOARDING_BUDGET, sanitizeFilename, storagePath } from "@/lib/onboarding";
 import { signUploadUrl } from "@/lib/storage";
 
@@ -14,6 +14,9 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  if (!(await sessionOwnerVerified(session))) {
+    return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
   }
   const body = await req.json().catch(() => null);
   const propertyId = typeof body?.propertyId === "string" ? body.propertyId.trim() : "";

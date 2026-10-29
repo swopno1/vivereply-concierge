@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession, sessionCan } from "@/lib/tenant";
+import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
 import { decryptSecret } from "@/lib/secrets";
 import { HttpSuiteAdapter, SUITE_API_VERSION } from "@/lib/suite";
 
@@ -18,6 +18,9 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  if (!(await sessionOwnerVerified(session))) {
+    return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
   }
   const body = await req.json().catch(() => null);
   const id = typeof body?.id === "string" ? body.id : "";

@@ -42,8 +42,13 @@ model User {
   // True while a temporary (admin-issued) password is in force — the owner
   // sees a change-password banner until they set their own.
   mustChangePassword Boolean @default(false)
+  // Null until the owner proves the email (self-signup link). Team-created
+  // owners (seed, /admin/register) are attested: verified at creation.
+  // Config surfaces (Settings, onboarding, their APIs) require this.
+  emailVerifiedAt DateTime?
   createdAt    DateTime  @default(now())
   sessions     Session[]
+  verificationTokens EmailVerificationToken[]
 
   @@index([propertyId, active])
 }
@@ -73,6 +78,36 @@ model Session {
 // than an hour are pruned opportunistically at login. No passwords here,
 // ever — only the outcome.
 model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  ip        String
+  ok        Boolean
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([ip, createdAt])
+}
+
+// Email-verification tokens (public signup). Random 32-byte token, SHA-256
+// hash at rest (raw value travels only inside the emailed link), 24h
+// expiry, single use (usedAt). Resending invalidates older unused tokens
+// for the user so only the newest link works.
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// Signup attempt log (spam defense). Mirrors LoginAttempt: signup is
+// throttled per email + per IP, DB-backed so it holds across instances.
+// No passwords here, ever — only the outcome.
+model SignupAttempt {
   id        String   @id @default(cuid())
   email     String
   ip        String

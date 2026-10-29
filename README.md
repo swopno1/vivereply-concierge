@@ -112,7 +112,8 @@ Environment (see `.env.example` for the full list):
 - `BINDING_SECRET_KEY` — encrypts backend keys at rest (≥32 chars)
 - `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` — Storage signing (server only)
 - `WORKER_SHARED_SECRET`, `MODAL_WORKER_URL` — RAG worker auth + endpoint
-- `TENANT_PASSWORD_<SLUG>` — owner passwords, only in the seeder's env
+- Seed-tenant logins live inline in `prisma/seed-tenants.mjs` (test
+  tenants only — see `docs/seed-users.md`); no password env vars
 
 Then, in order:
 
@@ -121,9 +122,9 @@ Then, in order:
 #    Dashboard → SQL Editor → CREATE EXTENSION IF NOT EXISTS vector;
 pnpm exec prisma generate
 pnpm exec prisma db push   # uses DIRECT_URL via prisma.config.ts
-# 2. Register tenants: fill owner emails in prisma/seed-tenants.mjs, then
-TENANT_PASSWORD_KRISHNACHURA_RETREAT='...' TENANT_PASSWORD_SEABREEZE_TEST='...' \
-  pnpm seed:tenants        # needs database access; never commit passwords
+# 2. Register tenants: fill owner emails + passwords in
+#    prisma/seed-tenants.mjs (see docs/seed-users.md), then
+pnpm seed:tenants          # needs database access
 pnpm dev                   # http://localhost:3000
 ```
 

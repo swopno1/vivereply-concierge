@@ -8,13 +8,16 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession, sessionCan } from "@/lib/tenant";
+import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
 import { normalizeHostname } from "@/lib/domains";
 
 export async function GET() {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  if (!(await sessionOwnerVerified(session))) {
+    return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
   }
   const rows = await prisma.approvedDomain.findMany({
     where: session.role === "OWNER" ? { propertyId: session.propertyId ?? "" } : {},
@@ -27,6 +30,9 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  if (!(await sessionOwnerVerified(session))) {
+    return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
   }
   const body = await req.json().catch(() => null);
   const domain = normalizeHostname(typeof body?.domain === "string" ? body.domain : "");
@@ -61,6 +67,9 @@ export async function PATCH(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  if (!(await sessionOwnerVerified(session))) {
+    return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
   }
   const body = await req.json().catch(() => null);
   const id = typeof body?.id === "string" ? body.id : "";

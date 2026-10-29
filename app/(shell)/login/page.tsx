@@ -1,13 +1,17 @@
-// Login (multi-tenant core). Owners sign in with the email + password from
-// registration; the founder bootstrap is ADMIN_EMAIL + ADMIN_PASSWORD (env).
-// No signup anywhere. After login the browser is sent to ?next= (same-site
-// path only) or the role home (/admin for super-admin, /settings for
-// owners) so the session cookie applies on load.
+// Login (multi-tenant core). Owners sign in with email + password; the
+// founder bootstrap is ADMIN_EMAIL + ADMIN_PASSWORD (env). After login
+// the browser is sent to ?next= (same-site path only) or the role home
+// (/admin for super-admin, /settings for owners) so the session cookie
+// applies on load. Adaptive human check: after repeated failures the API
+// answers 403 needCaptcha and the widget below appears; the token goes
+// back with the retry (single-use: remount after each attempt).
 
 "use client";
 
+import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import TurnstileWidget from "../../components/TurnstileWidget";
 
 function safeNext(raw: string | null, fallback: string): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return fallback;
@@ -21,25 +25,39 @@ function LoginInner() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
+  const [needCaptcha, setNeedCaptcha] = useState(false);
+  const [token, setToken] = useState("");
+  const [attempt, setAttempt] = useState(0);
 
   async function submit() {
     if (!email.trim() || !password || sending) return;
+    if (needCaptcha && !token) {
+      setError("Please complete the human check.");
+      return;
+    }
     setError("");
     setSending(true);
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify({ email: email.trim(), password, turnstileToken: token || undefined }),
       });
       const data = await res.json().catch(() => null);
+      if (res.status === 429) throw new Error("Too many attempts. Try again later.");
+      if (res.status === 403 && data?.needCaptcha) {
+        setNeedCaptcha(true);
+        throw new Error("Please complete the human check and try again.");
+      }
       if (!res.ok) throw new Error("Invalid email or password.");
       const fallback = data?.role === "OWNER" ? "/settings" : "/admin";
       window.location.href = safeNext(requestedNext, fallback);
-    } catch {
-      setError("Invalid email or password.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Invalid email or password.");
     } finally {
       setSending(false);
+      setToken("");
+      setAttempt((a) => a + 1);
     }
   }
 
@@ -53,8 +71,10 @@ function LoginInner() {
       </div>
       <h1 className="text-xl font-bold">Log in</h1>
       <p className="mt-1 text-sm text-gray-500">
-        Owners sign in with the email and password from registration. No signup — new properties
-        are registered by the Vivereply team.
+        Owners sign in with their email and password. New here?{" "}
+        <Link href="/signup" className="font-medium text-gray-900 underline">
+          Register your resort
+        </Link>
       </p>
       <div className="mt-4 flex flex-col gap-2">
         <input
@@ -75,6 +95,7 @@ function LoginInner() {
           autoComplete="current-password"
           className="rounded-full border px-4 py-2 text-sm outline-none focus:border-black focus-visible:ring-2 focus-visible:ring-gray-900"
         />
+        {needCaptcha && <TurnstileWidget key={attempt} onVerify={setToken} />}
         <button
           onClick={submit}
           disabled={sending || !email.trim() || !password}

@@ -3,16 +3,20 @@
 Deferred or structural choices the runbooks depend on. One entry each:
 what, why, what would reverse it. No entry, no reliance.
 
-## 1. Attested domains for invite-only (DECIDED)
+## 1. Attested domains, kept under public signup (DECIDED, revised 2026-10-29)
 
-Every tenant is registered by the Vivereply team, who types the
-tenant's domains into `/admin/register` (or seed). No DNS proof of
-ownership is required: a false attestation is a team keystroke error,
-not a remote attack, and the blast radius is one tenant's own widget.
+Self-serve registration exists now (`/signup`), so the original
+"invite-only" premise is gone — but attested domains stand. Reason:
+approving victim.com under YOUR property is harmless without script
+injection on victim.com (which the attacker would need anyway); the
+handshake binds key + approved host, so a false attestation can only
+ever serve the attacker's own widget to the attacker's own pages.
+The real signup abuse (bulk fake tenants) is handled instead by
+Turnstile + throttles + email verification gating configuration.
 
-Reverse if: self-serve registration opens. Then require DNS TXT
-(or file) proof before a domain activates, per the isolation
-checklist's item 8.
+Reverse if: a concrete attack appears where attestation (not
+injection) is the pivot — then require DNS TXT proof before a
+domain activates.
 
 ## 2. Row-level security scheduled, not shipped (DEFERRED)
 

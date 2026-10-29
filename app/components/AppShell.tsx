@@ -245,12 +245,20 @@ export default function AppShell({
               </button>
             </div>
           ) : (
-            <a
-              href={`/login?next=${encodeURIComponent(pathname)}`}
-              className="block rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-center text-sm font-medium text-gray-900 shadow-sm hover:bg-gray-100"
-            >
-              Sign in
-            </a>
+            <div className="flex flex-col gap-2">
+              <a
+                href={`/login?next=${encodeURIComponent(pathname)}`}
+                className="block rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-center text-sm font-medium text-gray-900 shadow-sm hover:bg-gray-100"
+              >
+                Sign in
+              </a>
+              <a
+                href="/signup"
+                className="block rounded-xl bg-black px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-gray-800"
+              >
+                Register your resort
+              </a>
+            </div>
           )}
         </div>
       </aside>

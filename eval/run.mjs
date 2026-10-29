@@ -226,7 +226,7 @@ async function main() {
   }
   if (!EVAL_PASSWORD) {
     console.error("Refusing: set EVAL_PASSWORD in the environment (the fixture owner's login password).");
-    console.error('  EVAL_PASSWORD="$TENANT_PASSWORD_SEABREEZE_TEST" pnpm eval');
+    console.error("  EVAL_PASSWORD='<sabreeze current password — see docs/seed-users.md>' pnpm eval");
     process.exit(2);
   }
 

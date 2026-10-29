@@ -1,25 +1,30 @@
 // Tenant seed (multi-tenant core). THE manual-registration file: the founder
-// registers a property by editing TENANTS below and running:
+// registers a property by editing TENANTS below (including ownerPassword)
+// and running:
 //
-//   TENANT_PASSWORD_KRISHNACHURA_RETREAT='...' TENANT_PASSWORD_SEABREEZE_TEST='...' \
-//     pnpm seed:tenants
+//   pnpm seed:tenants
 //
 // What it does (all idempotent upserts, safe to re-run):
 //   Property row + ApprovedDomain rows + RoomMapping rows + OWNER User row
 //   per entry. Krishnachura carries NO rooms here — its demo file stays the
 //   fallback until the catalogue is seeded from Settings (row-by-row UUID
 //   verification stays a deliberate act, not a blind copy).
-// What it NEVER does: passwords live ONLY in the seeder's environment —
-// nothing secret is committed here or printed to the log. Re-running with a
-// new env password rotates that owner's password; that is the documented
-// rotation path (there is no password-change UI).
 //
-// Env names: TENANT_PASSWORD_<SLUG>, slug uppercased, dashes to underscores.
-// A tenant with an empty ownerEmail seeds its property + domains but NO user
-// (safe default — fill the email, re-run, the user appears).
-// Minimum password length: 12. Exit non-zero on the first refusal, having
-// changed nothing for that tenant (earlier tenants in the file keep their
-// rows — re-run after fixing).
+// SECURITY CONTRACT — read before editing:
+// - Owner passwords are INLINE below, hence COMMITTED to git. Treat them
+//   as public to every repo reader. Test tenants ONLY (see
+//   docs/seed-users.md) — real tenants MUST use /admin/register, whose
+//   temp passwords are shown once and never stored.
+// - A password applies on user CREATE only, with mustChangePassword set
+//   (human first login is forced to rotate; automation is unaffected).
+//   Re-running NEVER resets an existing user's password — rotation
+//   happens in Settings. This is deliberate: re-running must not
+//   silently restore a public password over a rotated one.
+// - A tenant with an empty ownerEmail seeds its property + domains but
+//   NO user (safe default — fill email + password, re-run, appears).
+// - Minimum password length: 12. Exit non-zero on the first refusal,
+//   having changed nothing for that tenant (earlier tenants keep
+//   their rows — re-run after fixing).
 //
 // Run from a machine that reaches the database (NOT this sandbox: raw TCP
 // to Supabase is blocked here). Needs DATABASE_URL (or DIRECT_URL).
@@ -41,6 +46,8 @@ export function hashPassword(password) {
 }
 
 // ================= EDIT BELOW THIS LINE =================
+// ownerPassword values are COMMITTED (see contract above): test logins
+// only, obviously demo-scoped, rotated in Settings after first use.
 const TENANTS = [
   {
     id: "krishnachura-retreat",
@@ -48,6 +55,7 @@ const TENANTS = [
     widgetKey: "demo-krishnachura",
     domains: ["demo1.vivereply.com"],
     ownerEmail: "krishnachura@test.com",
+    ownerPassword: "krishnachura-demo-login-01",
   },
   {
     id: "seabreeze-test",
@@ -55,6 +63,7 @@ const TENANTS = [
     widgetKey: "test-seabreeze",
     domains: [], // direct-token chat only until a domain is approved
     ownerEmail: "sabreeze@test.com",
+    ownerPassword: "seabreeze-demo-login-01",
     // PRICE CONTRACT: these MUST equal demo-config/fixture.ts (same slugs,
     // same poisha, same suiteRoomIds). A mismatch surfaces as a totals
     // warning on drafts — visible, never silent.
@@ -67,10 +76,6 @@ const TENANTS = [
 // ================= EDIT ABOVE THIS LINE =================
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function envNameFor(id) {
-  return `TENANT_PASSWORD_${id.toUpperCase().replace(/-/g, "_")}`;
-}
 
 async function main() {
   try {
@@ -119,22 +124,26 @@ async function main() {
         continue;
       }
       if (!EMAIL_RE.test(t.ownerEmail)) throw new Error(`Bad owner email for ${t.id}: ${t.ownerEmail}`);
-      const envName = envNameFor(t.id);
-      const password = process.env[envName] ?? "";
-      if (!password) throw new Error(`Refusing: ${envName} is not set (passwords come from env only).`);
-      if (password.length < 12) throw new Error(`Refusing: ${envName} must be at least 12 characters.`);
-      const passwordHash = await hashPassword(password);
+      const password = t.ownerPassword ?? "";
+      if (!password) throw new Error(`Refusing: ${t.id} has no ownerPassword (see docs/seed-users.md).`);
+      if (password.length < 12) throw new Error(`Refusing: ${t.id} ownerPassword must be at least 12 characters.`);
       const email = t.ownerEmail.toLowerCase().trim();
       const existing = await prisma.user.findUnique({ where: { email } });
       if (existing && existing.propertyId && existing.propertyId !== t.id) {
         throw new Error(`Refusing: ${email} already owns ${existing.propertyId}.`);
       }
-      await prisma.user.upsert({
-        where: { email },
-        create: { email, passwordHash, role: "OWNER", propertyId: t.id, active: true },
-        update: { passwordHash, role: "OWNER", propertyId: t.id, active: true },
+      if (existing) {
+        // Existing logins keep their (possibly rotated) password: re-running
+        // must never restore the committed value over it. Rotate in Settings.
+        console.log(`  owner: ${email} (exists — password untouched; rotate in Settings)`);
+        continue;
+      }
+      const passwordHash = await hashPassword(password);
+      await prisma.user.create({
+        // Team-seeded: email attested, verified at creation (see schema).
+        data: { email, passwordHash, role: "OWNER", propertyId: t.id, active: true, mustChangePassword: true, emailVerifiedAt: new Date() },
       });
-      console.log(`  owner: ${email} ${existing ? "(password rotated)" : "(created)"}`);
+      console.log(`  owner: ${email} (created — must change password at first login)`);
     }
     console.log("seed-tenants: done.");
   } finally {

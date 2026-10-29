@@ -9,7 +9,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getSession, resolvePropertyId } from "@/lib/tenant";
+import { getSession, resolvePropertyId, sessionOwnerVerified } from "@/lib/tenant";
 import { WIDGET_KEYS } from "@/demo-config/widget-keys";
 import CopyButton from "../../components/CopyButton";
 import SignOutButton from "../../components/SignOutButton";
@@ -19,6 +19,7 @@ import AdminDomains from "../../components/AdminDomains";
 import BridgeTokens from "../../components/BridgeTokens";
 import PasswordChange from "../../components/PasswordChange";
 import EvalRunner from "../../components/EvalRunner";
+import VerifyPrompt from "../../components/VerifyPrompt";
 import { CASES } from "@/eval/cases.mjs";
 
 export const dynamic = "force-dynamic";
@@ -78,6 +79,11 @@ export default async function SettingsPage({
   const session = await getSession();
   if (!session) {
     redirect("/login?next=/settings");
+  }
+  // Config lock: unverified owners prove their email before touching
+  // any setting. (Super-admins bypass via the helper.)
+  if (!(await sessionOwnerVerified(session))) {
+    return <VerifyPrompt email={session.email} />;
   }
   const params = (await searchParams) ?? {};
   const propertyId = await resolvePropertyId(session, params.property);

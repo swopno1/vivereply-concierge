@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession, sessionCan } from "@/lib/tenant";
+import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
 import { mintBridgeToken } from "@/lib/bridge";
 
 function shape(row: {
@@ -37,6 +37,9 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
+  if (!(await sessionOwnerVerified(session))) {
+    return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
+  }
   const rows = await prisma.bridgeToken.findMany({
     where: session.role === "OWNER" ? { propertyId: session.propertyId ?? "" } : {},
     orderBy: { createdAt: "asc" },
@@ -48,6 +51,9 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  if (!(await sessionOwnerVerified(session))) {
+    return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
   }
   const body = await req.json().catch(() => null);
   const name = typeof body?.name === "string" ? body.name.trim() : "";
@@ -75,6 +81,9 @@ export async function PATCH(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  if (!(await sessionOwnerVerified(session))) {
+    return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
   }
   const body = await req.json().catch(() => null);
   const id = typeof body?.id === "string" ? body.id : "";

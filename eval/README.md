@@ -8,7 +8,7 @@ safe. Re-run before every such deploy; per-category rates are reported
 ## Run
 
 ```sh
-EVAL_PASSWORD="$TENANT_PASSWORD_SEABREEZE_TEST" pnpm eval
+EVAL_PASSWORD='<sabreeze current password — see docs/seed-users.md>' pnpm eval
 ```
 
 - Logs in as the **fixture** property's owner, mints a direct token, and

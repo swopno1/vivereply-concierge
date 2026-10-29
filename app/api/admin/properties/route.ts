@@ -95,7 +95,8 @@ export async function POST(req: NextRequest) {
         prisma.approvedDomain.create({ data: { domain, propertyId: id, active: true } })
       ),
       prisma.user.create({
-        data: { email: ownerEmail, passwordHash, role: "OWNER", propertyId: id, active: true, mustChangePassword: true },
+        // Team-registered: email attested, verified at creation (see schema).
+        data: { email: ownerEmail, passwordHash, role: "OWNER", propertyId: id, active: true, mustChangePassword: true, emailVerifiedAt: new Date() },
       }),
     ]);
   } catch {
