@@ -49,7 +49,7 @@ export default function Payments({
     const ref = (reference[id] ?? "").trim();
     if (
       !confirm(
-        `Confirm this manual payment as received${ref ? ` (ref: ${ref})` : ""}? The guest gets a receipt email.`
+        `Confirm this manual payment as received${ref ? ` (ref: ${ref})` : ""}? The guest gets a receipt email. This cannot be undone here — double-check the transaction ID first.`
       )
     ) {
       return;

@@ -114,7 +114,12 @@ export default function RoomCatalogues({ initialPropertyId }: { initialPropertyI
   }
 
   async function remove(row: RoomRow) {
-    if (!window.confirm(`Remove ${row.slug} from ${loadedFor}?`)) return;
+    if (
+      !window.confirm(
+        `Remove ${row.slug} from ${loadedFor}? Chat stops offering it immediately. Undo: re-add the row below.`
+      )
+    )
+      return;
     const res = await fetch("/api/admin/room-mappings", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },

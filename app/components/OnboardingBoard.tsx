@@ -246,7 +246,7 @@ export default function OnboardingBoard({
                 stats.pagesVisited !== undefined ? `${String(stats.pagesVisited)} pages` : "",
                 stats.docsParsed !== undefined ? `${String(stats.docsParsed)} docs` : "",
                 stats.chunksWritten !== undefined ? `${String(stats.chunksWritten)} chunks` : "",
-                stats.embedTokensEstimated !== undefined ? `~${Number(stats.embedTokensEstimated).toLocaleString()} embed tokens` : "",
+                stats.embedTokensEstimated !== undefined ? `~${Number(stats.embedTokensEstimated).toLocaleString()} embedding tokens` : "",
               ]
                 .filter(Boolean)
                 .join(" · ") || "No stats yet."}

@@ -245,9 +245,14 @@ export default function Chat({
   // tech announces finished messages once — never per typing tick.
   const [announced, setAnnounced] = useState("");
   const [queuedCount, setQueuedCount] = useState(0);
+  // State mirror of the conversation ref — the helpful-vote needs it for
+  // render decisions; the ref stays the source of truth for sending.
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [vote, setVote] = useState<boolean | null>(null);
   const idCounter = useRef(0);
   const busyRef = useRef(false);
   const conversationIdRef = useRef<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const queueRef = useRef<Array<{ id: string; text: string }>>([]);
   const listRef = useRef<HTMLDivElement | null>(null);
   const nearBottomRef = useRef(true);
@@ -269,6 +274,8 @@ export default function Chat({
     queueRef.current = [];
     setQueuedCount(0);
     conversationIdRef.current = null;
+    setConversationId(null);
+    setVote(null);
     setMessages([{ id: "greeting", role: "assistant", text: GREETING }]);
     setInput("");
     setPhase("idle");
@@ -285,6 +292,26 @@ export default function Chat({
     window.addEventListener(NEW_CHAT_EVENT, reset);
     return () => window.removeEventListener(NEW_CHAT_EVENT, reset);
   }, []);
+
+  // The embed script asks for input focus when the guest opens the panel
+  // (postMessage — the host cannot reach into this frame). No origin
+  // check: the only action taken is focusing our own input, which is
+  // harmless no matter who asks.
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data as { type?: unknown } | null;
+      if (data && typeof data === "object" && data.type === "vivereply:focus-input") {
+        inputRef.current?.focus({ preventScroll: true });
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  // One vote per conversation: a fresh conversation resets the ballot.
+  useEffect(() => {
+    setVote(null);
+  }, [conversationId]);
 
   function startNextFromQueue() {
     const next = queueRef.current[0];
@@ -414,7 +441,10 @@ export default function Chat({
         }
         if (reply === null) throw new Error("The connection closed before a reply arrived.");
       }
-      if (newConversationId) conversationIdRef.current = newConversationId;
+      if (newConversationId) {
+        conversationIdRef.current = newConversationId;
+        setConversationId(newConversationId);
+      }
       clearTimeout(reassureTimer);
       setReassurance("");
       setPhase("typing");
@@ -470,8 +500,32 @@ export default function Chat({
     void runTurn(text);
   }
 
+  // One-tap helpful vote, stored per conversation (upsert — the guest
+  // may change their mind). Fire-and-forget: a failed save must never
+  // interrupt the chat, so the UI updates optimistically and stays.
+  async function castVote(helpful: boolean) {
+    if (!conversationId || !token) return;
+    setVote(helpful);
+    await fetch("/api/chat/rating", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, conversationId, helpful }),
+    }).catch(() => null);
+  }
+
   const busy = phase !== "idle";
   const showSuggestions = messages.length <= 1 && phase === "idle" && !error;
+  // The ballot anchors to the latest finished reply only: voting on a
+  // stale message while a new turn runs would misattribute the vote.
+  const lastMessage = messages[messages.length - 1];
+  const showBallot =
+    phase === "idle" &&
+    !error &&
+    conversationId !== null &&
+    lastMessage !== undefined &&
+    lastMessage.role === "assistant" &&
+    !lastMessage.typing &&
+    lastMessage.id !== "greeting";
 
   // Desktop web constrains the reading column; the narrow widget uses full width.
   const columnWidth = compact ? "w-full" : "mx-auto w-full max-w-3xl";
@@ -580,6 +634,38 @@ export default function Chat({
         </div>
       </div>
 
+      {showBallot && (
+        <div className={`px-4 ${columnWidth}`}>
+          <div className="mb-2 flex items-center gap-2 rounded-xl bg-gray-50 px-4 py-2">
+            <p className="flex-1 text-sm text-gray-600">
+              {vote === null ? "Was this helpful?" : "Thanks — this helps the resort improve."}
+            </p>
+            <button
+              type="button"
+              onClick={() => void castVote(true)}
+              aria-pressed={vote === true}
+              aria-label="Yes, this was helpful"
+              className={`min-h-[44px] rounded-full px-4 py-1 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2 ${
+                vote === true ? "bg-black text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              onClick={() => void castVote(false)}
+              aria-pressed={vote === false}
+              aria-label="No, this was not helpful"
+              className={`min-h-[44px] rounded-full px-4 py-1 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2 ${
+                vote === false ? "bg-black text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              No
+            </button>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className={`px-4 ${columnWidth}`}>
           <div
@@ -609,11 +695,13 @@ export default function Chat({
         <div className={columnWidth}>
           <div className="flex items-end gap-2 rounded-[28px] border border-gray-300 bg-white px-2 py-2 shadow-sm focus-within:border-gray-500">
             <input
+              ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSend()}
               placeholder={busy ? "Type a follow-up — I'll send it next…" : "Message the Concierge…"}
               aria-label="Message the Concierge"
+              autoComplete="off"
               className="flex-1 rounded-xl bg-transparent px-3 py-2 text-[15px] text-gray-900 outline-none placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-gray-900"
             />
             <button
@@ -635,7 +723,15 @@ export default function Chat({
           </div>
           <p className="mt-2 text-center text-xs text-gray-500">
             The Concierge answers from live resort data — staff confirm every booking. Details
-            you share are used only to hold your booking.
+            you share are used only to hold your booking.{" "}
+            <a
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900"
+            >
+              Privacy notice
+            </a>
           </p>
         </div>
       </div>

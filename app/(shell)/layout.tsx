@@ -1,5 +1,5 @@
 // Shared app shell (sidebar + content) for every web-app page in this
-// route group: /, /staff, /admin, /login, /settings, /onboarding. The
+// route group: /, /staff, /login, /settings, /onboarding. The
 // widget (/widget) sits outside the group, so the narrow embed panel
 // stays a bare chat. Server component: it reads the session cookie once
 // and hands the session (who + role + property) to the client shell,

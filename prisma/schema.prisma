@@ -347,3 +347,15 @@ model PaymentLink {
   @@index([conversationId])
   @@index([bookingCode])
 }
+
+// Guest helpful vote (one-tap post-chat rating). One row per
+// conversation (upsert — the guest may change their mind). No PII of
+// its own: the conversation link carries the context, and the chat
+// token gates the write exactly like a chat message.
+model ChatRating {
+  id             String   @id @default(cuid())
+  conversationId String   @unique
+  helpful        Boolean
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}

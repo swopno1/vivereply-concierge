@@ -59,6 +59,17 @@ function SafetyPanel() {
         <li>Staff never ask for card numbers, PINs, or one-time codes anywhere.</li>
         <li>If anyone pressures you to pay a different way, stop and call the resort.</li>
       </ul>
+      <p className="mt-2 text-sm text-gray-700">
+        How your data is handled:{" "}
+        <a
+          href="/privacy"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900"
+        >
+          Privacy notice
+        </a>
+      </p>
     </section>
   );
 }

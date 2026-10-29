@@ -246,12 +246,12 @@ export default async function SettingsPage({
     `<!-- Staff widget: mint a token server-side per page load, then embed. -->`,
     `<!-- Never put the bridge key in the browser. -->`,
     `<iframe`,
-    `  src="${origin}/staff/embed?token=<embed-token>"`,
+    `  src="${origin}/staff/embed?token=<dashboard-token>"`,
     `  width="100%" height="720" style="border:0; border-radius:12px"`,
     `  title="Concierge staff handoffs"></iframe>`,
   ].join("\n");
   const embedMintSnippet = [
-    `# Mint the <embed-token> above from the client SERVER (tokens live 15 minutes):`,
+    `# Mint the <dashboard-token> above from the client SERVER (tokens live 15 minutes):`,
     `curl -s -X POST "${origin}/api/bridge/embed-tokens" \\`,
     `  -H "Authorization: Bearer $BRIDGE_KEY" \\`,
     `  -H 'Content-Type: application/json' \\`,
@@ -343,7 +343,7 @@ export default async function SettingsPage({
         <Snippet label="List open handoffs (curl)" text={bridgeExample} />
         <Snippet label="List open handoffs (Node)" text={bridgeNode} />
         <Snippet label="Staff widget embed (dashboard HTML)" text={staffWidgetSnippet} />
-        <Snippet label="Mint the widget token (server, curl)" text={embedMintSnippet} />
+        <Snippet label="Mint the dashboard token (server, curl)" text={embedMintSnippet} />
         <p className="text-sm text-gray-500">
           Full contract (read, assign, close, notes, widget):{" "}
           <span className="font-mono">docs/bridge-integration.md</span> in the repo.
@@ -431,7 +431,7 @@ export default async function SettingsPage({
       {session.role === "SUPER_ADMIN" && (
         <Section
           title="Chatbot exam"
-          blurb="The 12-case eval, runnable from here. Fixture hotel only — a run can never touch real bookings. Terminal twin: pnpm eval."
+          blurb="The 12-case eval, runnable from here. Demo hotel only — a run can never touch real bookings. Same exam as the terminal runner."
         >
           <EvalRunner
             cases={(CASES as { id: string; category: string; turns: unknown[] }[]).map((c) => ({

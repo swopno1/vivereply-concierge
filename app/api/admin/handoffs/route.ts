@@ -50,6 +50,31 @@ export async function GET(req: NextRequest) {
   for (const g of grouped) {
     if (g.status in counts) counts[g.status] = g._count.status;
   }
+  // Triage context, one batched query: the latest successful draft per
+  // listed conversation lends its guest first name + stay. Staff open
+  // fewer records when the row already says who and when. No draft →
+  // nulls, never an error (most handoffs never drafted).
+  const draftLogs = await prisma.toolCallLog.findMany({
+    where: {
+      conversationId: { in: rows.map((h) => h.conversationId) },
+      toolName: "create_booking_draft",
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const draftByConversation = new Map<string, { guestFirstName: string | null; room: string | null; checkIn: string | null; checkOut: string | null }>();
+  for (const l of draftLogs) {
+    if (draftByConversation.has(l.conversationId)) continue;
+    const output = l.output as { bookingCode?: string; room?: string; checkIn?: string; checkOut?: string } | null;
+    if (!output?.bookingCode) continue;
+    const input = l.input as { guestName?: string } | null;
+    const firstName = typeof input?.guestName === "string" ? (input.guestName.trim().split(/\s+/)[0] ?? null) : null;
+    draftByConversation.set(l.conversationId, {
+      guestFirstName: firstName || null,
+      room: typeof output.room === "string" ? output.room : null,
+      checkIn: typeof output.checkIn === "string" ? output.checkIn : null,
+      checkOut: typeof output.checkOut === "string" ? output.checkOut : null,
+    });
+  }
   return NextResponse.json({
     rows: rows.map((h) => ({
       id: h.id,
@@ -61,6 +86,7 @@ export async function GET(req: NextRequest) {
       language: h.conversation.language,
       createdAt: h.createdAt.toISOString(),
       noteCount: h._count.notes,
+      draft: draftByConversation.get(h.conversationId) ?? null,
     })),
     counts,
   });

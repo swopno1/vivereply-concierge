@@ -16,7 +16,13 @@ import { isPropertyActive } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
-function ErrorPanel({ message }: { message: string }) {
+function ErrorPanel({
+  message,
+  retry,
+}: {
+  message: string;
+  retry?: { key: string; token: string };
+}) {
   return (
     <main className="mx-auto flex min-h-screen w-full flex-col bg-white p-4 font-sans text-gray-900 antialiased">
       <div className="flex items-center gap-3">
@@ -26,6 +32,18 @@ function ErrorPanel({ message }: { message: string }) {
         <h1 className="text-[15px] font-semibold">Vivereply Concierge</h1>
       </div>
       <p className="mt-3 text-sm text-gray-500">{message}</p>
+      {retry && (
+        <form method="GET" className="mt-3">
+          <input type="hidden" name="key" value={retry.key} />
+          <input type="hidden" name="token" value={retry.token} />
+          <button
+            type="submit"
+            className="inline-flex min-h-[44px] items-center rounded-full bg-black px-5 py-2 text-sm font-medium text-white"
+          >
+            Try again
+          </button>
+        </form>
+      )}
     </main>
   );
 }
@@ -41,14 +59,30 @@ export default async function WidgetPage({
   // every property after the first.
   const property = await resolveWidgetProperty(params.key ?? null);
   const token = verifyChatToken(params.token);
+  // Retry replays the same handshake inputs: transient failures (token
+  // minted during a deploy, a slow replica) recover without the guest
+  // touching the host page. Deactivation states get no retry — retrying
+  // a refused site would only re-reject it.
+  const retry =
+    params.key && params.token ? { key: params.key, token: params.token } : undefined;
   if (!property || !token) {
     // Technical cause stays server-side: guests get a plain line, not embed jargon.
     console.error("Widget rejected: missing property or invalid token.");
-    return <ErrorPanel message="Chat is unavailable right now. Please try again in a moment." />;
+    return (
+      <ErrorPanel
+        message="Chat is unavailable right now. Please try again in a moment."
+        retry={retry}
+      />
+    );
   }
   if (token.scope !== "widget" || token.propertyId !== property.propertyId || !token.domain) {
     console.error("Widget rejected: token scope/property/domain mismatch.");
-    return <ErrorPanel message="Chat is unavailable right now. Please try again in a moment." />;
+    return (
+      <ErrorPanel
+        message="Chat is unavailable right now. Please try again in a moment."
+        retry={retry}
+      />
+    );
   }
   if (!(await isDomainApproved(token.propertyId, token.domain))) {
     return <ErrorPanel message="This site is not approved to host this chat." />;

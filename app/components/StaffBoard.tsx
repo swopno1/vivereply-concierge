@@ -11,6 +11,12 @@ import { useEffect, useState } from "react";
 
 type Note = { id: string; author: string; body: string; createdAt: string };
 type TranscriptMsg = { role: string; content: string; createdAt: string };
+type DraftRef = {
+  guestFirstName: string | null;
+  room: string | null;
+  checkIn: string | null;
+  checkOut: string | null;
+};
 type Row = {
   id: string;
   conversationId: string;
@@ -21,6 +27,7 @@ type Row = {
   language: string;
   createdAt: string;
   noteCount: number;
+  draft: DraftRef | null;
 };
 type Detail = Row & { notes: Note[]; transcript: TranscriptMsg[] };
 
@@ -257,6 +264,13 @@ export default function StaffBoard({
                 )}
               </span>
               <span className="mt-0.5 line-clamp-2 block text-sm text-gray-600">{h.summary}</span>
+              {h.draft && (h.draft.guestFirstName || h.draft.room) && (
+                <span className="mt-0.5 block truncate text-xs font-medium text-gray-700">
+                  {h.draft.guestFirstName ?? "Guest"}
+                  {h.draft.room ? ` · ${h.draft.room}` : ""}
+                  {h.draft.checkIn && h.draft.checkOut ? ` · ${h.draft.checkIn} → ${h.draft.checkOut}` : ""}
+                </span>
+              )}
               <span className="mt-1 block text-xs text-gray-500">
                 {h.assignee ? `With ${h.assignee}` : "Unassigned"} · {ageOf(h.createdAt)} ·{" "}
                 {h.noteCount} {h.noteCount === 1 ? "note" : "notes"}
