@@ -41,7 +41,17 @@ type Card =
       quotedTotal: string;
       totalsMatch: boolean;
     }
-  | { kind: "handoff"; reason: string; summary: string };
+  | { kind: "handoff"; reason: string; summary: string }
+  | {
+      kind: "payment";
+      bookingCode: string;
+      amount: string;
+      methodLabel: string;
+      paymentUrl: string | null;
+      expiresAt: string | null;
+      status: "pending" | "paid" | "expired" | "canceled";
+      paidAt: string | null;
+    };
 
 type Message = {
   id: string;
@@ -149,6 +159,56 @@ function CardView({ card }: { card: Card }) {
             {card.quotedTotal}.
           </p>
         )}
+      </div>
+    );
+  }
+  if (card.kind === "payment") {
+    if (card.status === "paid") {
+      return (
+        <div className="w-full rounded-xl border border-green-200 bg-green-50 px-4 py-3 shadow-sm">
+          <p className="text-sm font-semibold text-green-900">
+            Payment confirmed — {card.amount}
+          </p>
+          <p className="mt-0.5 text-sm text-green-800">
+            Booking {card.bookingCode} is secured
+            {card.paidAt ? ` · paid ${new Date(card.paidAt).toLocaleString()}` : ""}. A receipt
+            went to your email.
+          </p>
+        </div>
+      );
+    }
+    if (card.status === "pending" && card.paymentUrl) {
+      return (
+        <div className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+          <p className="text-sm font-semibold text-gray-900">
+            Secure your booking — {card.amount}
+          </p>
+          <p className="mt-0.5 text-sm text-gray-700">
+            {card.bookingCode} · {card.methodLabel}
+            {card.expiresAt ? ` · pay before ${new Date(card.expiresAt).toLocaleString()}` : ""}{" "}
+            or the hold releases.
+          </p>
+          <a
+            href={card.paymentUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-flex min-h-[44px] items-center rounded-lg bg-black px-5 py-2 text-sm font-semibold text-white"
+          >
+            Pay now (opens in a new tab)
+          </a>
+          <p className="mt-2 text-xs text-gray-500">
+            Pay only through this button. We never ask for card details or codes in chat.
+          </p>
+        </div>
+      );
+    }
+    return (
+      <div className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+        <p className="text-sm font-semibold text-gray-900">Payment link {card.status}</p>
+        <p className="mt-0.5 text-sm text-gray-700">
+          Booking {card.bookingCode} · {card.amount}. Ask me for a fresh link if your hold is
+          still alive.
+        </p>
       </div>
     );
   }

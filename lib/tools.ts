@@ -31,14 +31,48 @@ export type ToolDb = {
   hasDraft(conversationId: string): Promise<boolean>;
   getDraft(conversationId: string): Promise<BookingDraftRecord | null>;
   createHandoff(conversationId: string, reason: string, summary: string): Promise<void>;
+  createPaymentLink(
+    conversationId: string,
+    method: "stripe" | "manual"
+  ): Promise<PaymentLinkResult>;
+  getPaymentStatus(conversationId: string): Promise<PaymentStatusResult>;
+};
+
+// Server-minted payment data (booking payments). The model repeats the
+// paymentUrl EXACTLY as returned — it must never invent, shorten, or
+// rephrase a payment URL, and it never takes payment itself.
+export type PaymentLinkResult = {
+  paymentUrl: string;
+  method: "stripe" | "manual";
+  methodLabel: string;
+  bookingCode: string;
+  amount: string;
+  expiresAt: string;
+  reused: boolean;
+};
+
+export type PaymentStatusResult = {
+  found: boolean;
+  status: "pending" | "paid" | "expired" | "canceled";
+  method: "stripe" | "manual" | null;
+  methodLabel: string | null;
+  bookingCode: string | null;
+  amount: string | null;
+  paidAt: string | null;
+  expiresAt: string | null;
+  paymentUrl: string | null;
+  // NOTE: no token field on purpose — the model gets the full payment
+  // URL and must never see the raw token it could rephrase or leak.
 };
 
 const DATE_DESC = "Exact date in YYYY-MM-DD format.";
 
 // Tool schemas built per request from the property's catalogue (adapter
 // Phase 3): the model can only name rooms the property actually has.
-function buildToolDefinitions(roomSlugs: string[]): ToolDefinition[] {
-  return [
+// Payment tools join the list only when the route says this turn takes
+// payments (flag on + Suite backend — never fixtures).
+function buildToolDefinitions(roomSlugs: string[], opts?: { payments?: boolean }): ToolDefinition[] {
+  const defs: ToolDefinition[] = [
   {
     type: "function",
     function: {
@@ -147,14 +181,54 @@ function buildToolDefinitions(roomSlugs: string[]): ToolDefinition[] {
     },
   },
   ];
+  if (opts?.payments) {
+    defs.push(
+      {
+        type: "function",
+        function: {
+          name: "create_payment_link",
+          description:
+            "Mint the guest's payment link for the draft held in this conversation. Call ONLY after the guest agreed to pay AND picked a method. Returns the payment URL — repeat it EXACTLY as returned, never invent, shorten, or rephrase it. You never take payment yourself.",
+          parameters: {
+            type: "object",
+            properties: {
+              method: {
+                type: "string",
+                enum: ["stripe", "manual"],
+                description: "\"stripe\" for card payment, \"manual\" for bKash/bank transfer verified by staff.",
+              },
+            },
+            required: ["method"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "check_payment_status",
+          description:
+            "Check whether the booking held in this conversation is paid. Use when the guest asks about payment. Reports the paid time and amount, or pending + expiry + the payment URL again.",
+          parameters: {
+            type: "object",
+            properties: {},
+            required: [],
+          },
+        },
+      }
+    );
+  }
+  return defs;
 }
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = buildToolDefinitions(
   DEMO_ROOMS.map((r) => r.slug)
 );
 
-export function toolDefinitionsFor(rooms: DemoRoom[]): ToolDefinition[] {
-  return buildToolDefinitions(rooms.map((r) => r.slug));
+export function toolDefinitionsFor(rooms: DemoRoom[], opts?: { payments?: boolean }): ToolDefinition[] {
+  return buildToolDefinitions(
+    rooms.map((r) => r.slug),
+    opts
+  );
 }
 
 function err(message: string): Record<string, unknown> {
@@ -192,14 +266,57 @@ export function createToolExecutor(
   conversationId: string,
   db: ToolDb,
   suite: SuiteAdapter,
-  catalogue: DemoRoom[]
+  catalogue: DemoRoom[],
+  opts?: { payments?: boolean }
 ) {
+  const paymentsOn = opts?.payments === true;
   return async function execute(name: string, argsJson: string): Promise<unknown> {
     let args: Record<string, unknown>;
     try {
       args = JSON.parse(argsJson) as Record<string, unknown>;
     } catch {
       return err("Invalid tool arguments.");
+    }
+
+    // Booking payments (suite users only, flag-gated). The gate is
+    // enforced here too — not just by hiding the definitions — so a
+    // smuggled tool call fails closed with a guest-safe message.
+    if (name === "create_payment_link") {
+      if (!paymentsOn) return err("Payments are not enabled for this resort. Offer a handoff to staff instead.");
+      const method = args.method === "stripe" || args.method === "manual" ? args.method : null;
+      if (!method) return err("Pick a payment method first: card or manual transfer. Ask the guest which they prefer.");
+      if (!(await db.hasDraft(conversationId))) {
+        return err("There is no booking draft in this conversation yet. Confirm a quote and the guest's details first.");
+      }
+      try {
+        const link = await db.createPaymentLink(conversationId, method);
+        return {
+          ...link,
+          message:
+            "Give the guest this payment URL EXACTLY as shown (it opens in a new tab) with the amount and the expiry. Remind them: pay only through this link, on this domain — you never take card details or codes in chat, and staff never ask for them either.",
+        };
+      } catch (e) {
+        return err(e instanceof Error ? e.message : "The payment link could not be created.");
+      }
+    }
+
+    if (name === "check_payment_status") {
+      if (!paymentsOn) return err("Payments are not enabled for this resort. Offer a handoff to staff instead.");
+      try {
+        const st = await db.getPaymentStatus(conversationId);
+        if (!st.found) {
+          return { ...st, message: "No payment link exists in this conversation yet. If the guest wants to pay, walk them through picking a method first." };
+        }
+        if (st.status === "paid") {
+          return { ...st, message: "Confirm the payment to the guest with the amount and time. Their room is secured." };
+        }
+        if (st.status === "pending") {
+          return { ...st, message: "The booking is still unpaid. Insist once more: share the payment URL EXACTLY as shown and the expiry — after that the hold releases." };
+        }
+        return { ...st, message: "This payment link is no longer usable. Offer to mint a fresh one if the draft hold is still alive." };
+      } catch (e) {
+        return err(e instanceof Error ? e.message : "The payment status could not be checked.");
+      }
     }
 
     if (name === "request_handoff") {

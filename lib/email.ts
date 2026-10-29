@@ -24,3 +24,35 @@ export async function sendVerificationEmail(to: string, link: string): Promise<v
   }).catch(() => null);
   if (!res || !res.ok) throw new Error("The verification email could not be sent.");
 }
+
+// Guest payment receipt (booking payments). Sent once, right after the
+// row flips to paid (webhook for cards, staff confirm for manual). Plain
+// facts only, no links at all — so a forged "pay again" phish can't
+// reuse this template's shape. Failures throw; callers log
+// and continue (the paid row is the truth, the email is a courtesy).
+export async function sendPaymentConfirmationEmail(args: {
+  to: string;
+  firstName: string;
+  bookingCode: string;
+  room: string;
+  checkIn: string;
+  checkOut: string;
+  total: string;
+}): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY ?? "";
+  const from = process.env.RESEND_FROM ?? "";
+  if (!apiKey || !from) throw new Error("Email is not configured.");
+  const { to, firstName, bookingCode, room, checkIn, checkOut, total } = args;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: `Payment received — booking ${bookingCode}`,
+      html: `<p>Hi ${firstName},</p><p>Your payment of ${total} for booking ${bookingCode} (${room}, ${checkIn} to ${checkOut}) is confirmed. Your room is secured — no further action needed.</p><p>If you did not make this payment, contact the resort immediately.</p>`,
+      text: `Hi ${firstName},\n\nYour payment of ${total} for booking ${bookingCode} (${room}, ${checkIn} to ${checkOut}) is confirmed. Your room is secured — no further action needed.\n\nIf you did not make this payment, contact the resort immediately.`,
+    }),
+  }).catch(() => null);
+  if (!res || !res.ok) throw new Error("The payment email could not be sent.");
+}

@@ -23,6 +23,17 @@ import { retrieveGrounding, toVectorLiteral } from "@/lib/rag";
 import { verifyChatToken } from "@/lib/auth";
 import { isDomainApproved } from "@/lib/domains";
 import { isPropertyActive } from "@/lib/tenant";
+import {
+  availableMethods,
+  methodLabel,
+  mintPaymentLink,
+  paymentOrigin,
+  paymentStatusForConversation,
+  paymentUrlFor,
+  propertyTakesPayments,
+  type PaymentMethod,
+} from "@/lib/payments";
+import { formatTaka } from "@/demo-config/rates";
 
 /**
  * Human one-liners for the streamed "Checking…" status. Built ONLY from
@@ -66,6 +77,10 @@ function toolDetail(name: string, argsJson: string): string {
       return "Sending your booking details";
     case "verify_booking":
       return "Double-checking your booking";
+    case "create_payment_link":
+      return "Preparing your secure payment link";
+    case "check_payment_status":
+      return "Checking your payment";
     default:
       return "Checking with the resort";
   }
@@ -255,6 +270,98 @@ export async function POST(req: NextRequest) {
               data: { status: "HANDED_OFF" },
             });
           },
+          // Booking payments: the draft's OUTPUT carries stay + totals,
+          // its INPUT carries the guest contact — both server-side, both
+          // re-read here, never trusted from the model. The URL origin is
+          // the configured canonical domain (paymentOrigin), never the
+          // request's Host header.
+          createPaymentLink: async (cid, method: "stripe" | "manual") => {
+            const origin = paymentOrigin();
+            const logs = await prisma.toolCallLog.findMany({
+              where: { conversationId: cid, toolName: "create_booking_draft" },
+              orderBy: { createdAt: "desc" },
+            });
+            for (const l of logs) {
+              const output = l.output as {
+                bookingCode?: string;
+                room?: string;
+                checkIn?: string;
+                checkOut?: string;
+                suiteTotalPoisha?: number;
+              } | null;
+              const input = l.input as {
+                guestName?: string;
+                guestEmail?: string;
+                guestPhone?: string;
+              } | null;
+              if (
+                output?.bookingCode &&
+                output.room &&
+                output.checkIn &&
+                output.checkOut &&
+                typeof output.suiteTotalPoisha === "number" &&
+                input?.guestName &&
+                input?.guestEmail
+              ) {
+                const link = await mintPaymentLink({
+                  propertyId: activeConversation.propertyId,
+                  conversationId: cid,
+                  draft: {
+                    bookingCode: output.bookingCode,
+                    room: output.room,
+                    checkIn: output.checkIn,
+                    checkOut: output.checkOut,
+                    suiteTotalPoisha: output.suiteTotalPoisha,
+                    guestName: input.guestName,
+                    guestEmail: input.guestEmail,
+                  },
+                  method,
+                });
+                const linkMethod = link.method as PaymentMethod;
+                return {
+                  paymentUrl: paymentUrlFor(link, origin),
+                  method: linkMethod,
+                  methodLabel: methodLabel(linkMethod),
+                  bookingCode: link.bookingCode,
+                  amount: formatTaka(link.amountPoisha),
+                  expiresAt: link.expiresAt.toISOString(),
+                  reused: Date.now() - link.createdAt.getTime() > 10_000,
+                };
+              }
+            }
+            throw new Error("No booking draft is held in this conversation yet.");
+          },
+          getPaymentStatus: async (cid) => {
+            // No link yet → answer without touching origin config, so a
+            // resort still setting up payments gets "no link" not noise.
+            const any = await prisma.paymentLink.findFirst({ where: { conversationId: cid } });
+            if (!any) {
+              return {
+                found: false as const,
+                status: "pending" as const,
+                method: null,
+                methodLabel: null,
+                bookingCode: null,
+                amount: null,
+                paidAt: null,
+                expiresAt: null,
+                paymentUrl: null,
+              };
+            }
+            const st = await paymentStatusForConversation(cid, paymentOrigin());
+            const stMethod = st.method as PaymentMethod | null;
+            return {
+              found: st.found,
+              status: st.status,
+              method: stMethod,
+              methodLabel: stMethod ? methodLabel(stMethod) : null,
+              bookingCode: st.bookingCode,
+              amount: st.amountPoisha !== null ? formatTaka(st.amountPoisha) : null,
+              paidAt: st.paidAt,
+              expiresAt: st.expiresAt,
+              paymentUrl: st.paymentUrl,
+            };
+          },
         };
 
         // Per-property backend + catalogue (adapter Phases 2-3): the
@@ -275,7 +382,15 @@ export async function POST(req: NextRequest) {
           send({ type: "error", error: "The resort's booking connection needs attention. Please try again later." });
           return;
         }
-        const baseExecute = createToolExecutor(activeConversation.id, db, suite, catalogue);
+        // Booking payments for THIS turn: flag on + Suite backend. The
+        // fixture check is belt-and-braces (propertyTakesPayments already
+        // excludes fixtures) — a demo backend must never mint a pay link.
+        const paymentsOn =
+          propertyTakesPayments(activeConversation.propertyId) &&
+          !(suite instanceof FixtureSuiteAdapter);
+        const baseExecute = createToolExecutor(activeConversation.id, db, suite, catalogue, {
+          payments: paymentsOn,
+        });
         // Reply identity (onboarding Phase 3): absent profile = default voice.
         const profile = await prisma.propertyProfile
           .findUnique({ where: { propertyId: activeConversation.propertyId } })
@@ -356,7 +471,15 @@ export async function POST(req: NextRequest) {
           messages: [
             {
               role: "system",
-              content: systemPrompt(activeConversation.language === "bn" ? "bn" : "en", grounding, catalogue, profile),
+              content: systemPrompt(
+                activeConversation.language === "bn" ? "bn" : "en",
+                grounding,
+                catalogue,
+                profile,
+                paymentsOn
+                  ? { payments: true as const, methods: availableMethods().map(methodLabel) }
+                  : { payments: false as const }
+              ),
             },
             ...history.map(
               (m: { role: string; content: string }): { role: "assistant" | "user"; content: string } => ({
@@ -365,7 +488,7 @@ export async function POST(req: NextRequest) {
               })
             ),
           ],
-          tools: toolDefinitionsFor(catalogue),
+          tools: toolDefinitionsFor(catalogue, { payments: paymentsOn }),
           execute,
           onModelCall: async (usage) => {
             await prisma.toolCallLog.create({
