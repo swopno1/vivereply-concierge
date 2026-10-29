@@ -1,9 +1,8 @@
 // Booking funnel from the events we already log, per property:
-// conversations -> quoted -> drafted -> payment link -> paid -> handoff.
-// Success = a tool output WITHOUT an error field. Honest gap, stated
-// in the output: widget OPENS are not logged anywhere, so the funnel
-// starts at first message — open-to-chat conversion is unmeasurable
-// until an open event exists.
+// widget opens -> conversations -> quoted -> drafted -> payment link
+// -> paid -> handoff. Success = a tool output WITHOUT an error field.
+// Opens come from the widget.js sendBeacon (WidgetOpen rows, property
+// + timestamp only); only panel taps count, never page loads.
 //
 //   pnpm funnel                 # last 30 days
 //   pnpm funnel -- --days=7
@@ -35,9 +34,13 @@ async function main() {
 
   try {
     const since = new Date(Date.now() - DAYS * 24 * 60 * 60 * 1000);
-    console.log(`funnel: last ${DAYS} day(s). Starts at first message — widget opens are NOT logged (gap).`);
+    console.log(`funnel: last ${DAYS} day(s).`);
 
-    const [convs, logs, links, handoffs] = await Promise.all([
+    const [opens, convs, logs, links, handoffs] = await Promise.all([
+      prisma.widgetOpen.findMany({
+        where: { createdAt: { gte: since } },
+        select: { propertyId: true },
+      }),
       prisma.conversation.findMany({
         where: { createdAt: { gte: since } },
         select: { id: true, propertyId: true },
@@ -78,6 +81,8 @@ async function main() {
       console.log(`  ${label.padEnd(14)} ${cells.map((n, i) => `${props[i]}:${n}`).join("  ")}  total:${set.size}`);
     };
     console.log("conversations are distinct ids; later stages also imply earlier ones only per conversation.");
+    const openCells = props.map((p) => opens.filter((o) => o.propertyId === p).length);
+    console.log(`  ${"opens".padEnd(14)} ${openCells.map((n, i) => `${props[i]}:${n}`).join("  ")}  total:${opens.length}`);
     row("chats", new Set(convs.map((c) => c.id)));
     row("quoted", quoted);
     row("drafted", drafted);

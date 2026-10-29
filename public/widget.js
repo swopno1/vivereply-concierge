@@ -87,6 +87,17 @@
       open ? "Close Vivereply Concierge chat" : "Open Vivereply Concierge chat"
     );
     label.textContent = open ? "Close" : "Chat";
+    if (open) {
+      // Funnel beacon: counts panel OPENS (page loads don't reach
+      // here). Fire-and-forget — metrics must never disturb chat.
+      try {
+        if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+          navigator.sendBeacon(origin + "/api/widget-open", JSON.stringify({ key: key }));
+        }
+      } catch (e) {
+        /* metrics are best-effort */
+      }
+    }
     if (open && frame && frame.contentWindow) {
       // Ask the chat to focus its input. The host cannot reach into
       // the frame, so this is a request, not a command — the chat

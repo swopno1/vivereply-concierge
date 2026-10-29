@@ -404,6 +404,19 @@ model DraftClaim {
   createdAt      DateTime     @default(now())
 }
 
+// Widget opens (funnel stage zero): one row per panel open, fired by
+// widget.js via sendBeacon. Property + timestamp ONLY — no IP, no
+// user agent, no guest identity. Unauthenticated by design (a guest
+// action); abuse pollutes metrics, never data. Powers the funnel's
+// open-to-chat conversion; prune freely past the pilot window.
+model WidgetOpen {
+  id         String   @id @default(cuid())
+  propertyId String
+  createdAt  DateTime @default(now())
+
+  @@index([propertyId, createdAt])
+}
+
 // Admin audit trail (append-only in practice; nothing deletes these
 // rows except tenant offboarding). actorEmail is whoever acted (or
 // the attempted email on login failure); detail carries names/ids/

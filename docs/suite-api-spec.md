@@ -44,6 +44,10 @@ POST /api/bookings
 ```
 
 - Creates a PENDING hold (no payment). `bookingCode` is the guest-facing code.
+- Holds auto-release 24 hours after creation if unpaid — the guest
+  always sees this window (draft card + agent prompt), so backends
+  MUST honor it (or negotiate a different window out-of-band before
+  going live; the Concierge states 24h unless told otherwise).
 - `totalAmountPoisha` is the backend's own total for the stay — it governs
   over the Concierge's quote on any mismatch, and the guest is told so.
 - Missing/invalid fields → `400`. Unknown room → `404`. No free unit → `409`

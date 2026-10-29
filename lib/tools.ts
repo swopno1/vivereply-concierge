@@ -367,7 +367,7 @@ export function createToolExecutor(
         const message = e instanceof Error ? e.message : "";
         if (message === "not_found") return err("No booking found for that code. Ask the guest to check the code and try again.");
         if (message === "rate_limited") return err("Too many lookup attempts. Ask the guest to try again later.");
-        return err(message || "Booking lookup failed.");
+        return err((message || "Booking lookup failed.") + " Offer a staff handoff so the guest isn't stuck.");
       }
     }
 
@@ -384,7 +384,7 @@ export function createToolExecutor(
       } catch (e) {
         const message = e instanceof Error ? e.message : "";
         if (message === "rate_limited") return err("Too many attempts. Ask the guest to try again later.");
-        return err(message || "Could not request booking details.");
+        return err((message || "Could not request booking details.") + " Offer a staff handoff so the guest isn't stuck.");
       }
     }
 
@@ -403,7 +403,10 @@ export function createToolExecutor(
         const availability = await suite.getAvailability(room.suiteRoomId, checkIn, checkOut);
         return { room: room.name, checkIn, checkOut, available: availability.available };
       } catch (e) {
-        return err(e instanceof Error ? e.message : "Availability check failed.");
+        return err(
+          (e instanceof Error ? e.message : "Availability check failed.") +
+            " Offer a staff handoff so the guest isn't stuck."
+        );
       }
     }
 
@@ -429,7 +432,9 @@ export function createToolExecutor(
           available: availability.available,
         };
       } catch (e) {
-        return err(e instanceof Error ? e.message : "Quote failed.");
+        return err(
+          (e instanceof Error ? e.message : "Quote failed.") + " Offer a staff handoff so the guest isn't stuck."
+        );
       }
     }
 
@@ -485,7 +490,10 @@ export function createToolExecutor(
             : "The Suite total governs: it differs from the quote, so tell the guest the Suite total.",
         };
       } catch (e) {
-        return err(e instanceof Error ? e.message : "Booking draft failed.");
+        return err(
+          (e instanceof Error ? e.message : "Booking draft failed.") +
+            " Offer a staff handoff so the guest isn't stuck."
+        );
       } finally {
         await db.releaseDraftClaim(conversationId);
       }

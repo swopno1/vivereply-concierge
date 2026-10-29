@@ -153,6 +153,9 @@ function CardView({ card }: { card: Card }) {
           Booking code: <CopyCode code={card.bookingCode} />
         </p>
         <p className="mt-1 text-base font-bold text-gray-900">Total: {card.suiteTotal}</p>
+        <p className="mt-1 text-sm text-gray-600">
+          Held for 24 hours — pay or confirm with the resort before it releases.
+        </p>
         {!card.totalsMatch && (
           <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
             Note: the Suite total ({card.suiteTotal}) governs — it differs from the quoted{" "}

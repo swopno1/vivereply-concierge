@@ -38,6 +38,15 @@ describe("systemPrompt payments section", () => {
   });
 });
 
+describe("systemPrompt hold-release rule", () => {
+  it("tells the 24h release on every draft in both languages", () => {
+    for (const lang of ["en", "bn"]) {
+      const p = systemPrompt(lang, null, ROOMS, null, { payments: false });
+      assert.ok(p.includes("hold releases after 24 hours"), lang);
+    }
+  });
+});
+
 describe("systemPrompt card-details rule", () => {
   it("is present in both languages with payments on or off", () => {
     for (const lang of ["en", "bn"]) {

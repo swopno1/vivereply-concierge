@@ -56,6 +56,8 @@ DELETE FROM "OnboardingRun" WHERE "propertyId" = 'TENANT';
 -- audit rows (no FK — plain delete; keep the export from step 1
 -- if the contract needs a trail after deletion)
 DELETE FROM "AuditLog" WHERE "propertyId" = 'TENANT';
+-- widget-open metrics (no FK, no PII — plain delete)
+DELETE FROM "WidgetOpen" WHERE "propertyId" = 'TENANT';
 -- logins (cascades sessions), then the property itself
 DELETE FROM "User" WHERE "propertyId" = 'TENANT';
 DELETE FROM "Property" WHERE id = 'TENANT';
@@ -77,6 +79,7 @@ SELECT 'Chunk(orphan)', COUNT(*) FROM "KnowledgeChunk" k LEFT JOIN "KnowledgeDoc
 SELECT 'PaymentLink(orphan)', COUNT(*) FROM "PaymentLink" p LEFT JOIN "Conversation" c ON c.id = p."conversationId" WHERE c.id IS NULL UNION ALL
 SELECT 'PaymentLink(tenant)', COUNT(*) FROM "PaymentLink" WHERE "propertyId" = 'TENANT' UNION ALL
 SELECT 'AuditLog(tenant)', COUNT(*) FROM "AuditLog" WHERE "propertyId" = 'TENANT' UNION ALL
+SELECT 'WidgetOpen(tenant)', COUNT(*) FROM "WidgetOpen" WHERE "propertyId" = 'TENANT' UNION ALL
 SELECT 'ChatRating(orphan)', COUNT(*) FROM "ChatRating" r LEFT JOIN "Conversation" c ON c.id = r."conversationId" WHERE c.id IS NULL;
 ```
 

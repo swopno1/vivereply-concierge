@@ -108,6 +108,19 @@ describe("quote-first + one-draft", () => {
     assert.match(out.error, /already holds a booking draft/);
     assert.equal(reads, 2);
   });
+  it("offers a staff handoff when the Suite fails mid-flow", async () => {
+    const down = new Error("The resort's system answered unexpectedly. Please try again.");
+    const avail = await run(fakeDb(), stubSuite({ getAvailability: async () => { throw down; } }))(
+      "get_quote",
+      JSON.stringify(STAY)
+    );
+    assert.match(avail.error, /staff handoff/);
+    const draft = await run(
+      fakeDb({ hasQuote: async () => true }),
+      stubSuite({ createBooking: async () => { throw down; } })
+    )("create_booking_draft", JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1" }));
+    assert.match(draft.error, /staff handoff/);
+  });
   it("reports sold-out instead of quoting zero availability", async () => {
     const out = await run(fakeDb(), stubSuite({ getAvailability: async () => ({ available: 0 }) }))(
       "get_quote",
