@@ -70,6 +70,20 @@ function toolDetail(name: string, argsJson: string): string {
   }
 }
 
+// Trivial-turn gate (cost): greetings, thanks, and acks carry no
+// retrievable question, so they skip the embedding call AND the
+// "Looking up…" phase entirely. Conservative by design — anything
+// that is not clearly trivial still retrieves (a guessed skip is
+// worse than a wasted embedding). EN + BN.
+const TRIVIAL_MESSAGE =
+  /^(hi|hey|hello|yo|thanks?|thank you|thx|ok|okay|sure|bye|good ?(morning|afternoon|evening|night)|how are you|হাই|হ্যালো|ধন্যবাদ|ঠিক আছে|বিদায়|কেমন আছেন?)[.!?\s।]*$/iu;
+
+function needsRetrieval(message: string): boolean {
+  const text = message.trim();
+  if (text.length <= 2) return false;
+  return !TRIVIAL_MESSAGE.test(text);
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const message = typeof body?.message === "string" ? body.message.trim() : "";
@@ -155,11 +169,17 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
       };
       try {
-        const history = await prisma.message.findMany({
-          where: { conversationId: activeConversation.id },
-          orderBy: { createdAt: "asc" },
-          take: 20,
-        });
+        // History window = the LAST 20 messages: newest-first fetch,
+        // reversed back to chronological order for the model. (An
+        // earlier cut used oldest-first + take, which silently dropped
+        // the newest context past 20 messages — fixed 2026-10-29.)
+        const history = (
+          await prisma.message.findMany({
+            where: { conversationId: activeConversation.id },
+            orderBy: { createdAt: "desc" },
+            take: 20,
+          })
+        ).reverse();
 
         const db: ToolDb = {
           hasQuote: async (cid, roomSlug, checkIn, checkOut) => {
@@ -284,37 +304,44 @@ export async function POST(req: NextRequest) {
         // seeded property knowledge for this turn's question. Retrieval
         // failure is NOT fatal: the agent then runs without grounding and
         // must say it does not know property facts instead of inventing.
+        // Trivial turns (greetings etc.) skip retrieval entirely — no
+        // embedding call, no phase event (see needsRetrieval).
         let grounding: string | null = null;
-        try {
-          send({ type: "phase", phase: "checking", detail: "Looking up what I know about the resort…" });
-          const retrieved = await retrieveGrounding({
-            query: message,
-            embed: embedText,
-            search: async (embedding) => {
-              const rows = await prisma.$queryRaw<
-                Array<{ title: string; content: string; similarity: number }>
-              >`SELECT d."title", c."content", 1 - (c."embedding" <=> ${toVectorLiteral(embedding)}::vector) AS "similarity" FROM "KnowledgeChunk" AS c JOIN "KnowledgeDocument" AS d ON d."id" = c."documentId" WHERE d."propertyId" = ${activeConversation.propertyId} AND c."indexed" = true ORDER BY c."embedding" <=> ${toVectorLiteral(embedding)}::vector ASC LIMIT 4`;
-              return rows;
-            },
-          });
-          grounding = retrieved.text;
-          if (retrieved.chunks.length > 0) {
-            await prisma.toolCallLog.create({
-              data: {
-                conversationId: activeConversation.id,
-                toolName: "rag_retrieval",
-                input: { query: message } as never,
-                output: { chunks: retrieved.chunks } as never,
+        if (needsRetrieval(message)) {
+          try {
+            send({ type: "phase", phase: "checking", detail: "Looking up what I know about the resort…" });
+            const retrieved = await retrieveGrounding({
+              query: message,
+              embed: embedText,
+              search: async (embedding) => {
+                const rows = await prisma.$queryRaw<
+                  Array<{ title: string; content: string; similarity: number }>
+                >`SELECT d."title", c."content", 1 - (c."embedding" <=> ${toVectorLiteral(embedding)}::vector) AS "similarity" FROM "KnowledgeChunk" AS c JOIN "KnowledgeDocument" AS d ON d."id" = c."documentId" WHERE d."propertyId" = ${activeConversation.propertyId} AND c."indexed" = true ORDER BY c."embedding" <=> ${toVectorLiteral(embedding)}::vector ASC LIMIT 4`;
+                return rows;
               },
             });
+            grounding = retrieved.text;
+            if (retrieved.chunks.length > 0) {
+              await prisma.toolCallLog.create({
+                data: {
+                  conversationId: activeConversation.id,
+                  toolName: "rag_retrieval",
+                  input: { query: message } as never,
+                  output: { chunks: retrieved.chunks } as never,
+                },
+              });
+            }
+          } catch (e) {
+            console.error(
+              "RAG retrieval failed, continuing without grounding:",
+              e instanceof Error ? e.message : e
+            );
           }
-        } catch (e) {
-          console.error(
-            "RAG retrieval failed, continuing without grounding:",
-            e instanceof Error ? e.message : e
-          );
         }
 
+        // POST-HACKATHON TODO (cost controls, docs/cost-controls-plan.md):
+        // refuse here when this property is killed or over its token
+        // budget. Not enforced today — every turn runs.
         const { reply } = await runAgent({
           messages: [
             {
@@ -335,6 +362,7 @@ export async function POST(req: NextRequest) {
               data: {
                 conversationId: activeConversation.id,
                 toolName: "model_call",
+                output: { via: usage.via } as never,
                 promptTokens: usage.promptTokens,
                 completionTokens: usage.completionTokens,
                 reasoningTokens: usage.reasoningTokens,

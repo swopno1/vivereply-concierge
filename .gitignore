@@ -150,6 +150,7 @@ vite.config.ts.timestamp-*
 
 # Extra for testing and debugging
 wip-script.py
+/notes_checklists
 
 # Python bytecode (Modal worker)
 __pycache__/
