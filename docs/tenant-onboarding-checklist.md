@@ -1,21 +1,18 @@
 # Tenant onboarding checklist
 
-Two paths in: team registration (`/admin/register`, email attested,
-verified at creation) or public signup (`/signup`, owner proves the
-email via link before configuring anything). Steps 2–6 are identical
-for both. Follow top to bottom; each step states where it happens
+One path in: public signup (`/signup` — the owner proves the email via
+link before configuring anything). The retired team-registration page
+(`/admin/register`, deleted) survives only as the seed file for test
+tenants. Follow top to bottom; each step states where it happens
 and how to verify it.
 
-## 1. Register (super-admin `/admin/register`, or owner `/signup`)
+## 1. Register (owner `/signup`)
 
-- Property ID (slug), display name, widget key (unique), owner email,
-  initial domains (bare hostnames, max 10).
-- Team path: response shows the owner temp password ONCE — deliver
-  it to the owner over an existing trusted channel (never email it
-  alongside the login URL; never store it). Signup path: no temp
-  password — the owner chose their own; they verify email instead.
-- Verify: property row `ACTIVE`, domains active, owner row
-  `mustChangePassword: true`.
+- Resort name, owner email, owner-chosen password (Turnstile-guarded).
+- No temp password — the owner chose their own; they verify email
+  instead. Until verified, configuration stays locked.
+- Verify: property row `ACTIVE`, owner row present, `emailVerified`
+  set after the link click.
 
 ## 2. Owner first login + password (owner)
 
@@ -28,7 +25,7 @@ and how to verify it.
 - Business form + reply identity (name, tone, languages, greeting).
 - Website and/or documents, then submit. Watch the run card to
   `complete`; on failure read the run's `error` before retrying
-  (re-runs need super-admin approval in `/admin`).
+  (re-runs need super-admin approval in `/settings`, Onboarding re-runs room).
 - Verify: run `complete`, `chunks_written > 0`; ask a grounded
   question in chat and confirm the answer cites the new corpus.
 

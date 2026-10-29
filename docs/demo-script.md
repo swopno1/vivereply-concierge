@@ -41,7 +41,7 @@ front-of-house you are about to see."
 ## Beat 2 — tenant isolation (only if proven in the pre-filming check below)
 
 Pre-filming check (founder, 2 min, do BEFORE the shoot, not on camera): in app
-/admin, deactivate demo1.vivereply.com → send one widget message → expect
+/settings Widget domains, deactivate demo1.vivereply.com → send one widget message → expect
 "This site is no longer approved to host this chat." → REACTIVATE immediately →
 send one message → expect a normal reply.
 On camera: show the deactivation error from the check (screen recording), then the

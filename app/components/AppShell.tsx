@@ -4,9 +4,9 @@
 // the layout sits above the page and cannot call its state directly —
 // Chat ignores the event while a reply is in flight, so the button needs
 // no busy state of its own. The footer shows Sign in (with a ?next= back
-// to the current page) or the signed-in row with Sign out. /admin appears
-// in the nav for SUPER_ADMIN only — owners never see a link they cannot
-// open (the page itself enforces the same rule server-side).
+// to the current page) or the signed-in row with Sign out. There is no
+// separate admin area: super-admin oversight (tenants, re-run approvals)
+// lives as extra sections inside /settings, rendered server-side.
 
 "use client";
 
@@ -15,9 +15,9 @@ import { usePathname } from "next/navigation";
 
 export const NEW_CHAT_EVENT = "concierge:new-chat";
 
-// Nav groups: Talk (the product), Manage (people + oversight), Configure
-// (setup). /admin filters out for owners (see visibleGroups below); the
-// page itself enforces the same rule server-side.
+// Nav groups: Talk (the product), Manage (people), Configure (setup).
+// Every item is visible to every signed-in role — super-admin extras
+// live inside /settings sections, not in the nav.
 const NAV_GROUPS: { heading: string; items: { href: string; label: string; icon: React.ReactNode }[] }[] = [
   {
     heading: "Talk",
@@ -52,30 +52,6 @@ const NAV_GROUPS: { heading: string; items: { href: string; label: string; icon:
               strokeWidth="1.6"
               strokeLinecap="round"
             />
-          </svg>
-        ),
-      },
-      {
-        href: "/admin",
-        label: "Admin",
-        icon: (
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path
-              d="M8 1.5 13.5 4v4c0 3.5-2.5 5.5-5.5 6.5C5 13.5 2.5 11.5 2.5 8V4L8 1.5Z"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinejoin="round"
-            />
-          </svg>
-        ),
-      },
-      {
-        href: "/admin/register",
-        label: "Register",
-        icon: (
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <circle cx="8" cy="8" r="6.2" stroke="currentColor" strokeWidth="1.6" />
-            <path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           </svg>
         ),
       },
@@ -139,11 +115,7 @@ export default function AppShell({
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const isSuper = session?.role === "SUPER_ADMIN";
-  const visibleGroups = NAV_GROUPS.map((group) => ({
-    ...group,
-    items: isSuper ? group.items : group.items.filter((item) => !item.href.startsWith("/admin")),
-  })).filter((group) => group.items.length > 0);
+  const visibleGroups = NAV_GROUPS.filter((group) => group.items.length > 0);
   const whoLabel = !session ? "" : session.role === "SUPER_ADMIN" ? "Super admin" : (session.email ?? "Owner");
   const whoInitial = !session ? "" : (whoLabel.charAt(0).toUpperCase() || "A");
 

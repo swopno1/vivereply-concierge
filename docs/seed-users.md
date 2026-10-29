@@ -19,9 +19,9 @@ No super-admin User row is seeded — the founder logs in via the
 - These passwords are COMMITTED to git. Treat them as public to
   every repo reader — that is the price of inline seed data, paid
   deliberately for demo convenience.
-- Test tenants ONLY. Real tenants MUST come from `/admin/register`
-  (shown-once temp passwords, never stored). Never seed a real
-  resort's login here.
+- Test tenants ONLY. Real tenants MUST come from public `/signup`
+  (email verification + Turnstile, no temp passwords). Never seed a
+  real resort's login here.
 - After seeding production: log in as each owner promptly and rotate
   via Settings (first human login is forced to). Until rotated,
   anyone with repo access can use these logins.

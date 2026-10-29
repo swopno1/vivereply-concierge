@@ -30,7 +30,7 @@ Deliver or archive per the tenant's contract, then proceed.
 
 - Bridge keys: `/settings` → Revoke each key (or
   `UPDATE "BridgeToken" SET active = false WHERE "propertyId" = 'TENANT';`).
-- Owner logins: `/admin` → deactivate each (kills sessions, audit
+- Owner logins: `/settings` → Tenants room → deactivate each (kills sessions, audit
   trail) — or `UPDATE "User" SET active = false WHERE "propertyId" = 'TENANT';`.
 
 ## 3. Delete (order matters — children before parents)

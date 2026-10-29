@@ -1,8 +1,9 @@
 # Tenant suspension runbook
 
-One action stops a tenant: set the property `INACTIVE` (`/admin` →
-Suspend button, or `PATCH /api/admin/properties { id, status }` as
-super-admin). Suspension confirms first; resuming is one click back.
+One action stops a tenant: set the property `INACTIVE` (`/settings`
+→ Tenants room → Suspend button, super-admin, or
+`PATCH /api/admin/properties { id, status }`). Suspension confirms
+first; resuming is one click back.
 
 ## What stops, and how fast
 
@@ -18,7 +19,7 @@ super-admin). Suspension confirms first; resuming is one click back.
 
 ## Suspend procedure
 
-1. `/admin` → property → **Suspend** → confirm. Note time + reason
+1. `/settings` → Tenants room → property → **Suspend** → confirm. Note time + reason
    (billing, abuse, request) in the evidence log.
 2. Verify each surface (replace `ID`):
    - Handshake: `POST /api/widget-token { key }` with the tenant's
@@ -26,12 +27,12 @@ super-admin). Suspension confirms first; resuming is one click back.
    - Chat: any existing token → next message → expect 403.
    - Owner login → expect 401; loaded staff page → redirects to login.
    - Bridge: any key call → expect 401.
-3. Optional belt-and-braces: `/admin` → owner → deactivate (kills
+3. Optional belt-and-braces: `/settings` → Tenants room → owner → deactivate (kills
    sessions redundantly) — harmless, and documents intent.
 
 ## Resume procedure
 
-1. `/admin` → property → **Resume**.
+1. `/settings` → Tenants room → property → **Resume**.
 2. Verify: handshake 200, owner login works, one test chat quotes.
 3. Record the resume in the evidence log.
 

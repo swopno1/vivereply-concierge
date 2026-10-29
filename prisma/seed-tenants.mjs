@@ -13,8 +13,8 @@
 // SECURITY CONTRACT — read before editing:
 // - Owner passwords are INLINE below, hence COMMITTED to git. Treat them
 //   as public to every repo reader. Test tenants ONLY (see
-//   docs/seed-users.md) — real tenants MUST use /admin/register, whose
-//   temp passwords are shown once and never stored.
+//   docs/seed-users.md) — real tenants MUST use public /signup
+//   (email verification + Turnstile, no temp passwords).
 // - A password applies on user CREATE only, with mustChangePassword set
 //   (human first login is forced to rotate; automation is unaffected).
 //   Re-running NEVER resets an existing user's password — rotation

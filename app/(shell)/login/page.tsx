@@ -1,7 +1,7 @@
 // Login (multi-tenant core). Owners sign in with email + password; the
 // founder bootstrap is ADMIN_EMAIL + ADMIN_PASSWORD (env). After login
-// the browser is sent to ?next= (same-site path only) or the role home
-// (/admin for super-admin, /settings for owners) so the session cookie
+// the browser is sent to ?next= (same-site path only) or /settings — the
+// single configuration home for every role — so the session cookie
 // applies on load. Adaptive human check: after repeated failures the API
 // answers 403 needCaptcha and the widget below appears; the token goes
 // back with the retry (single-use: remount after each attempt).
@@ -50,7 +50,7 @@ function LoginInner() {
         throw new Error("Please complete the human check and try again.");
       }
       if (!res.ok) throw new Error("Invalid email or password.");
-      const fallback = data?.role === "OWNER" ? "/settings" : "/admin";
+      const fallback = "/settings";
       window.location.href = safeNext(requestedNext, fallback);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Invalid email or password.");

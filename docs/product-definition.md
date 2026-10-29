@@ -107,8 +107,9 @@ check runs. Nothing is faked with timers.
 - Chat widget (the embed). One `<script>` tag the resort pastes on its site.
   Chat button + panel with the origin logo, short-lived token iff the site's
   domain is approved, chat in an iframe. Works for any seeded property's key.
-- Staff page (/staff). One property's handoffs, newest first, with reason,
-  summary, and full transcript. Owners see only theirs.
+- Staff page (/staff). Triage board for one property's handoffs: status
+  filters with counts, compact list, one transcript at a time, notes,
+  assignment, resolve/reopen. Owners see only theirs; verified email required.
 - Staff bridge (server API). Client
   dashboards work handoffs from their own servers: list, read with
   transcript, assign, close, follow-up notes — all as JSON, guarded by
@@ -119,13 +120,13 @@ check runs. Nothing is faked with timers.
   mints a 15-minute origin-bound token per page load; the bridge key never
   reaches the browser. Strict origin binding, mutual exclusion with chat
   tokens, documented limits.
-- Admin page (/admin, super-admin only). Cross-property oversight: properties
-  & owners, onboarding re-run approvals, backend failures. All per-property
-  configuration moved to Settings.
 - Settings (/settings). The single configuration surface, one property at a
   time: chat widget codes, widget domains, staff bridge codes + widget
   snippets, bridge keys, Suite connections, room catalogues, Secrets (honest
   Later), live security board, role-aware profile, Appearance (honest Later).
+  Super-admins additionally see Tenants (cross-property oversight: owners,
+  suspend/resume) and Onboarding re-runs (approvals) at the top — there is
+  no separate admin page.
 - Onboarding + knowledge (RAG). One guided run per property fills its
   knowledge base: business form + reply identity, website (fixed knowledge
   endpoint or polite crawl), document uploads. Hard token budget, one run per
@@ -171,7 +172,7 @@ rendering, Modal worker live trial, full Krishnachura regression.
   resort site demo1.vivereply.com.
 - P0 regression baseline green (7/7) after the prod database migration.
 - Multi-night quote → draft → admin loop: real draft RES-202610-00002
-  (Terracotta, Oct 29–31, ৳29,000, totals match, PENDING in /admin).
+  (Terracotta, Oct 29–31, ৳29,000, totals match, PENDING in the resort's own admin).
 - Bengali dated totals: Bamboo Nov 4–6 → ৳17,000; Terracotta Oct 31–Nov 2 →
   ৳29,000. Bengali sold-out path also honest (no quote when full).
 - Verification: code path shows only dates + first name + status; contact

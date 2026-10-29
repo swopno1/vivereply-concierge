@@ -20,6 +20,11 @@ import BridgeTokens from "../../components/BridgeTokens";
 import PasswordChange from "../../components/PasswordChange";
 import EvalRunner from "../../components/EvalRunner";
 import VerifyPrompt from "../../components/VerifyPrompt";
+import Payments from "../../components/Payments";
+import OnboardingApprovals from "../../components/OnboardingApprovals";
+import OwnerActions from "../../components/OwnerActions";
+import PropertyStatusToggle from "../../components/PropertyStatusToggle";
+import { paymentsEnabledGlobal } from "@/lib/payments";
 import { CASES } from "@/eval/cases.mjs";
 
 export const dynamic = "force-dynamic";
@@ -168,6 +173,54 @@ export default async function SettingsPage({
     lastTestOk: r.lastTestOk,
     createdAt: r.createdAt.toISOString(),
   }));
+  // Booking payments (flag-gated): recent links, tokens never leave the server.
+  const paymentsOn = paymentsEnabledGlobal();
+  const paymentRows = paymentsOn
+    ? await prisma.paymentLink
+        .findMany({ where: { propertyId }, orderBy: { createdAt: "desc" }, take: 50 })
+        .catch(() => [])
+    : [];
+  const initialPayments = paymentRows.map((r) => ({
+    id: r.id,
+    bookingCode: r.bookingCode,
+    method: r.method,
+    status: r.status,
+    amountPoisha: r.amountPoisha,
+    guestFirstName: r.guestFirstName,
+    room: r.room,
+    checkIn: r.checkIn,
+    checkOut: r.checkOut,
+    manualReference: r.manualReference,
+    paidAt: r.paidAt?.toISOString() ?? null,
+    expiresAt: r.expiresAt.toISOString(),
+    createdAt: r.createdAt.toISOString(),
+  }));
+  // Super-admin oversight (relocated from the deleted /admin page):
+  // cross-property tenants + onboarding approvals. Owners never fetch
+  // these rows — the queries below run for super-admins only.
+  const isSuper = session.role === "SUPER_ADMIN";
+  const allProperties = isSuper
+    ? await prisma.property
+        .findMany({
+          orderBy: { id: "asc" },
+          include: { users: { select: { id: true, email: true, role: true, active: true } } },
+        })
+        .catch(() => [])
+    : [];
+  const initialRuns = isSuper
+    ? await prisma.onboardingRun
+        .findMany({ orderBy: { updatedAt: "desc" } })
+        .catch(() => [])
+        .then((rows) =>
+          rows.map((r) => ({
+            propertyId: r.propertyId,
+            status: r.status,
+            approvedRerun: r.approvedRerun,
+            approvedBy: r.approvedBy,
+            updatedAt: r.updatedAt.toISOString(),
+          }))
+        )
+    : [];
 
   // Widget keys for THIS property: static entries plus the seeded row's
   // key (deduped — the demo key lives in both until the seed runs).
@@ -214,6 +267,46 @@ export default async function SettingsPage({
           Later are reserved space for upcoming features.
         </p>
       </header>
+
+      {isSuper && (
+        <Section
+          title="Tenants"
+          blurb="Registered resorts (public signup + seed file). Owners see exactly their property; suspending a property stops its chat immediately."
+        >
+          {allProperties.length === 0 && (
+            <p className="text-sm text-gray-500">
+              No properties yet. The first resort arrives via public signup.
+            </p>
+          )}
+          {allProperties.map((p) => (
+            <div
+              key={p.id}
+              className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-gray-900">
+                  {p.name} <span className="font-mono text-xs text-gray-500">({p.id})</span>
+                </p>
+                {p.users.length === 0 ? (
+                  <p className="truncate text-sm text-gray-500">no owner login yet</p>
+                ) : (
+                  <OwnerActions initial={p.users} />
+                )}
+              </div>
+              <PropertyStatusToggle propertyId={p.id} initialStatus={p.status} />
+            </div>
+          ))}
+        </Section>
+      )}
+
+      {isSuper && (
+        <Section
+          title="Onboarding re-runs"
+          blurb="Each property gets one ingestion run. Approving unlocks exactly one more."
+        >
+          <OnboardingApprovals initial={initialRuns} approver={session.email ?? "super-admin"} />
+        </Section>
+      )}
 
       <Section
         title="Chat widget codes"
@@ -286,6 +379,15 @@ export default async function SettingsPage({
           )}
         </div>
       </Section>
+
+      {paymentsOn && (
+        <Section
+          title="Booking payments"
+          blurb="Payment links the chatbot minted for held drafts. Confirm manual transfers here after verifying them; card links flip automatically when Stripe confirms."
+        >
+          <Payments initial={initialPayments} initialPropertyId={propertyId} />
+        </Section>
+      )}
 
       <Section
         title="Room catalogues"

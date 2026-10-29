@@ -4,12 +4,12 @@
 //
 // Two different tokens, do not confuse them:
 //   - Session: proves a browser passed /login. Stored as an HttpOnly
-//     cookie, checked server-side by /staff, /admin, /settings,
+//     cookie, checked server-side by /staff, /settings,
 //     /onboarding, and /api/admin/*. Two roles: SUPER_ADMIN (the
 //     founder — ADMIN_EMAIL + ADMIN_PASSWORD env, checked first, or a
 //     User row) and OWNER (one property, email + scrypt password from
-//     registration). There is no signup, no password reset-by-email, no
-//     2FA — recovery is changing the env vars (bootstrap) or the admin
+//     registration). There is no password reset-by-email, no
+//     2FA — recovery is changing the env vars (bootstrap) or the
 //     revoke (user rows). That is the honest bar, stated in the README.
 //   - Chat token: proves a chat request is allowed. Issued either
 //     server-side for a direct visit to / (scope "direct"), or by the
