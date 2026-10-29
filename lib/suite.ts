@@ -56,6 +56,11 @@ async function suiteFetch(binding: SuiteBinding, path: string, init?: RequestIni
   });
   const data = (await res.json().catch(() => null)) as SuiteError | Record<string, unknown> | null;
   if (!res.ok) {
+    // 429 is a FIRST-CLASS signal, not a body parse: tools.ts maps
+    // "rate_limited" to a try-again-later message, and a Suite that
+    // answers 429 with an empty body must still land there. Hence the
+    // status check runs before the body's error field is trusted.
+    if (res.status === 429) throw new Error("rate_limited");
     const message =
       (data as SuiteError | null)?.error ??
       (res.status === 409
@@ -95,7 +100,13 @@ export type BookingLookup = {
 
 export interface SuiteAdapter {
   getAvailability(roomId: string, checkIn: string, checkOut: string): Promise<Availability>;
-  createBooking(roomId: string, guest: BookingGuest, checkIn: string, checkOut: string): Promise<BookingDraft>;
+  createBooking(
+    roomId: string,
+    guest: BookingGuest,
+    checkIn: string,
+    checkOut: string,
+    opts?: { idempotencyKey?: string }
+  ): Promise<BookingDraft>;
   lookupBookingByCode(code: string): Promise<BookingLookup>;
   requestBookingDetails(contact: { email?: string; phone?: string }): Promise<{ sent: boolean }>;
   ping(): Promise<{ ok: boolean; suiteVersion: number }>;
@@ -117,10 +128,12 @@ export class HttpSuiteAdapter implements SuiteAdapter {
     roomId: string,
     guest: BookingGuest,
     checkIn: string,
-    checkOut: string
+    checkOut: string,
+    opts?: { idempotencyKey?: string }
   ): Promise<BookingDraft> {
     const data = (await suiteFetch(this.binding, "/api/bookings", {
       method: "POST",
+      headers: opts?.idempotencyKey ? { "Idempotency-Key": opts.idempotencyKey } : {},
       body: JSON.stringify({
         roomId,
         guestName: guest.guestName,
@@ -193,6 +206,10 @@ export class HttpSuiteAdapter implements SuiteAdapter {
 // — a fixture cannot email). Anything this adapter touches is labeled
 // FIXTURE, in codes and in docs.
 const fixtureDrafts = new Map<string, { firstName: string; checkIn: string; checkOut: string }>();
+// Fixture idempotency ledger: same property + key replays the SAME
+// draft instead of minting a second — the in-memory mirror of the
+// Idempotency-Key contract real Suites implement (suite-api-spec.md).
+const fixtureIdemKeys = new Map<string, BookingDraft>();
 let fixtureCounter = 0;
 
 export class FixtureSuiteAdapter implements SuiteAdapter {
@@ -216,7 +233,8 @@ export class FixtureSuiteAdapter implements SuiteAdapter {
     roomId: string,
     guest: BookingGuest,
     checkIn: string,
-    checkOut: string
+    checkOut: string,
+    opts?: { idempotencyKey?: string }
   ): Promise<BookingDraft> {
     const room = this.room(roomId);
     if (!guest.guestName.trim() || !guest.guestEmail.trim() || !guest.guestPhone.trim()) {
@@ -224,11 +242,19 @@ export class FixtureSuiteAdapter implements SuiteAdapter {
     }
     const quote = quoteForStay(room.basePricePoisha, checkIn, checkOut);
     if (quote.nights < 1) throw new Error("Check-out must be after check-in.");
+    if (opts?.idempotencyKey) {
+      const replay = fixtureIdemKeys.get(`${this.propertyId}:${opts.idempotencyKey}`);
+      if (replay) return replay;
+    }
     fixtureCounter += 1;
     const bookingCode = `FIX-${Date.now().toString(36).toUpperCase()}-${fixtureCounter.toString(36).toUpperCase()}`;
     const firstName = guest.guestName.trim().split(/\s+/)[0] ?? guest.guestName.trim();
     fixtureDrafts.set(`${this.propertyId}:${bookingCode}`, { firstName, checkIn, checkOut });
-    return { id: bookingCode, bookingCode, totalAmountPoisha: quote.totalPoisha };
+    const draft = { id: bookingCode, bookingCode, totalAmountPoisha: quote.totalPoisha };
+    if (opts?.idempotencyKey) {
+      fixtureIdemKeys.set(`${this.propertyId}:${opts.idempotencyKey}`, draft);
+    }
+    return draft;
   }
 
   async lookupBookingByCode(code: string): Promise<BookingLookup> {

@@ -131,6 +131,7 @@ model Conversation {
   handoffs   HandoffRecord[]
   paymentLinks PaymentLink[]
   rating     ChatRating?
+  draftClaim DraftClaim?
 }
 
 model Message {
@@ -389,6 +390,18 @@ model IpRateBucket {
 
   @@id([ip, windowStart])
   @@index([windowStart])
+}
+
+// Draft claim (double-draft race guard): at most one row per
+// conversation, held only across the check→book window (claimed
+// before suite.createBooking, released in a finally right after).
+// A crash between claim and release leaves a stale row — claims
+// older than 5 minutes are pruned on the next denied claim, so the
+// guest's retry succeeds. Cascades with the conversation.
+model DraftClaim {
+  conversationId String       @unique
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
 }
 
 // Admin audit trail (append-only in practice; nothing deletes these

@@ -8,7 +8,11 @@ import { Pool } from "pg";
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function createClient() {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  // max 5 per serverless instance: every Vercel instance opens its own
+  // pool, so an unbounded default fans out into hundreds of pooler
+  // connections under load. 5 is plenty — turns are short queries,
+  // not long transactions — and the pooler queues the overflow.
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
   return new PrismaClient({ adapter: new PrismaPg(pool) });
 }
 

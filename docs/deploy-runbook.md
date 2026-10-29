@@ -16,8 +16,8 @@ mechanics, that page is the gate.
    Environment Variables), full list in `.env.example`. Secrets
    rotate per `key-rotation.md`, never in a deploy.
 4. Verify the deployment (5 min):
-   - `curl https://app.vivereply.com/api/healthz` → `ok: true`
-     (deep check hits the database).
+   - `curl 'https://app.vivereply.com/api/healthz?deep=1'` →
+     `ok: true` + `db: "up"` (deep check hits the database).
    - `curl https://demo1.vivereply.com/` → 200.
    - One chat turn on the widget + Settings loads as owner.
 

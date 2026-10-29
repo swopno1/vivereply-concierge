@@ -136,7 +136,10 @@ async function attemptCompletions(
 // Primary then fallback: the Meta API first, always; Baseten's
 // open-weights endpoint second, only when its key is configured. Exactly
 // one fallback attempt — a double failure throws the FALLBACK's error with
-// the primary's attached, so the log shows both.
+// the primary's attached, so the log shows both. A primary 429 falls
+// back too, deliberately: Baseten is a DIFFERENT provider with its own
+// quota, so this sheds load sideways instead of hammering Meta again —
+// and the fallback never retries, so the worst case is 2 calls, not a storm.
 async function completionsWithFallback(payload: Record<string, unknown>): Promise<{ data: unknown; via: "meta" | "baseten" }> {
   const effective =
     FIXED_TEMPERATURE === null ? payload : { ...payload, temperature: FIXED_TEMPERATURE };

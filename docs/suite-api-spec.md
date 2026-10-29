@@ -49,6 +49,12 @@ POST /api/bookings
 - Missing/invalid fields → `400`. Unknown room → `404`. No free unit → `409`
   (message SHOULD read like "sold out" — the Concierge maps 409 to sold-out
   wording when the message is empty).
+- Idempotency: the Concierge sends `Idempotency-Key: <conversation-id>`
+  (one draft per conversation, so the key is stable across retries).
+  Backends MUST return the ORIGINAL booking (same code, same total) when
+  a key repeats — never a second hold. A repeated key with DIFFERENT
+  booking fields SHOULD answer `422` (key reuse across conversations is
+  a Concierge bug; fail loudly, don't fork the ledger).
 
 ## 4. Lookup by code (REQUIRED)
 
@@ -82,6 +88,10 @@ POST /api/bookings/send-details
   sentence when safe, else a generic line — it never invents details.
 - Backends SHOULD rate-limit brute-forceable endpoints (lookup, send-details)
   with `429`; the Concierge tells the guest to try again later.
+- `429` contract: status alone is the signal — the Concierge maps ANY
+  `429` to try-again-later wording even with an empty body. Backends
+  MAY include `{ "error": "…" }` and a `Retry-After` header (currently
+  informational; the Concierge answers immediately, it does not wait).
 - Anything outside this spec (extra fields, extra endpoints) is ignored.
 
 ## Versioning

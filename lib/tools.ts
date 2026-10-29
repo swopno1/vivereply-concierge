@@ -29,6 +29,11 @@ export type ToolDb = {
     checkOut: string
   ): Promise<boolean>;
   hasDraft(conversationId: string): Promise<boolean>;
+  // Claim-then-book serialization (double-draft race guard): exactly
+  // one holder per conversation; false means a sibling turn is inside
+  // its booking window. Always paired with releaseDraftClaim.
+  claimDraft(conversationId: string): Promise<boolean>;
+  releaseDraftClaim(conversationId: string): Promise<void>;
   getDraft(conversationId: string): Promise<BookingDraftRecord | null>;
   createHandoff(conversationId: string, reason: string, summary: string): Promise<void>;
   createPaymentLink(
@@ -441,12 +446,27 @@ export function createToolExecutor(
       if (await db.hasDraft(conversationId)) {
         return err("This conversation already holds a booking draft. Share its booking code instead of creating another.");
       }
+      // Claim-then-book: the hasDraft check above still races when two
+      // turns overlap, so the database serializes the booking window
+      // (unique claim per conversation). Denied means a sibling turn is
+      // inside its window — re-read hasDraft to tell "already held"
+      // from "in progress". The claim ALWAYS releases (finally):
+      // post-success duplicates are impossible by idempotency key
+      // (conversationId — one draft per conversation, stable across
+      // retries), so the claim must not outlive the window.
+      if (!(await db.claimDraft(conversationId))) {
+        if (await db.hasDraft(conversationId)) {
+          return err("This conversation already holds a booking draft. Share its booking code instead of creating another.");
+        }
+        return err("A booking is already being created in this conversation. Please wait a moment and try again.");
+      }
       try {
         const booking = await suite.createBooking(
           room.suiteRoomId,
           { guestName, guestEmail, guestPhone },
           checkIn,
-          checkOut
+          checkOut,
+          { idempotencyKey: conversationId }
         );
         const quoted = quoteForStay(room.basePricePoisha, checkIn, checkOut);
         const totalsMatch = booking.totalAmountPoisha === quoted.totalPoisha;
@@ -466,6 +486,8 @@ export function createToolExecutor(
         };
       } catch (e) {
         return err(e instanceof Error ? e.message : "Booking draft failed.");
+      } finally {
+        await db.releaseDraftClaim(conversationId);
       }
     }
 

@@ -16,6 +16,8 @@ function fakeDb(over = {}) {
   return {
     hasQuote: async () => false,
     hasDraft: async () => false,
+    claimDraft: async () => true,
+    releaseDraftClaim: async () => {},
     getDraft: async () => null,
     createHandoff: async () => {},
     createPaymentLink: async () => {
@@ -79,6 +81,32 @@ describe("quote-first + one-draft", () => {
     );
     assert.equal(out.bookingCode, "RES-TEST-1");
     assert.equal(out.totalsMatch, true);
+  });
+  it("answers in-progress when the claim is denied and no draft exists", async () => {
+    let booked = 0;
+    const out = await run(
+      fakeDb({ hasQuote: async () => true, hasDraft: async () => false, claimDraft: async () => false }),
+      stubSuite({ createBooking: async () => { booked += 1; throw new Error("must not book"); } })
+    )(
+      "create_booking_draft",
+      JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1" })
+    );
+    assert.match(out.error, /already being created/);
+    assert.equal(booked, 0);
+  });
+  it("answers already-held when the claim is denied but a draft landed", async () => {
+    // First read: no draft (passes the guard). Denied claim. Second
+    // read: the sibling's draft is now visible — the re-read path.
+    let reads = 0;
+    const out = await run(
+      fakeDb({ hasQuote: async () => true, hasDraft: async () => ++reads > 1, claimDraft: async () => false }),
+      stubSuite()
+    )(
+      "create_booking_draft",
+      JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1" })
+    );
+    assert.match(out.error, /already holds a booking draft/);
+    assert.equal(reads, 2);
   });
   it("reports sold-out instead of quoting zero availability", async () => {
     const out = await run(fakeDb(), stubSuite({ getAvailability: async () => ({ available: 0 }) }))(

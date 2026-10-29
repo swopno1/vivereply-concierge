@@ -10,6 +10,7 @@
 // stream closes with { done }. Errors mid-stream are generic lines to the
 // guest; real causes go to the server log.
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { runAgent } from "@/lib/agent";
 import { createToolExecutor, toolDefinitionsFor, type ToolDb } from "@/lib/tools";
@@ -245,6 +246,33 @@ export async function POST(req: NextRequest) {
               const output = l.output as { bookingCode?: string } | null;
               return Boolean(output?.bookingCode);
             });
+          },
+          // Claim-then-book: INSERT-or-denied serializes overlapping
+          // turns at the database (P2002 = sibling holds the window).
+          // Only P2002 denies — any other error rethrows so a sick
+          // database fails the turn honestly instead of double-booking.
+          // On denial, one prune-and-retry heals a crash-orphaned
+          // claim (older than 5 min) without wasting the guest's turn.
+          claimDraft: async (cid) => {
+            const attempt = async (): Promise<boolean> => {
+              try {
+                await prisma.draftClaim.create({ data: { conversationId: cid } });
+                return true;
+              } catch (e) {
+                if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+                  return false;
+                }
+                throw e;
+              }
+            };
+            if (await attempt()) return true;
+            await prisma.draftClaim
+              .deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 5 * 60_000) } } })
+              .catch(() => null);
+            return attempt();
+          },
+          releaseDraftClaim: async (cid) => {
+            await prisma.draftClaim.deleteMany({ where: { conversationId: cid } }).catch(() => null);
           },
           getDraft: async (cid) => {
             const logs = await prisma.toolCallLog.findMany({
