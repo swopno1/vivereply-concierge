@@ -18,6 +18,8 @@ import RoomCatalogues from "../../components/RoomCatalogues";
 import AdminDomains from "../../components/AdminDomains";
 import BridgeTokens from "../../components/BridgeTokens";
 import PasswordChange from "../../components/PasswordChange";
+import EvalRunner from "../../components/EvalRunner";
+import { CASES } from "@/eval/cases.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -317,6 +319,22 @@ export default async function SettingsPage({
           ))}
         </div>
       </Section>
+
+      {session.role === "SUPER_ADMIN" && (
+        <Section
+          title="Chatbot exam"
+          blurb="The 12-case eval, runnable from here. Fixture hotel only — a run can never touch real bookings. Terminal twin: pnpm eval."
+        >
+          <EvalRunner
+            cases={(CASES as { id: string; category: string; turns: unknown[] }[]).map((c) => ({
+              id: c.id,
+              category: c.category,
+              turns: c.turns.length,
+            }))}
+            commit={process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local"}
+          />
+        </Section>
+      )}
 
       <Section
         title="Profile"

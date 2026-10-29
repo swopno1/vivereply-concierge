@@ -23,6 +23,22 @@ const BASETEN_URL = "https://inference.baseten.co/v1";
 // with this exact model, so configurability would be a pure footgun.
 const BASETEN_MODEL = "meta-models/muse-spark-open-1026";
 
+// Sampling knob (optimization backlog #1): optional META_TEMPERATURE (0-2).
+// Unset = API default = today's behavior, byte-identical. Set = the same
+// temperature on every completion, tool and plain, primary and fallback.
+// Validated once at module load; an invalid value warns and behaves as
+// unset, so a typo can never silently reshape answers.
+const FIXED_TEMPERATURE: number | null = (() => {
+  const raw = process.env.META_TEMPERATURE;
+  if (raw === undefined || raw === "") return null;
+  const t = Number(raw);
+  if (!Number.isFinite(t) || t < 0 || t > 2) {
+    console.warn(`concierge: ignoring invalid META_TEMPERATURE=${JSON.stringify(raw)} (want 0-2)`);
+    return null;
+  }
+  return t;
+})();
+
 export type ChatMessage = {
   role: "user" | "assistant" | "system" | "tool";
   content: string;
@@ -45,13 +61,18 @@ export type ToolDefinition = {
   };
 };
 
+export type LlmBackend = "meta" | "baseten";
+
 export type Usage = {
   promptTokens: number;
   completionTokens: number;
   reasoningTokens: number;
+  // Which backend served this call — persisted on the model_call log
+  // row so the fallback rate is a DB query, not a log-grep.
+  via: LlmBackend;
 };
 
-function parseUsage(data: { usage?: Record<string, unknown> }): Usage {
+function parseUsage(data: { usage?: Record<string, unknown> }, via: LlmBackend): Usage {
   const u = (data.usage ?? {}) as {
     prompt_tokens?: number;
     completion_tokens?: number;
@@ -61,6 +82,7 @@ function parseUsage(data: { usage?: Record<string, unknown> }): Usage {
     promptTokens: u.prompt_tokens ?? 0,
     completionTokens: u.completion_tokens ?? 0,
     reasoningTokens: u.completion_tokens_details?.reasoning_tokens ?? 0,
+    via,
   };
 }
 
@@ -98,14 +120,16 @@ async function attemptCompletions(
 // one fallback attempt — a double failure throws the FALLBACK's error with
 // the primary's attached, so the log shows both.
 async function completionsWithFallback(payload: Record<string, unknown>): Promise<{ data: unknown; via: "meta" | "baseten" }> {
+  const effective =
+    FIXED_TEMPERATURE === null ? payload : { ...payload, temperature: FIXED_TEMPERATURE };
   try {
-    const data = await attemptCompletions(BASE_URL, apiKey(), MODEL, payload);
+    const data = await attemptCompletions(BASE_URL, apiKey(), MODEL, effective);
     return { data, via: "meta" };
   } catch (primaryError) {
     const fallbackKey = basetenKey();
     if (!fallbackKey) throw primaryError;
     try {
-      const data = await attemptCompletions(BASETEN_URL, fallbackKey, BASETEN_MODEL, payload);
+      const data = await attemptCompletions(BASETEN_URL, fallbackKey, BASETEN_MODEL, effective);
       console.log(
         `concierge: llm fallback baseten (primary: ${primaryError instanceof Error ? primaryError.message : primaryError})`
       );
@@ -123,12 +147,12 @@ export async function chatCompletion(
 ): Promise<{ reply: string; usage: Usage }> {
   // Generous max_tokens: Muse Spark reasons first and reasoning tokens
   // count against this budget (smoke test: 337 reasoning tokens for one word).
-  const { data } = await completionsWithFallback({ messages, max_tokens: 1024 });
+  const { data, via } = await completionsWithFallback({ messages, max_tokens: 1024 });
   const content = (data as { choices?: { message?: { content?: unknown } }[] })?.choices?.[0]?.message?.content;
   if (typeof content !== "string" || !content) {
     throw new Error("Empty reply from model");
   }
-  return { reply: content, usage: parseUsage(data as { usage?: Record<string, unknown> }) };
+  return { reply: content, usage: parseUsage(data as { usage?: Record<string, unknown> }, via) };
 }
 
 export async function chatCompletionWithTools(
@@ -154,7 +178,7 @@ export async function chatCompletionWithTools(
     return { role: m.role, content: m.content };
   });
 
-  const { data } = await completionsWithFallback({ messages: wireMessages, tools, max_tokens: 2048 });
+  const { data, via } = await completionsWithFallback({ messages: wireMessages, tools, max_tokens: 2048 });
   const message = (data as { choices?: { message?: unknown }[] })?.choices?.[0]?.message as
     | { content?: unknown; tool_calls?: { id: string; function?: { name?: string; arguments?: string } }[] }
     | undefined;
@@ -174,5 +198,5 @@ export async function chatCompletionWithTools(
   if (!content && toolCalls.length === 0) {
     throw new Error("Empty reply from model");
   }
-  return { content, toolCalls, usage: parseUsage(data as { usage?: Record<string, unknown> }) };
+  return { content, toolCalls, usage: parseUsage(data as { usage?: Record<string, unknown> }, via) };
 }
