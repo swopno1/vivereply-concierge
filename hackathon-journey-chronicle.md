@@ -114,6 +114,10 @@ The exam immediately earned its keep: experiment #5 (temperature 0.2, the guide'
 
 Item #6 (per-property budgets, cutoff, kill switch) was deliberately parked the same day: design written down in full (tokens-not-money until real prices exist, fail-open budget checks, fail-closed kill flag, owner-or-super-admin authority), reminders planted in the thinking guide and at the exact enforcement point in the chat route, build checklist queued for after Nov 9 — before the first paying tenant, not before the judges.
 
+The whole pass then committed as one unit (`833ac27`, 14 files, +1273/−38) on branch `feature/llm-optimization-pass` — history fix, RAG gate, backend logging, the 12-case eval with its runner and dashboard, the Settings exam card, the temperature knob, decision log, cost-controls plan, and this chronicle itself. The founder's pre-existing dirty files (`.gitignore`, evidence log, `next-env.d.ts`, `.DS_Store`) were deliberately left out of the commit, and the thinking-guide edits stayed local-only — `notes_checklists/` is gitignored by design. Awaiting: push, PR, merge, deploy — then the baseline exam runs, first from Settings, and the temperature experiment gets its numbers.
+
+Late afternoon turned to the submission itself: the business-impact checklist was run against the live product (six verdicts updated — Bengali fit DONE, availability blocker cleared, cost half-measured, staff gap narrowed, adversarial cases in the eval, fallback test proposed), and the one-page impact narrative was drafted with every claim pinned to evidence and every non-claim fenced. The day closed with a routing explainer doc: which tool is the model's decision, which backend is the code's, and the wall between them — traced with one message through fixtures.
+
 ## 5. How the vision changed — and what changed it
 
 - **"Chat exists" → "Chat was never live."** Evidence (the connector spike) beat assumption; scope grew by the honest minimum and the demo's opening line was corrected to match.

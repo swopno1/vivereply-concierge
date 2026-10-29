@@ -377,3 +377,25 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
   Settings nav. CopyButton + SignOutButton client components.
 - TSC green. Live checks post-deploy: signed-out /settings → /login (I curl);
   signed-in rooms render (founder, admin session).
+
+## 2026-10-29 — P4 part 1 live: deploy verified, regression green, throttle proven
+
+- DEPLOY FINGERPRINT 7/7 (proves merged code serves): /staff/embed error
+  panel + token gate, mint endpoint 401 key-only, /admin/register 307,
+  password + users APIs 401, bridge dual-auth message.
+- P0 REGRESSION 7/7 post-deploy: Krishnachura fallback mechanically
+  untouched (Bamboo Dec 1–3 2026 → ৳17,000 card).
+- Bengali dated total ✓; lookup name + ISO dates, zero contact leak ✓.
+- THROTTLE live: 7 bad logins → 401×5 then 429×2 (p4-throttle-probe@test).
+- Seabreeze Property row confirmed live (test-seabreeze resolves; unapproved
+  domain correctly rejected). Owner rows + seabreeze chat + widget + Tier 1
+  loop still need founder-assisted proofs (credentials by design).
+
+## 2026-10-29 — Reel verification: real Krishnachura loop (live)
+
+- Quote Bamboo Dec 1–3 2026 → ৳17,000 card (available: 4) → confirm with
+  test guest → REAL draft RES-202610-00004 (totalsMatch, PENDING).
+- Fresh-conversation lookup of that code → first name + ISO dates +
+  status, zero contact leak. Bengali dated total ৳১৭,০০০.
+- Full transcript: /tmp/reel-transcript.json. Reel rendered from it:
+  vivereply-reel.mp4 (3:00, 1080x1920, VO + burned captions).
