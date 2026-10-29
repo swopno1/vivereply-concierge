@@ -13,10 +13,14 @@
 // and fallback replies may word things slightly differently — same tools,
 // same guards, different weights. Data-flow note: on fallback turns, guest
 // text flows to Baseten instead of Meta (stated in the README, never
-// silent). The contributor-flagged model stays out of the guest path
-// entirely, primary or fallback.
+// silent). Only the two models below ever serve guest turns; no other
+// model name appears in any guest-path code.
 
 const BASE_URL = process.env.META_API_BASE_URL ?? "https://api.meta.ai/v1";
+// Free text, deliberately not an allowlist: this is founder-only server
+// config (no guest input can reach it), and pinning names would block
+// same-day model upgrades. The safety is procedural: changing it
+// requires a full eval re-run (docs/model-version.md) before deploy.
 const MODEL = process.env.META_MODEL ?? "muse-spark-1.3";
 const BASETEN_URL = "https://inference.baseten.co/v1";
 // Pinned, deliberately not an env override: the hackathon key works ONLY

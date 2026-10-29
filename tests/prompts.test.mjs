@@ -38,6 +38,15 @@ describe("systemPrompt payments section", () => {
   });
 });
 
+describe("systemPrompt citation rule", () => {
+  it("tells the model to name knowledge sources in both languages", () => {
+    for (const lang of ["en", "bn"]) {
+      const p = systemPrompt(lang, null, ROOMS, null, { payments: false });
+      assert.ok(p.includes("name the source"), lang);
+    }
+  });
+});
+
 describe("systemPrompt hold-release rule", () => {
   it("tells the 24h release on every draft in both languages", () => {
     for (const lang of ["en", "bn"]) {

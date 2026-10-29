@@ -1,9 +1,10 @@
 // Eval dashboard: weekly aggregates from the logs we already keep.
 // Tokens/turn, calls/turn, fallback rate, turn latency p50/p95, tool
-// mix, grounded-vs-silent split, helpful votes — the "Observe" half of
-// the optimization loop. No cost math: there are no verified
-// per-token prices for Muse Spark, and an invented price would be
-// worse than no number.
+// mix + error share, grounded-vs-silent split, helpful votes — the
+// "Observe" half of the optimization loop. Cost math runs ONLY on
+// founder-pasted prices (COST_USD_PER_1M_PROMPT / _COMPLETION env):
+// there are no verified list prices for Muse Spark, so the dashboard
+// refuses to invent any — unset prices print the stance, not $0.
 //
 //   pnpm eval:dashboard            # last 7 days
 //   pnpm eval:dashboard -- --days=30
@@ -81,6 +82,18 @@ async function main() {
         (modelCalls.length ? ` (${((100 * baseten) / modelCalls.length).toFixed(1)}%)` : "")
     );
 
+    // Cost: founder-pasted $/1M tokens only (see header). Reasoning
+    // tokens price as completion (the usual convention; stated so a
+    // different convention can correct the line, not the data).
+    const pricePrompt = Number(process.env.COST_USD_PER_1M_PROMPT ?? "");
+    const priceCompletion = Number(process.env.COST_USD_PER_1M_COMPLETION ?? "");
+    if (Number.isFinite(pricePrompt) && Number.isFinite(priceCompletion) && pricePrompt > 0 && priceCompletion > 0) {
+      const usd = (prompt * pricePrompt + (completion + reasoning) * priceCompletion) / 1_000_000;
+      console.log(`est. cost: $${usd.toFixed(2)} @ $${pricePrompt}/$${priceCompletion} per 1M prompt/completion`);
+    } else {
+      console.log("est. cost: n/a — set COST_USD_PER_1M_PROMPT + COST_USD_PER_1M_COMPLETION to price this window");
+    }
+
     // Per-property split (spend follows design: which tenant burns).
     const byProp = new Map();
     for (const l of modelCalls) {
@@ -109,6 +122,15 @@ async function main() {
     for (const [t, n] of [...toolMix.entries()].sort((a, b) => b[1] - a[1])) {
       console.log(`  ${t}: ${n}`);
     }
+    // Tool error share: outputs carrying { error } over all tool calls
+    // (model_call rows excluded — they never error by construction).
+    // A rising share means the agent is fighting the Suite, not serving.
+    const toolRows = logs.filter((l) => l.toolName !== "model_call" && l.toolName !== "rag_retrieval");
+    const toolErrs = toolRows.filter((l) => typeof (l.output ?? {}).error === "string").length;
+    console.log(
+      `tool errors: ${toolErrs}/${toolRows.length}` +
+        (toolRows.length ? ` (${((100 * toolErrs) / toolRows.length).toFixed(1)}%)` : "")
+    );
     const ragAttempts = logs.filter((l) => l.toolName === "rag_retrieval");
     const ragGrounded = ragAttempts.filter((l) => ((l.output ?? {}).chunks ?? []).length > 0).length;
     console.log(

@@ -58,6 +58,18 @@ by it: `curl` the production URL (not the deployment URL) for
 origin, then run `pre-deploy-checklist.md` §Human-eyes. Only then
 update the evidence log and tell anyone it's fixed.
 
+## Function timeout budget (no maxDuration set — deliberate)
+
+The chat route declares no `maxDuration`, and that is a decision,
+not an omission: the worst-case single model call is ~120s (60s
+primary timeout + 60s fallback attempt), so any cap under ~130s
+would AMPUTATE the fallback path instead of protecting it. A blind
+`maxDuration = 60` breaks more than it fixes (and Hobby plans cap
+at 60 anyway — verify the plan before touching this). Typical turns
+complete in seconds; the provider timeouts are the real bound. If
+Vercel ever kills a long turn, the fix is a plan-aware cap ≥130s,
+not a guess.
+
 ## Uptime monitoring (recommended, not yet built)
 
 Ping `/api/healthz?deep=1` every 1–5 min from outside Vercel (Better
