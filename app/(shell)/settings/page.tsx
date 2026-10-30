@@ -177,14 +177,15 @@ export default async function SettingsPage({
   // Booking payments (flag-gated): recent links, tokens never leave the server.
   const paymentsOn = paymentsEnabledGlobal();
   // Stripe mode indicator (server-computed; the key itself never leaves
-  // the server). Test vs live comes from the key prefix; an unrecognized
-  // prefix is shown as-is rather than guessed.
+  // the server). Test vs live comes from the key prefix — secret (sk_)
+  // or restricted (rk_, the recommended kind); an unrecognized prefix
+  // is shown as-is rather than guessed.
   const stripeKey = process.env.STRIPE_SECRET_KEY ?? "";
   const stripeMode = !stripeKey
     ? ("unset" as const)
-    : stripeKey.startsWith("sk_test_")
+    : stripeKey.startsWith("sk_test_") || stripeKey.startsWith("rk_test_")
       ? ("test" as const)
-      : stripeKey.startsWith("sk_live_")
+      : stripeKey.startsWith("sk_live_") || stripeKey.startsWith("rk_live_")
         ? ("live" as const)
         : ("unrecognized" as const);
   const stripeWebhook = Boolean(process.env.STRIPE_WEBHOOK_SECRET);

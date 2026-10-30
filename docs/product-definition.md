@@ -3,9 +3,24 @@
 Read this any time you forget what we're building. If this file and the app
 disagree, the app wins and this file must be updated.
 
-Family note (adopted 30 Oct 2026): ViveReply is Suite + Chatbot;
-Concierge is the Chatbot line's hackathon build name. The entry stays
-"Vivereply Concierge".
+## Where this fits (the two faces — adopted 30 Oct 2026)
+
+ViveReply is one business solution with two faces:
+
+- ViveReply Suite — the complete package for a hotel/resort: the
+  direct-booking website plus the property management side
+  (bookings, front desk, inventory). Pre-existing; not hackathon
+  work. (Suite-side detail per Cosmo; this repo holds the proof
+  only for the chatbot half.)
+- ViveReply Chatbot — the AI front-office assistant: answers guests,
+  checks live availability, quotes exact prices, drafts bookings.
+- Vivereply Concierge is the Chatbot's hackathon build name — the
+  entry for the Meta Global AI Developer Hackathon (Startup track),
+  built Oct 27–Nov 4 on the Suite's live booking data.
+
+In judges-facing copy it is always a front-desk agent, never generic
+agent infrastructure: native tool calling solving a domain-specific
+problem in a closed setup (the resort's own front desk).
 
 Last updated: 30 Oct 2026 (multi-tenant live, payments built flag-gated, submission evidence in progress).
 
@@ -162,12 +177,13 @@ check runs. Nothing is faked with timers.
 
 ## Current position (30 Oct 2026)
 
-Everything ever branched is merged: multi-tenant core, RAG onboarding +
-Modal worker, public signup, booking payments, staff triage board, audit
-trail, throttles, draft-claim serialization, error boundaries. Live at
-app.vivereply.com + demo1.vivereply.com; 70 unit tests, 19 eval cases,
-10 isolation probes green in code. See docs/STATUS.md for the snapshot
-and docs/evidence-log.md for the journal.
+Everything ever branched is merged (PR #6 RAG onboarding, #7
+tenant-core, #8 auth tier 1, plus signup, payments, triage, audit,
+throttles, draft-claim, error boundaries). Live at app.vivereply.com
++ demo1.vivereply.com; 70 unit tests, 19 eval cases, 10 isolation
+probes green in code (recorded runs still owed — see below). See
+docs/STATUS.md for the snapshot and docs/evidence-log.md for the
+journal.
 
 Live proofs still owed (no claim without them): recorded eval + probes
 runs with committed JSON, payments trial end to end, live fallback
@@ -193,6 +209,11 @@ The video is scripted, unfilmed. See docs/hackathon-final.md.
   configuration locked until verified. Seed file kept for test tenants.
 - Payments (built, trial-pending): insist-per-draft, server-minted /pay
   links (Stripe/manual), webhook + staff confirm, status re-check.
+  Stripe over hand-rolled REST (no SDK): per-link idempotency keys on
+  session create, HMAC-verified webhooks with timestamp tolerance.
+- Client integration: staff bridge API (list/read/assign/close/notes,
+  docs/bridge-integration.md); demo1's /admin/chatbot-admin works it
+  natively (demo1-side, attested Oct 30).
 - UI: ChatGPT-style chat in a left-nav shell (role-filtered, sign-in/out);
   both widgets branded; privacy notice + helpful-rating post-chat.
   (A conversation-history list is still post-hackathon work.)
