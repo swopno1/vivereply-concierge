@@ -477,10 +477,15 @@ if HAVE_MODAL:
         "fastapi[standard]",
     )
 
+    # memory=2048: Modal's 128 MB default OOM-crashes this worker
+    # (fastapi + trafilatura + pandas + up to 2000 embedded chunks in
+    # flight) — that crash loop is what the Modal warning reports.
+    # 2 GB is cheap here: the worker idles at ~zero between runs.
     @app.function(
         image=modal_image,
         secrets=[modal.Secret.from_name("vivereply-onboarding")],
         timeout=1800,
+        memory=2048,
     )
     @modal.fastapi_endpoint(method="POST")
     def ingest(payload: dict) -> dict:
