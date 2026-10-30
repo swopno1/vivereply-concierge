@@ -8,6 +8,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SUGGESTION_SEGMENTS, cleanSegmentIds } from "@/lib/segments";
 
 type Profile = {
   businessName: string;
@@ -19,6 +20,7 @@ type Profile = {
   tone: string;
   languages: string;
   greeting: string;
+  suggestionSegments: string[];
 };
 
 type RunState = {
@@ -44,6 +46,7 @@ const EMPTY_PROFILE: Profile = {
   tone: "",
   languages: "",
   greeting: "",
+  suggestionSegments: [],
 };
 
 const inputClass =
@@ -92,6 +95,7 @@ export default function OnboardingBoard({
         tone: data.profile.tone ?? "",
         languages: Array.isArray(data.profile.languages) ? data.profile.languages.join(", ") : "",
         greeting: data.profile.greeting ?? "",
+        suggestionSegments: cleanSegmentIds(data.profile.suggestionSegments),
       });
     } else {
       setProfile(EMPTY_PROFILE);
@@ -143,6 +147,7 @@ export default function OnboardingBoard({
             tone: profile.tone,
             languages: profile.languages.split(",").map((l) => l.trim()).filter(Boolean),
             greeting: profile.greeting,
+            suggestionSegments: profile.suggestionSegments,
           },
           website: profile.website || undefined,
           filePaths: files.map((f) => f.path),
@@ -280,6 +285,38 @@ export default function OnboardingBoard({
           </div>
           <input value={profile.tone} onChange={(e) => setProfile({ ...profile, tone: e.target.value })} placeholder="Tone (e.g. warm, short replies, formal Bengali)" className={inputClass} />
           <input value={profile.greeting} onChange={(e) => setProfile({ ...profile, greeting: e.target.value })} placeholder="Greeting line (optional)" className={inputClass} />
+
+          <h2 className="text-lg font-bold text-gray-900">Suggestion topics</h2>
+          <p className="text-sm text-gray-500">
+            Tick what the chatbot may advise on. Suggestions come only from your documents and
+            website below — never from general knowledge. Unticked topics get a handoff to staff.
+          </p>
+          <div className="flex flex-col gap-2">
+            {SUGGESTION_SEGMENTS.map((s) => {
+              const on = profile.suggestionSegments.includes(s.id);
+              return (
+                <label key={s.id} className="flex cursor-pointer items-start gap-2 text-sm text-gray-800">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={on}
+                    onChange={() =>
+                      setProfile({
+                        ...profile,
+                        suggestionSegments: on
+                          ? profile.suggestionSegments.filter((x) => x !== s.id)
+                          : [...profile.suggestionSegments, s.id],
+                      })
+                    }
+                  />
+                  <span>
+                    <span className="font-medium">{s.label}</span>
+                    <span className="text-gray-500"> — {s.blurb}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
 
           <h2 className="text-lg font-bold text-gray-900">Documents</h2>
           <label className="cursor-pointer self-start rounded-full border px-5 py-2 text-sm hover:bg-gray-50">

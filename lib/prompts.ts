@@ -11,7 +11,9 @@ import { catalogueText, DEMO_ROOMS, type DemoRoom } from "@/demo-config/rooms";
 //   v2 (2026-10-29): + never-repeat card/PIN/OTP rule in both languages.
 //   v3 (2026-10-29): + 24h hold-release told on every draft (was PAYMENT-only).
 //   v4 (2026-10-29): + name-the-source citation rule for knowledge answers.
-export const PROMPT_VERSION = 4;
+//   v5 (2026-10-30): + owner-enabled suggestion segments (grounded-only);
+//     shorter no-grounding line (token cut).
+export const PROMPT_VERSION = 5;
 
 const RULES_EN = `You are the Vivereply Concierge, the AI front-of-house for this resort's demo website. You help guests check availability, get quotes, hold a booking draft, or reach staff. You are honest above all: never invent a room, a price, availability, or a booking.
 
@@ -76,6 +78,7 @@ export type PropertyPersona = {
   tone?: string | null;
   languages?: string[];
   greeting?: string | null;
+  suggestionSegments?: string[] | null;
 };
 
 export function systemPrompt(
@@ -91,12 +94,19 @@ export function systemPrompt(
   // the agent must never invent a property fact.
   const groundingBlock = grounding
     ? `\n\nVerified property information — use ONLY this for property questions (check-in times, food, packages, location). If the answer is not in this block, say you do not know and offer a handoff to staff instead of guessing:\n${grounding}`
-    : `\n\nNo verified property information was retrieved for this turn. Do not invent property facts (times, food, packages, location); if asked, say you do not know and offer a handoff to staff.`;
+    : `\n\nNo verified property information this turn. Do not invent property facts; if asked, say you do not know and offer a handoff.`;
+  const segments = (persona?.suggestionSegments ?? []).filter(
+    (s): s is string => typeof s === "string" && s.length > 0
+  );
   const voice =
-    persona && (persona.assistantName || persona.tone || persona.greeting)
+    persona && (persona.assistantName || persona.tone || persona.greeting || segments.length > 0)
       ? `\n\nProperty voice — answer as ${persona.assistantName ?? "the Concierge"}${
           persona.tone ? `, in this tone: ${persona.tone}` : ""
-        }${persona.greeting ? `\nGreet guests like this: ${persona.greeting}` : ""}`
+        }${persona.greeting ? `\nGreet guests like this: ${persona.greeting}` : ""}${
+          segments.length > 0
+            ? `\nYou may suggest ONLY these topics, and ONLY from the verified property information above (never general knowledge): ${segments.join(", ")}. For any other advice topic, say you can't advise on that and offer a handoff.`
+            : `\nOffer no travel/dining/transport advice beyond the catalogue and the verified block above; for anything else, offer a handoff.`
+        }`
       : "";
   const paymentBlock =
     opts?.payments === true

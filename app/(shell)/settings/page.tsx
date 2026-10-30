@@ -21,6 +21,7 @@ import PasswordChange from "../../components/PasswordChange";
 import EvalRunner from "../../components/EvalRunner";
 import VerifyPrompt from "../../components/VerifyPrompt";
 import Payments from "../../components/Payments";
+import ChatbotProfile from "../../components/ChatbotProfile";
 import OnboardingApprovals from "../../components/OnboardingApprovals";
 import OwnerActions from "../../components/OwnerActions";
 import PropertyStatusToggle from "../../components/PropertyStatusToggle";
@@ -131,6 +132,9 @@ export default async function SettingsPage({
     active: d.active,
     createdAt: d.createdAt.toISOString(),
   }));
+  const chatbotProfile = await prisma.propertyProfile
+    .findUnique({ where: { propertyId } })
+    .catch(() => null);
   const recentLogs = await prisma.toolCallLog.findMany({
     where: {
       conversation: { propertyId },
@@ -334,6 +338,21 @@ export default async function SettingsPage({
           <AuditTrail properties={allProperties.map((p) => ({ id: p.id, name: p.name }))} />
         </Section>
       )}
+
+      <Section
+        title="Chatbot name + topics"
+        blurb="What guests see (name, greeting, tone) and what the chatbot may advise on. Saving here takes effect on the next widget load — no re-ingestion."
+      >
+        <ChatbotProfile
+          propertyId={propertyId}
+          initial={{
+            assistantName: chatbotProfile?.assistantName ?? "",
+            greeting: chatbotProfile?.greeting ?? "",
+            tone: chatbotProfile?.tone ?? "",
+            suggestionSegments: chatbotProfile?.suggestionSegments ?? [],
+          }}
+        />
+      </Section>
 
       <Section
         title="Chat widget codes"

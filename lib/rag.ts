@@ -22,6 +22,11 @@ export type RagSearch = (embedding: number[]) => Promise<RagChunk[]>;
 
 export const RAG_SIMILARITY_THRESHOLD = 0.45;
 export const RAG_TOP_K = 4;
+// Token budget: chunks are 2000-char windows on disk, but the model only
+// ever needs the head — the match that cleared 0.45 sits at the front.
+// 600 chars x 4 chunks bounds grounding at ~2.4k chars (~600 tokens)
+// instead of ~8k chars (~2k tokens).
+export const RAG_CHUNK_CHAR_CAP = 600;
 
 export function toVectorLiteral(embedding: number[]): string {
   if (embedding.length === 0 || !embedding.every((n) => Number.isFinite(n))) {
@@ -43,6 +48,14 @@ export async function retrieveGrounding(params: {
   if (chunks.length === 0) {
     return { text: null, chunks: [] };
   }
-  const text = chunks.map((c) => `- ${c.title}: ${c.content}`).join("\n");
+  const text = chunks
+    .map((c) => {
+      const head =
+        c.content.length > RAG_CHUNK_CHAR_CAP
+          ? `${c.content.slice(0, RAG_CHUNK_CHAR_CAP)}…`
+          : c.content;
+      return `- ${c.title}: ${head}`;
+    })
+    .join("\n");
   return { text, chunks };
 }

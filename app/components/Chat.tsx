@@ -227,16 +227,19 @@ function CardView({ card }: { card: Card }) {
 export default function Chat({
   compact = false,
   title,
+  greeting,
   token,
   source,
 }: {
   compact?: boolean;
   title?: string;
+  greeting?: string;
   token: string;
   source: "direct" | "widget";
 }) {
+  const firstLine = greeting || GREETING;
   const [messages, setMessages] = useState<Message[]>([
-    { id: "greeting", role: "assistant", text: GREETING },
+    { id: "greeting", role: "assistant", text: firstLine },
   ]);
   const [input, setInput] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -279,7 +282,7 @@ export default function Chat({
     conversationIdRef.current = null;
     setConversationId(null);
     setVote(null);
-    setMessages([{ id: "greeting", role: "assistant", text: GREETING }]);
+    setMessages([{ id: "greeting", role: "assistant", text: firstLine }]);
     setInput("");
     setPhase("idle");
     setPhaseDetail("");

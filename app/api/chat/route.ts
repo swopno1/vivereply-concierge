@@ -21,6 +21,7 @@ import { detectLanguage } from "@/lib/language";
 import { buildCards } from "@/lib/cards";
 import { embedText } from "@/lib/embeddings";
 import { retrieveGrounding, toVectorLiteral } from "@/lib/rag";
+import { capHistoryForModel } from "@/lib/history";
 import { verifyChatToken } from "@/lib/auth";
 import { isDomainApproved } from "@/lib/domains";
 import { checkChatRate, checkChatRateByIp } from "@/lib/ratelimit";
@@ -529,12 +530,9 @@ export async function POST(req: NextRequest) {
                   : { payments: false as const }
               ),
             },
-            ...history.map(
-              (m: { role: string; content: string }): { role: "assistant" | "user"; content: string } => ({
-                role: m.role === "assistant" ? "assistant" : "user",
-                content: m.content,
-              })
-            ),
+            // Token budget: 20 messages kept, each capped (lib/history)
+            // so old pastes can't tax every later turn.
+            ...capHistoryForModel(history),
           ],
           tools: toolDefinitionsFor(catalogue, { payments: paymentsOn }),
           execute,
