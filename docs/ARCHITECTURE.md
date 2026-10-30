@@ -18,16 +18,24 @@ guest site ──widget.js──> /api/widget-token ──token──> iframe /w
                                      never trusted for it)
                                   2. kill-switch: property ACTIVE?
                                      domain still approved?
-                                  3. resolve adapter: Settings row →
+                                  3. throttle: per-property (60/min) +
+                                     per-IP (30/min) fixed windows,
+                                     counted pre-write; 429 + Retry-After.
+                                     Fail OPEN with alarm (guardrail,
+                                     never the product).
+                                  4. resolve adapter: Settings row →
                                      demo env (demo only) → fixture
                                      (fixture ids) → honest error
-                                  4. RAG attempt (trivial turns skip;
+                                  5. RAG attempt (trivial turns skip;
                                      always logged, empty or not)
-                                  5. tool loop, max 6 rounds
+                                  6. tool loop, max 6 rounds
                                      (lib/agent.ts): Muse Spark picks
                                      room-scoped tools, reads live
-                                     Suite results, answers or calls
-                                  6. persist messages + tool logs,
+                                     Suite results, answers or calls.
+                                     Drafts: claim-then-book (unique
+                                     DraftClaim serializes overlap) +
+                                     conversation-id idempotency key.
+                                  7. persist messages + tool logs,
                                      build cards from same-turn logs,
                                      stream SSE (phase → typing → done)
 ```
@@ -39,7 +47,10 @@ per-turn retrieval embeds the guest message via Gemini.
 
 - Concierge DB (Supabase Postgres + Prisma): conversations,
   messages, tool logs, handoffs + notes, tenants, users, sessions,
-  bindings, catalogues, payment links, ratings, knowledge.
+  bindings, catalogues, payment links, ratings, knowledge, plus
+  ops tables: RateBucket + IpRateBucket (throttles), DraftClaim
+  (booking serialization), AuditLog (admin trail), WidgetOpen
+  (funnel opens, no PII).
 - Suite data is NEVER joined: referenced by ID/code only, fetched
   over HTTP per call (`docs/suite-api-spec.md` v1 contract).
 - Secrets: Suite keys encrypted at rest (BINDING_SECRET_KEY);
@@ -56,6 +67,9 @@ per-turn retrieval embeds the guest message via Gemini.
 | Webhooks | Stripe signature verified, timestamp-tolerated, idempotent |
 | Sessions | Signed cookie + server row (revocable), 7-day absolute + 24h idle, verified-email gate before config/PII |
 | Staff surfaces | Session + tenant + verification gates; bridge API needs the client-server key |
+| Throttles | Fixed-window counters, DB-backed atomic upserts; blind-table fails open with alarm, never closed |
+| Admin actions | Every mutation writes AuditLog (who/what/property/outcome, never secrets); super-admin read only |
+| Framing | `frame-ancestors 'self'` + nosniff globally; /widget + /staff/embed exempt (token+origin gates instead) |
 
 ## Failure model (what fails into what)
 
@@ -65,6 +79,8 @@ per-turn retrieval embeds the guest message via Gemini.
 - RAG/embedding failure → ungrounded turn (must say don't-know), never fatal.
 - Suspended property / deapproved domain → immediate refusal on next message (checked per message, not per token).
 - Payment link expired/invalid/wrong-booking → one generic face; Stripe double-clicks collapse via idempotency key.
+- Overlapping draft attempts → second turn answers already-held/in-progress (claim), never a double booking; retries replay via idempotency key.
+- Staff-page crash (DB unreachable mid-render) → error boundary with retry, never a 500 wall.
 
 ## Tenancy model
 
