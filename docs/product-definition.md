@@ -44,7 +44,11 @@ An AI front-of-house that lives on the resort's website as a chat box. A guest
 types in English or Bengali. The Concierge:
 
 1. Checks REAL availability (how many units are free, from the booking system).
-2. Gives an EXACT quote (real nightly prices × nights, e.g. ৳29,000 for 2 nights).
+2. Gives an EXACT quote (property catalogue prices × nights, e.g. ৳29,000
+   for 2 nights). The quote is computed, never fetched — but the moment
+   a draft is created, the Suite's OWN total governs: any seasonal rates
+   or discounts in the client's backend flow through as live data, and a
+   mismatch against the quote is surfaced, never hidden.
 3. HOLDS a booking draft (a PENDING hold with a booking code like
    RES-202610-00002 — no payment, the resort confirms later).
 4. VERIFIES bookings privately (by code it shows only dates + first name +
@@ -243,7 +247,8 @@ docs/hackathon-final.md; rehearsal detail is docs/demo-test-plan.md.
 - Test resort: Seabreeze Test Inn (fixture backend, FIX- codes, Harbor Suite
   ৳12,500 · Dune Room ৳6,800).
 - Rooms/night (Krishnachura): Terracotta Villa ৳14,500 · Bamboo Cottage ৳8,500 ·
-  Clay House Suite ৳9,800 · Palm Loft ৳7,200 · Earth Lodge ৳16,800. Flat rates.
+  Clay House Suite ৳9,800 · Palm Loft ৳7,200 · Earth Lodge ৳16,800. Flat
+  demo catalogue; client-side seasonal/discount logic governs draft totals live.
 - Check-in 2:00 PM, check-out 11:00 AM.
 - Live: app.vivereply.com (Concierge) · demo1.vivereply.com (resort + widget).
 - AI: Muse Spark is the agent; Gemini is embeddings-only.

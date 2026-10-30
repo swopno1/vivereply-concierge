@@ -14,7 +14,10 @@
 ## In the portal
 
 - [ ] Accept the rules; confirm eligibility (new work: first commit
-      Oct 27, 2026, inside Oct 26 – Nov 4).
+      Oct 27, 2026, inside Oct 26 – Nov 4). While reading: confirm NO
+      open-source-license requirement (our LICENSE is proprietary with
+      a hackathon-evaluation exception — if the rules demand OSS,
+      STOP and decide before pasting anything).
 - [ ] Confirm track/theme spelling, judging weights (expected
       30/25/25/20 — VERIFY, do not assume), video caps.
 - [ ] Paste docs/submission-text.md fields; replace every [VERIFY].
@@ -25,7 +28,10 @@
 ## After submit
 
 - [ ] Screenshot the confirmation; note the submission ID + time.
-- [ ] Freeze deploys Nov 5–8 (judging) except a downed site.
+- [ ] Freeze deploys from the moment you submit through Nov 8
+      (judging runs Nov 4–8) except a downed site.
 - [ ] Uptime monitor armed on both sites (external service).
 - [ ] Calendar: Nov 9 cron removal (nightly contracts) if the repo
-      goes quiet; Nov 16 winners — no action either way.
+      goes quiet. Nov 9 closing ceremony = winners announced
+      (official key dates); community vote Nov 9–16 per info pack
+      (verify mechanics in portal/Discord).
