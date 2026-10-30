@@ -34,12 +34,22 @@ export async function checkChatRate(propertyId: string, now = new Date()): Promi
   const limit = rateLimitPerMinute();
   if (limit === 0) return { allowed: true };
   const windowStart = windowStartOf(now);
-  const row = await prisma.rateBucket.upsert({
-    where: { propertyId_windowStart: { propertyId, windowStart } },
-    create: { propertyId, windowStart, count: 1 },
-    update: { count: { increment: 1 } },
-    select: { count: true },
-  });
+  // Fail OPEN with an alarm: the throttle is a guardrail, not the
+  // product — a sick bucket table must never halt every turn (lived
+  // through exactly this: code deployed before `prisma db push`).
+  // Abuse risk is nil (callers can't break the table through the API).
+  let row: { count: number };
+  try {
+    row = await prisma.rateBucket.upsert({
+      where: { propertyId_windowStart: { propertyId, windowStart } },
+      create: { propertyId, windowStart, count: 1 },
+      update: { count: { increment: 1 } },
+      select: { count: true },
+    });
+  } catch (e) {
+    console.error("chat throttle blind (allowing turn):", e instanceof Error ? e.message : e);
+    return { allowed: true };
+  }
   prisma.rateBucket
     .deleteMany({ where: { windowStart: { lt: new Date(now.getTime() - 2 * 3600_000) } } })
     .catch(() => null);
@@ -55,12 +65,19 @@ export async function checkChatRateByIp(ip: string, now = new Date()): Promise<R
   if (limit === 0 || !ip) return { allowed: true };
   const windowStart = windowStartOf(now);
   const key = ip.slice(0, 80);
-  const row = await prisma.ipRateBucket.upsert({
-    where: { ip_windowStart: { ip: key, windowStart } },
-    create: { ip: key, windowStart, count: 1 },
-    update: { count: { increment: 1 } },
-    select: { count: true },
-  });
+  // Fail open with an alarm, same as the per-tenant check above.
+  let row: { count: number };
+  try {
+    row = await prisma.ipRateBucket.upsert({
+      where: { ip_windowStart: { ip: key, windowStart } },
+      create: { ip: key, windowStart, count: 1 },
+      update: { count: { increment: 1 } },
+      select: { count: true },
+    });
+  } catch (e) {
+    console.error("chat IP throttle blind (allowing turn):", e instanceof Error ? e.message : e);
+    return { allowed: true };
+  }
   prisma.ipRateBucket
     .deleteMany({ where: { windowStart: { lt: new Date(now.getTime() - 2 * 3600_000) } } })
     .catch(() => null);

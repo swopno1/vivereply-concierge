@@ -3,6 +3,8 @@
 Run top to bottom BEFORE the camera rolls or the portal submit. Any
 red line stops filming until green — a missing beat scores better
 than a staged one (see docs/demo-script.md fallbacks).
+Prerequisite: docs/demo-test-plan.md §5 go/no-go passed the evening
+before. The morning re-proves; it never discovers.
 
 ## 1. Availability re-proof (5 min)
 
@@ -28,7 +30,7 @@ than a staged one (see docs/demo-script.md fallbacks).
 
 ## 3. Regression gate (15 min, machine with creds)
 
-- [ ] `pnpm eval` → 18/18 (fixture property); commit results JSON.
+- [ ] `pnpm eval` → 19/19 (fixture property); commit results JSON.
 - [ ] `pnpm probes` → 10/10.
 - [ ] Results stamped with today's commit + prompt version.
 

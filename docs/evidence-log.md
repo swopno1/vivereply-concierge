@@ -399,3 +399,37 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
   status, zero contact leak. Bengali dated total ৳১৭,০০০.
 - Full transcript: /tmp/reel-transcript.json. Reel rendered from it:
   vivereply-reel.mp4 (3:00, 1080x1920, VO + burned captions).
+
+## 2026-10-30 — Pre-submission live pass (founder-assist, curl)
+
+- Reachability 200×4: app healthz?deep=1 (ok:true, db:up, commit
+  a7c9d60 — one behind HEAD a15e7fe), /privacy, demo1 /, widget.js.
+- Owner login krishnachura@test.com → OWNER/krishnachura-retreat;
+  /staff /settings /onboarding all 200. (Seed password still active
+  — rotation reminder stands.)
+- Widget handshake (Origin demo1) mints 188-char token. Chat error
+  paths JSON-clean (403s). Rating validates (404 JSON, bogus conv).
+- RED: POST /api/chat with valid token → HTTP 500, empty body.
+  Diagnosis: throttle upserts vs never-pushed RateBucket/IpRateBucket
+  tables (schema queue pending since round 17). Token verifies, DB
+  reads fine — throw is past-verify, pre-stream; only new-table
+  writes fit. Founder fix: `prisma db push` then re-test turn.
+- Hardening (local, uncommitted at log time): throttle fail-open
+  with alarm + regression test (70/70 green, typecheck green) so a
+  guardrail can never halt chat again. Deploy after the push.
+- NOT run from here (blocked/unsafe): full guest turn, eval 19/19,
+  probes, contracts (env), dashboard/funnel/load (DB TCP), signup
+  (would pollute prod), payments trial, fallback drill (preview),
+  onboarding run, mobile device pass — all founder-side per
+  docs/demo-test-plan.md §4.
+
+## 2026-10-30 — Chat restored after schema push (live)
+
+- Founder `prisma db push` Done in 6.58s → immediate re-test:
+  Terracotta Nov 10–12 quote HTTP 200, ৳14,500×2=৳29,000, quote
+  card, available:1. Diagnosis CONFIRMED (missing throttle tables).
+- Bengali turn live: wrong room name corrected to Bamboo Cottage
+  in Bengali, Bengali digits, no invented quote, dates asked.
+- Rooftop-pool turn live: honest unknown + handoff offer, no cards.
+- WARNING for filming: Terracotta Nov 10–12 shows available:1 —
+  rehearse drafts on ALT windows only (demo-test-plan §Rules).

@@ -437,7 +437,7 @@ export default async function SettingsPage({
             ["Widget token handshake (per-message domain re-check)", true],
             [`Bridge keys (hashed, revocable, ${tokenCount} active)`, true],
             ["Staff widget tokens (15-minute, origin-bound)", true],
-            ["Rate limiting", false],
+            ["Rate limiting (chat per-property + per-IP, login throttle)", true],
             ["Two-factor authentication", false],
           ].map(([label, on]) => (
             <p key={String(label)} className="flex items-center justify-between gap-3 text-gray-900">
@@ -457,7 +457,7 @@ export default async function SettingsPage({
       {session.role === "SUPER_ADMIN" && (
         <Section
           title="Chatbot exam"
-          blurb="The 18-case eval, runnable from here. Demo hotel only — a run can never touch real bookings. Same exam as the terminal runner."
+          blurb="The 19-case eval, runnable from here. Demo hotel only — a run can never touch real bookings. Same exam as the terminal runner."
         >
           <EvalRunner
             cases={(CASES as { id: string; category: string; turns: unknown[] }[]).map((c) => ({
@@ -486,7 +486,7 @@ export default async function SettingsPage({
             <p className="text-sm text-gray-500">
               {session.role === "SUPER_ADMIN"
                 ? "The bootstrap password lives in the deployment environment, not in the app."
-                : `Sees ${property?.name ?? propertyId} only. No signup — properties are registered by the Vivereply team.`}
+                : `Sees ${property?.name ?? propertyId} only. One login, one resort — nothing else is visible from here.`}
             </p>
           </div>
           <SignOutButton />

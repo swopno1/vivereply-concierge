@@ -3,7 +3,8 @@
 // by probes against live data, not here.
 import { describe, it, afterEach } from "node:test";
 import { strict as assert } from "node:assert";
-import { rateLimitPerMinute, ipRateLimitPerMinute, windowStartOf, RATE_WINDOW_MS } from "@/lib/ratelimit";
+import { rateLimitPerMinute, ipRateLimitPerMinute, windowStartOf, RATE_WINDOW_MS, checkChatRate, checkChatRateByIp } from "@/lib/ratelimit";
+import { prisma } from "@/lib/prisma";
 
 const SAVED = process.env.CHAT_RATE_LIMIT_PER_MIN;
 const SAVED_IP = process.env.CHAT_RATE_LIMIT_IP_PER_MIN;
@@ -49,5 +50,33 @@ describe("ipRateLimitPerMinute", () => {
     assert.equal(ipRateLimitPerMinute(), 0);
     process.env.CHAT_RATE_LIMIT_IP_PER_MIN = "nonsense";
     assert.equal(ipRateLimitPerMinute(), 30);
+  });
+});
+
+describe("throttle fail-open", () => {
+  it("allows the turn (with an alarm) when the bucket table is sick", async () => {
+    // Regression: code deployed before `prisma db push` left every
+    // chat turn 500ing on the missing RateBucket table. The guardrail
+    // must alarm, never halt the line.
+    process.env.CHAT_RATE_LIMIT_PER_MIN = "60";
+    process.env.CHAT_RATE_LIMIT_IP_PER_MIN = "30";
+    const origTenant = prisma.rateBucket.upsert;
+    const origIp = prisma.ipRateBucket.upsert;
+    const origErr = console.error;
+    prisma.rateBucket.upsert = async () => {
+      throw new Error('relation "RateBucket" does not exist');
+    };
+    prisma.ipRateBucket.upsert = async () => {
+      throw new Error('relation "IpRateBucket" does not exist');
+    };
+    console.error = () => {};
+    try {
+      assert.equal((await checkChatRate("p1")).allowed, true);
+      assert.equal((await checkChatRateByIp("1.2.3.4")).allowed, true);
+    } finally {
+      prisma.rateBucket.upsert = origTenant;
+      prisma.ipRateBucket.upsert = origIp;
+      console.error = origErr;
+    }
   });
 });
