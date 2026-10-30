@@ -42,10 +42,11 @@ fixes that unblock those two.
 - Replace every [VERIFY] in docs/submission-text.md with portal
   truth (rules, weights, caps, contributors).
 
-## Nov 5–8 — Freeze (judging)
+## Nov 5–8 — Freeze (judging runs Nov 4–8)
 
-- No deploys except a downed site (rollback path only, never a
-  forward fix under pressure). Uptime monitor armed on both sites.
+- Freeze starts the moment you submit Nov 4. No deploys except a
+  downed site (rollback path only, never a forward fix under
+  pressure). Uptime monitor armed on both sites.
 - Watch: Vercel logs once daily for error strings; do not touch
   config. Answer judge questions if the portal allows.
 

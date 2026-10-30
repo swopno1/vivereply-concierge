@@ -8,8 +8,10 @@ dashboard — they are not observable from this repo.
 
 - Project ref: [FOUNDER] (dashboard URL contains it:
   `supabase.com/dashboard/project/<ref>`)
-- Region: [FOUNDER] (Settings → General → Region; closest to the
-  guests is ap-south / ap-southeast for Bangladesh resorts)
+- Region: Seoul (per info pack Oct 30 — VERIFY in dashboard:
+  Settings → General → Region). Note: Seoul is far from Bangladesh
+  guests; latency is acceptable for the demo, revisit region choice
+  with the first paying tenant.
 - Postgres version: [FOUNDER] (Settings → General)
 - Pooling: Supabase pooler (`aws-0-….pooler.supabase.com:5432`) for
   `DATABASE_URL`; direct connection for `DIRECT_URL`

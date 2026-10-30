@@ -13,8 +13,9 @@
 // and fallback replies may word things slightly differently — same tools,
 // same guards, different weights. Data-flow note: on fallback turns, guest
 // text flows to Baseten instead of Meta (stated in the README, never
-// silent). Only the two models below ever serve guest turns; no other
-// model name appears in any guest-path code.
+// silent). Only the two models below ever serve guest turns — in
+// particular no `-contributor` model variant ever touches guest data,
+// on either backend (no such name appears in any guest-path code).
 
 const BASE_URL = process.env.META_API_BASE_URL ?? "https://api.meta.ai/v1";
 // Free text, deliberately not an allowlist: this is founder-only server
