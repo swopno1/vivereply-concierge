@@ -61,6 +61,21 @@ const NAV_GROUPS: { heading: string; items: { href: string; label: string; icon:
     heading: "Configure",
     items: [
       {
+        href: "/setup",
+        label: "Getting started",
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path
+              d="M5.5 8.5 7.5 10.5 11 6M3 2.5h10v11H3v-11Z"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        ),
+      },
+      {
         href: "/settings",
         label: "Settings",
         icon: (

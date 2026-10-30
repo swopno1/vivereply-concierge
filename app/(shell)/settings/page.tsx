@@ -278,7 +278,11 @@ export default async function SettingsPage({
         <h1 className="text-xl font-bold text-gray-900">Settings</h1>
         <p className="text-sm text-gray-500">
           Configuration rooms for {property?.name ?? propertyId}. Real rooms work; rooms marked
-          Later are reserved space for upcoming features.
+          Later are reserved space for upcoming features. New here? Start with{" "}
+          <a href="/setup" className="underline">
+            Getting started
+          </a>
+          .
         </p>
       </header>
 
