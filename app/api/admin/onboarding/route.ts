@@ -13,6 +13,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
 import { ONBOARDING_BUDGET, sanitizeFilename } from "@/lib/onboarding";
+import { cleanSegmentIds } from "@/lib/segments";
 import { signDownloadUrl, signUploadUrl } from "@/lib/storage";
 import { invokeIngestionWorker } from "@/lib/worker";
 
@@ -155,6 +156,7 @@ export async function POST(req: NextRequest) {
     tone: optStr(profile.tone, 500),
     languages,
     greeting: optStr(profile.greeting, 500),
+    suggestionSegments: cleanSegmentIds(profile.suggestionSegments),
   };
 
   const existing = await prisma.onboardingRun.findUnique({ where: { propertyId } });

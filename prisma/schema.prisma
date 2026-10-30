@@ -262,6 +262,10 @@ model PropertyProfile {
   tone          String?
   languages     String[]
   greeting      String?
+  // Suggestion segments the owner enabled at onboarding (ids from
+  // lib/segments.ts). The agent may advise ONLY on these, and only
+  // from verified property information — never general knowledge.
+  suggestionSegments String[] @default([])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
