@@ -3,7 +3,11 @@
 Read this any time you forget what we're building. If this file and the app
 disagree, the app wins and this file must be updated.
 
-Last updated: 28 Oct 2026 (multi-tenant core built, live proofs pending).
+Family note (adopted 30 Oct 2026): ViveReply is Suite + Chatbot;
+Concierge is the Chatbot line's hackathon build name. The entry stays
+"Vivereply Concierge".
+
+Last updated: 30 Oct 2026 (multi-tenant live, payments built flag-gated, submission evidence in progress).
 
 ## The idea in one sentence
 
@@ -35,14 +39,18 @@ types in English or Bengali. The Concierge:
    group, a special request) — the full chat goes to staff, who work it in
    our staff page, their own dashboard (server API), or our embeddable staff
    widget.
+6. PRESSES FOR PAYMENT on held drafts (built, flag-gated, Suite-only):
+   server-minted payment links (Stripe or manual transfer), insistence in
+   the same reply as the draft, status re-checks. The bot never takes
+   payment itself and never invents a payment URL.
 
 It never invents a room, a price, availability, or a booking. If it doesn't
 know, it says so and offers a human.
 
 One product, many resorts: each resort (tenant) gets its own rooms, booking
 backend, knowledge, reply voice, staff, and logins — and can never see
-another resort's data. New resorts are registered by the Vivereply team (seed
-file); there is deliberately no public signup.
+another resort's data. New resorts sign up publicly (email verification +
+spam defense); the seed file survives for test tenants only.
 
 ## How one chat works (a real example)
 
@@ -83,12 +91,15 @@ check runs. Nothing is faked with timers.
   owner login, widget key, domains, rooms, booking backend, knowledge, and
   staff scope. Sessions carry role + property; owners touch only their own
   property (cross-property reads answer 404); the founder's super-admin sees
-  all. Registration is the seed file only — no signup route exists.
+  all. Registration is public signup (verified email required before any
+  configuration); the seed file registers test tenants only.
 - Agent + tools (the brain + hands). Muse Spark, via Meta's API, running a
   hand-rolled loop: think → call tools → think again, max 6 rounds. Tools:
-  check_availability, get_quote, create_booking_draft, request_handoff,
-  lookup_booking_by_code, request_booking_details, verify_booking.
-  Guards: quote before any draft, one draft per conversation, a returned
+  check_availability, get_quote, create_booking_draft, verify_booking,
+  lookup_booking_by_code, request_booking_details, request_handoff, plus
+  create_payment_link and check_payment_status when payments are on.
+  Guards: quote before any draft, one draft per conversation (claim-
+  serialized at the database, idempotent across retries), a returned
   booking code is CONFIRMED (later "0 available" is expected, not a bug).
 - Suite backends (real + fixture). Any booking backend implementing
   docs/suite-api-spec.md plugs in via Settings (URL + encrypted key, room
@@ -133,81 +144,77 @@ check runs. Nothing is faked with timers.
   client unless super-admin approves more (owners can never self-approve).
   Heavy lifting runs in a Modal Python worker that embeds and stores with
   guards; guests never see half-ingested runs. See docs/onboarding.md.
-- Security. Owner passwords are scrypt-hashed (seeded, env-supplied, never
-  in the repo); sessions are signed cookies carrying role + property; chat
-  tokens carry the property ID (the browser's claim is ignored); widget
-  domains re-checked on every message; bridge keys hashed + revocable;
-  widget tokens short-lived + origin-bound. Honest limits: no 2FA, no rate
-  limiting, no public signup (by design).
+- Security. Owner passwords are scrypt-hashed (signup-chosen, or seeded
+  test passwords committed as test credentials and rotated after prod
+  seeding); login throttled with anti-enumeration timing; sessions are
+  signed cookies carrying role + property (server rows, revocable);
+  chat tokens carry the property ID (the browser's claim is ignored);
+  widget domains re-checked on every message; bridge keys hashed +
+  revocable; widget tokens short-lived + origin-bound; chat throttled
+  per-property and per-IP (429 + Retry-After, fail-open with alarm);
+  framing locked to same-origin except the two embed surfaces; every
+  admin mutation lands in the audit log. Honest limits: no 2FA, no
+  password reset-by-email, no per-tenant spend quotas yet.
 - Knowledge answers (supporting only). Check-in 2 PM / check-out 11 AM,
   halal food, packages — answered from seeded notes via vector search, and
   only when the match is strong. Prices and availability NEVER come from
   these notes; the tools govern those.
 
-## Current position (28 Oct 2026)
+## Current position (30 Oct 2026)
 
-Live on main today: the Krishnachura demo path, re-verified end to end after
-the database migration (7/7 sweep: home, bridge 401, settings gate, widget
-accept/reject, ৳17,000 quote card, demo1 widget tag; plus Bengali dated
-total and private lookup). See docs/evidence-log.md.
+Everything ever branched is merged: multi-tenant core, RAG onboarding +
+Modal worker, public signup, booking payments, staff triage board, audit
+trail, throttles, draft-claim serialization, error boundaries. Live at
+app.vivereply.com + demo1.vivereply.com; 70 unit tests, 19 eval cases,
+10 isolation probes green in code. See docs/STATUS.md for the snapshot
+and docs/evidence-log.md for the journal.
 
-Built on branches, statically proven, awaiting merge + deploy + live proof:
-
-- PR #6 (RAG onboarding + worker rework): guided runs, budgets, Modal
-  worker owning embed + store, SSRF guards, indexed staging, least-privilege
-  DB role. Merge FIRST.
-- feature/tenant-core `afe0c50` (multi-tenant core P1–P5): owner login +
-  seed registration, fixture backend + threading, staff iframe widget,
-  consolidated Settings + ops Admin + grouped nav + full branding. tsc
-  green, 68/68 probes. Merge SECOND, after #6.
-
-Live proofs still owed (no claim without them): owner login + seed run,
-seabreeze chat quote/draft/lookup, both-direction tenant isolation, staff
-widget mint → iframe → note/assign/close round-trip, consolidated pages
-rendering, Modal worker live trial, full Krishnachura regression.
+Live proofs still owed (no claim without them): recorded eval + probes
+runs with committed JSON, payments trial end to end, live fallback
+serve, mobile device pass, clean-clone validation, uptime monitor.
+The video is scripted, unfilmed. See docs/hackathon-final.md.
 
 ## What we have built so far (proven live, see docs/evidence-log.md)
 
 - The app is live at app.vivereply.com; the widget is embedded on the demo
   resort site demo1.vivereply.com.
 - P0 regression baseline green (7/7) after the prod database migration.
-- Multi-night quote → draft → admin loop: real draft RES-202610-00002
-  (Terracotta, Oct 29–31, ৳29,000, totals match, PENDING in the resort's own admin).
-- Bengali dated totals: Bamboo Nov 4–6 → ৳17,000; Terracotta Oct 31–Nov 2 →
-  ৳29,000. Bengali sold-out path also honest (no quote when full).
+- Multi-night quote → draft → admin loop: real drafts with matching totals,
+  PENDING in the resort's own admin (latest: RES-202610-00004, Bamboo).
+- Bengali dated totals live (৳17,000 / ৳29,000 paths); Bengali sold-out
+  path honest (no quote when full).
 - Verification: code path shows only dates + first name + status; contact
   path gives identical generic replies and the real email arrived in inbox.
 - Group handoff: 25-person request → handoff card → record + transcript
-  in /staff.
+  in /staff triage board (filters, notes, assign, resolve).
 - Widget path: handshake accepts approved domains, rejects bad keys and bad
   origins, widget-token chat quotes live prices.
-- UI: ChatGPT-style chat in a left-nav shell (Talk / Manage / Configure
-  groups, role-filtered, sign-in/out at the bottom); both widgets bare and
-  branded; origin logo everywhere. (A conversation-history list is still
-  post-hackathon work.)
+- Owner signup: public registration with email verification + Turnstile;
+  configuration locked until verified. Seed file kept for test tenants.
+- Payments (built, trial-pending): insist-per-draft, server-minted /pay
+  links (Stripe/manual), webhook + staff confirm, status re-check.
+- UI: ChatGPT-style chat in a left-nav shell (role-filtered, sign-in/out);
+  both widgets branded; privacy notice + helpful-rating post-chat.
+  (A conversation-history list is still post-hackathon work.)
 
 ## What we have NOT built (say it honestly)
 
-- One live property today (Krishnachura Retreat, fictional demo). The second
-  property (Seabreeze Test Inn, fixture backend) is built and seeded but not
-  yet live-proven — until P4 passes, "multi-tenant" is code, not a claim.
-- No public signup — by design, not by omission. Registration is the founder
-  running the seed file. No self-serve setup, no invite system yet.
-- No second demo, no real customers, no revenue, no reviews, no seasonal
-  rates (flat nightly prices), no accuracy figures. None are claimed anywhere.
-- No 2FA, no rate limiting, no frame-ancestors allowlist on the staff widget
-  (token + origin binding is the gate). Stated, not hidden.
+- One live property today (Krishnachura Retreat, fictional demo) plus the
+  Seabreeze fixture double. No real resort, no pilot customer yet.
+- No recorded eval/probe/dashboard runs with committed JSON — the suites
+  exist and pass in code; the judging evidence needs founder runs.
+- No video filmed; no portal submission yet; no uptime monitor armed.
+- No second demo, no revenue, no reviews, no seasonal rates (flat nightly
+  prices). None are claimed anywhere.
+- No 2FA, no password reset-by-email, no per-tenant spend quotas, no
+  staff reply-into-chat, no notifications. Stated, not hidden.
 
 ## What's next
 
-1. Merge + migrate + seed + deploy (founder): PR #6, then tenant-core PR;
-   `db push` for Property/User; fill owner emails and run the seed; deploy.
-2. P4 live proofs: tenant-2 end to end (chat quote/draft/lookup, RAG trial,
-   staff widget round-trip), both-direction isolation, full Krishnachura
-   regression. Every claim gets its evidence-log line.
-3. P6 submission: demo script with the tenant-2 beat, filmed rehearsal,
-   README/architecture refresh, submission packaging. Founder files the
-   evening of Nov 4 Dhaka time.
+Nov 1 numbers (eval/probes/dashboard/fallback evidence), Nov 2 breakage
+(drills + devices + go/no-go), Nov 3 footage, Nov 4 paper (tag + portal),
+Nov 5–8 hands off, Nov 9 close. The day-by-day plan with gates is
+docs/hackathon-final.md; rehearsal detail is docs/demo-test-plan.md.
 
 ## Cheat sheet
 
@@ -220,4 +227,4 @@ rendering, Modal worker live trial, full Krishnachura regression.
 - Live: app.vivereply.com (Concierge) · demo1.vivereply.com (resort + widget).
 - AI: Muse Spark is the agent; Gemini is embeddings-only.
 - Databases: Concierge DB and Suite DB are separate, joined by HTTP + IDs only.
-- Tenants: seed file registers, owners log in with email + password, no signup.
+- Tenants: public signup (verified email) or seed file for test tenants; owners log in with email + password.

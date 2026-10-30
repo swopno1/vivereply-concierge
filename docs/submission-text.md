@@ -24,9 +24,10 @@ name and theme spelling on submission day.]
 
 Independent resorts with no night front desk lose after-hours guest
 enquiries — and a wrong answer (wrong price, invented availability)
-is worse than silence. Vivereply Concierge is a multi-tenant AI
-front-of-house: each resort gets its own rooms, booking backend,
-knowledge, voice, staff scope, and logins.
+is worse than silence. Vivereply Concierge — the hackathon build of
+the ViveReply Chatbot product line (Suite + Chatbot family) — is a
+multi-tenant AI front-of-house: each resort gets its own rooms,
+booking backend, knowledge, voice, staff scope, and logins.
 
 On the live demo (Krishnachura Retreat, Himchari, Cox's Bazar), a
 guest chats on the resort website: the agent checks LIVE availability,
