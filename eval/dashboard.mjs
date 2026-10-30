@@ -107,9 +107,13 @@ async function main() {
     }
     console.log("per-property model calls:");
     for (const [p, e] of [...byProp.entries()].sort((a, b) => b[1].calls - a[1].calls)) {
-      console.log(
-        `  ${p}: ${e.calls} calls, ${(e.prompt + e.completion).toLocaleString()} tk (r:${e.reasoning.toLocaleString()})`
-      );
+      const tk = e.prompt + e.completion;
+      let cost = "";
+      if (Number.isFinite(pricePrompt) && Number.isFinite(priceCompletion) && pricePrompt > 0 && priceCompletion > 0) {
+        const usd = (e.prompt * pricePrompt + (e.completion + e.reasoning) * priceCompletion) / 1_000_000;
+        cost = `, est. $${usd.toFixed(2)}`;
+      }
+      console.log(`  ${p}: ${e.calls} calls, ${tk.toLocaleString()} tk (r:${e.reasoning.toLocaleString()})${cost}`);
     }
 
     // Tool mix: what the agent actually does.

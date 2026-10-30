@@ -13,7 +13,7 @@
     "seed:tenants": "node prisma/seed-tenants.mjs",
     "eval": "node --no-warnings --experimental-transform-types --loader ./scripts/esm-alias-loader.mjs eval/run.mjs",
     "eval:dashboard": "node eval/dashboard.mjs",
-    "probes": "node probes/run.mjs",
+    "probes": "node --no-warnings --experimental-transform-types --loader ./scripts/esm-alias-loader.mjs probes/run.mjs",
     "funnel": "node eval/funnel.mjs",
     "test": "node --no-warnings --experimental-transform-types --loader ./scripts/esm-alias-loader.mjs --test \"tests/*.test.mjs\"",
     "typecheck": "tsc --noEmit"
