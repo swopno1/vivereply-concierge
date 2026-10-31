@@ -1,13 +1,42 @@
 # Vivereply Concierge
 
+[![CI](https://github.com/swopno1/vivereply-concierge/actions/workflows/ci.yml/badge.svg)](https://github.com/swopno1/vivereply-concierge/actions)
+[![Stack](https://img.shields.io/badge/stack-Next.js%20·%20Muse%20Spark%20·%20Prisma-black)](https://github.com/swopno1/vivereply-concierge)
+[![Eval](https://img.shields.io/badge/eval-19%2F19-brightgreen)](docs/live-test-checklist.md)
+[![License](https://img.shields.io/badge/license-proprietary-red)](LICENSE)
+
 ![Vivereply Concierge — AI front-of-house for resorts](public/og-concierge.png)
 
-AI front-of-house for resorts — a chat that checks live availability,
-quotes exact prices, holds booking drafts, answers property questions from
-its own knowledge, verifies bookings privately, and hands complex cases to
-staff with the full conversation. One product, many resorts: every property
-gets its own rooms, booking backend, knowledge, voice, staff scope, and
-logins.
+> A guest asks at 2 AM. The Concierge checks **live availability**,
+> quotes the **exact price**, **holds the room**, and points at the
+> resort's **own pay page** — in English or Bengali — while the front
+> desk sleeps. Anything it can't verify goes to **staff with the full
+> transcript**. One product, many resorts: every property gets its own
+> rooms, booking backend, knowledge, voice, staff scope, and logins.
+
+## Demo video (60 seconds)
+
+<!-- TODO(launch): upload to YouTube (Public or Unlisted), then replace
+     VIDEO_ID below + drop docs/assets/demo-thumbnail.png (1280x720).
+     Script: docs/demo-video-script.md. Capture list: docs/visual-assets.md.
+[![Vivereply Concierge demo — 60 seconds](docs/assets/demo-thumbnail.png)](https://www.youtube.com/watch?v=VIDEO_ID)
+-->
+*Video lands here before launch — [script is ready](docs/demo-video-script.md)
+(Hook → live quote → draft → pay pointer → handoff → CTA).*
+
+```mermaid
+flowchart LR
+    G[Guest on resort site] -->|"<script> widget"| W[Chat panel]
+    W --> A[Muse Spark agent]
+    A --> T1[get_quote / draft]
+    A --> T2[lookup / verify]
+    A --> T3[handoff to staff]
+    T1 --> S[Resort's Suite backend]
+    A --> R[(Property knowledge)]
+    T3 --> B[Staff board / bridge API]
+    A --> P[Resort's own pay page]
+    style P stroke-dasharray: 5 5
+```
 
 Built for the **Meta Global AI Developer Hackathon** (Startup track,
 "Build for Your World"). Pre-existing: Vivereply Suite and the demo1
@@ -30,22 +59,22 @@ core. The demo properties are fictional, not real resorts.
   - `request_handoff` — passes the conversation to staff with a summary
   - `lookup_booking_by_code`, `request_booking_details`, `verify_booking`
     — the privacy-safe verification loop
-  - `create_payment_link`, `check_payment_status` — booking payments
-    (flag-gated, Suite properties only; see below)
+  - `get_resort_payment_link` — deep-links the resort's OWN pay page
+    with `?booking=CODE` after a draft (points, never takes)
 - **Cards** — quote, draft (with booking code, plus a "Suite total
-  governs" warning if it ever differs from the quote), payment, and
-  handoff cards, built only from that turn's tool logs.
+  governs" warning if it ever differs from the quote), resort-pay
+  pointer, and handoff cards, built only from that turn's tool logs.
 - **Tenants** — each resort is isolated by property: rooms, backend,
   knowledge, voice, staff, logins. Owners touch only their property
   (cross-property reads answer 404). Resorts join via public signup
   (email verification + Turnstile spam defense); configuration stays
   locked until the email is verified.
-- **Booking payments** (off by default, `PAYMENTS_ENABLED`) — the
-  chatbot insists on payment for every held draft but never takes
-  payment itself: it mints a server-side `/pay` deep link (Stripe
-  card or manual transfer), the guest pays standalone, webhook or
-  staff confirmation flips the row to paid, and the bot re-reads the
-  row on "is it paid?". Suite properties only. See `docs/payments.md`.
+- **Guest payments (the bot points, the resort collects)** — after a
+  draft the chatbot sends guests to the resort's own payment page
+  with the booking code prefilled. Guest money never touches our
+  systems; the bot can never say whether a guest paid (known only on
+  the resort's site). The owner pastes one URL in Settings. See
+  `docs/payments.md`.
 - **Suite backends** — any backend implementing `docs/suite-api-spec.md`
   plugs in per property (URL + encrypted key + catalogue, Test
   connection, failure health). Test properties run on the labeled
@@ -62,10 +91,10 @@ core. The demo properties are fictional, not real resorts.
   per page load and renders the iframe. The bridge key never reaches
   the browser.
 - **Settings** (`/settings`) — the single configuration surface, one
-  property at a time: widget codes, domains, bridge codes + widget
-  snippets, keys, booking system connection, catalogues, booking
-  payments, security board, profile + password change. Secrets and
-  Appearance are honest Later rooms. There is no separate admin page:
+  property at a time: chatbot name + topics, widget codes, domains,
+  bridge codes + widget snippets, keys, booking system connection
+  (incl. your payment page URL), catalogues, security board, profile
+  + password change. Secrets and Appearance are honest Later rooms. There is no separate admin page:
   super-admins additionally see Tenants (cross-property owners,
   suspend/resume) and Onboarding re-runs (approvals) at the top.
 - **Onboarding** (`/onboarding`) — one budgeted run per property builds
@@ -171,7 +200,7 @@ created at import time.
 ## Tests
 
 ```bash
-pnpm test        # unit tests: rates, language, cards, tool guards, prompts, payment pure legs
+pnpm test        # unit tests: rates, language, cards, tool guards, prompts, resort-pay, setup
 pnpm typecheck   # strict tsc
 pnpm eval        # 19-case live referee against the fixture backend (needs API keys)
 pnpm probes      # 10 tenant-isolation probes against a live app (needs tenant creds)
@@ -234,6 +263,21 @@ Post-hackathon: Supabase Auth migration, 2FA, per-domain
 frame-ancestors, spend quotas.
 
 ## Demo flow to try
+
+```mermaid
+journey
+    title 2 AM guest, zero staff online
+    section Chat
+      Ask for sea-facing room: 5: Guest
+      Exact quote in seconds: 5: Concierge
+      Confirm + give details: 4: Guest
+      Room held, code issued: 5: Concierge
+    section Pay & verify
+      Pay on resort's own page: 4: Guest
+      Booking lookup stays private: 5: Concierge
+    section Edge cases
+      25-guest wedding → staff: 5: Concierge
+```
 
 1. Sea-facing room, 2 nights, ~৳15,000/night → quote card, then
    confirm + details → draft card with booking code.
