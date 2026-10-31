@@ -105,9 +105,10 @@ aspirational. Per-tenant runtime quotas are still open
   conversation history.
 - Resort documents → Modal worker + Supabase. Never to Meta/Google
   except as 600-char retrieved heads at answer time.
-- Payments: the model sees booking context + method names only — card
-  data lives entirely inside Stripe Checkout; pasted card/PIN/OTP in
-  chat is never repeated or processed (prompt rule, both languages).
+- Payments: the model sees the booking code + the resort's pay-page URL
+  only — guest money moves entirely on the resort's site, never through
+  us; pasted card/PIN/OTP in chat is never repeated or processed
+  (prompt rule, both languages).
 
 ## If the bill hurts (levers, in order)
 

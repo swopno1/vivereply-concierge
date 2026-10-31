@@ -1,60 +1,61 @@
-# Booking payments (suite users, flag-gated OFF by default)
+# Resort payments: the bot points, the resort collects
 
-The chatbot insists on payment for every held draft but never takes payment
-itself and never invents a payment URL: it repeats a server-minted deep link,
-`/pay/[token]?booking=[code]`, that works standalone (no chat needed).
+Positioning (founder decision 2026-10-31): resort GUEST money NEVER
+touches our systems or our Stripe account. Booking payment always
+happens on the resort owner's website. The chatbot "shows the cash
+counter": after a draft, it deep-links the resort's OWN payment page
+with the booking code — and can never say whether the guest paid.
+
+(Our OWN subscription billing — resorts paying US — is a separate,
+unbuilt system. Placeholder shape only: `lib/billing.ts`, commented
+`BILLING_*` vars in `.env.example` §2. Nothing is wired.)
 
 ## Guest flow
 
-1. Draft held → chatbot presents booking details AND presses for payment in
-   the same reply (24h hold, auto-release unpaid).
-2. Guest picks a method — card (Stripe) or manual transfer (bKash/bank,
-   verified by staff). "What do you accept?" lists exactly the configured
-   methods, never invented ones.
-3. `create_payment_link` mints the row; the Pay card + the reply carry the
-   URL verbatim (new tab). Fraud-safety lines ride along in chat, on the
-   card, and on the page.
-4. Guest pays: Stripe Checkout (card) or the manual instructions. Webhook
-   (card) or staff confirm in Settings (manual) flips the row to paid and
-   sends the receipt email.
-5. "Is my payment done?" → `check_payment_status` reads the row: paid time
-   and amount, or still pending with expiry + the URL again.
+1. Draft held → chatbot calls `get_resort_payment_link` in the same
+   reply: the hold auto-releases after 24 hours unless the resort
+   confirms it, so paying now on the resort page secures the room.
+2. The tool returns `{ paymentUrl, bookingCode }` — server-built from
+   the binding's `paymentPageUrl` + `?booking=CODE`. The reply and the
+   Pay card repeat the URL verbatim (new tab, resort's site).
+3. Guest pays entirely on the resort's website, by whatever means the
+   resort offers. Concierge sees none of it.
+4. "Is my payment done?" → the bot says it can't see resort-site
+   payments, suggests checking the confirmation email/receipt, and
+   offers a handoff. It NEVER confirms, denies, or guesses.
 
 ## Guard-rails (all enforced server-side)
 
-- **Off by default**: `PAYMENTS_ENABLED=true` gates tools, prompt section,
-  /pay page, checkout, webhook, and the Settings room.
-- **Suite-only**: fixture properties never get payment tools or links, even
-  with the flag on (`propertyTakesPayments` = flag + non-fixture).
-- **Configured-domain links**: URLs build ONLY from `APP_BASE_URL` (required,
-  https in production) — never Host headers. Minting also requires the
-  property to have an active website domain in Settings.
-- **Booking-bound links**: the code rides in the URL AND the page refuses any
-  token whose code mismatches. All refusals share one generic face.
-- **Server-side money**: amounts snapshot from the draft at mint; the browser
-  sends only the token; Stripe sessions carry a per-link idempotency key.
-- **Model-blind secrets**: tool outputs carry the full URL but never the raw
-  token; the page shows first name only, never email/phone/full name; the
-  receipt email carries no links at all (un-phishable template).
-- **Cards can't be faked by hand**: only the verified Stripe webhook flips
-  card rows; staff confirm manual rows only, after verifying the transfer.
+- **No page, no pointer**: the tool + PAYMENT prompt section exist for
+  a turn only when the binding has `paymentPageUrl` AND the backend is
+  a real Suite (fixtures have no resort site). Otherwise the bot says
+  to pay on the resort's website and offers a handoff.
+- **Draft-first**: the tool errors without a held draft in THIS
+  conversation — no draft, no pay link, ever.
+- **Owner-configured URL only**: `paymentPageUrl` is set in Settings →
+  Booking system, https-only in production (same rule as binding
+  URLs). The code never invents a host, path, or parameter — only
+  `?booking=` (or `&booking=`) is appended.
+- **Repeat-verbatim**: prompt rule + card builder repeat the
+  server-built URL exactly; the card builder refuses non-http(s) URLs.
+- **No status anywhere**: no paid/pending tracking, no webhook, no
+  receipt from us. The card carries booking code + URL only — a
+  pointer, not a receipt.
 
-## Setup
+## Setup (owner, 2 min)
 
-1. `prisma db push` (new `PaymentLink` table) + deploy.
-2. Stripe test mode: restricted key (`rk_…`) → `STRIPE_SECRET_KEY`; register
-   `https://app.vivereply.com/api/pay/webhook` for
-   `checkout.session.completed` → `STRIPE_WEBHOOK_SECRET`; set
-   `PAYMENTS_ENABLED=true` + `APP_BASE_URL`.
-3. Trial on the demo property (it has an approved domain): hold a draft in
-   chat, pick card, pay with `4242…`, confirm the paid card + email + the
-   Settings row. Then a manual link → confirm in Settings.
-4. Go live: live keys + live webhook, same steps.
+1. Settings → Booking system → Edit → "Your payment page" →
+   `https://yourresort.com/pay` → Save. (Empty = pointer off.)
+2. Hold a test draft in chat; confirm the bot + Pay card link to your
+   page with `?booking=CODE` appended.
+3. Make sure your page reads the `booking` parameter and prefills it.
 
-## Deferred (deliberate)
+## What was removed (2026-10-31)
 
-- Per-property Stripe accounts (Connect) and per-property manual
-  instructions — platform key + generic instructions for the MVP.
-- Link sweeper — expiry is lazy (every read marks expired rows).
-- Releasing the Suite-side hold on expiry — the Suite owns its hold clock;
-  our 24h default mirrors it (tune via `PAYMENT_LINK_TTL_HOURS`).
+Our-Stripe guest checkout is gone from the codebase: `/pay/[token]`,
+`/api/pay/*`, `/api/admin/payments/*`, the `PaymentLink` model, the
+Settings Booking-payments room, `STRIPE_*`/`PAYMENTS_ENABLED`/
+`MANUAL_*`/`PAYMENT_LINK_TTL_*` env, and the mint/status tools. The
+replacement is strictly smaller: one config URL, one tool, one card.
+`npx prisma db push` drops the `PaymentLink` table (export first if
+any test rows matter — prod has none).

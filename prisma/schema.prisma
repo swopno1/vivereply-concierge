@@ -129,7 +129,6 @@ model Conversation {
   messages   Message[]
   toolCalls  ToolCallLog[]
   handoffs   HandoffRecord[]
-  paymentLinks PaymentLink[]
   rating     ChatRating?
   draftClaim DraftClaim?
 }
@@ -230,6 +229,11 @@ model PropertyBinding {
   propertyId    String    @unique
   suiteBaseUrl  String
   secretEnc     String?
+  // The resort's OWN payment page (owner-configured, https). The bot
+  // deep-links here with ?booking=CODE after a draft — "showing the
+  // cash counter". Concierge never takes resort money itself; unset =
+  // the bot says to pay on the resort site / offers a handoff.
+  paymentPageUrl String?
   version       Int       @default(1)
   lastTestedAt  DateTime?
   lastTestOk    Boolean?
@@ -328,34 +332,6 @@ model ApprovedDomain {
 // from the draft (never from the browser), and the 24h expiry mirrors
 // the booking hold. Guest contact is a snapshot for the receipt only —
 // the /pay page shows the first name, never email or phone.
-model PaymentLink {
-  id             String    @id @default(cuid())
-  propertyId     String
-  conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  bookingCode    String
-  method         String // "stripe" | "manual"
-  token          String    @unique
-  amountPoisha   Int
-  currency       String    @default("bdt")
-  status         String    @default("pending") // pending|paid|expired|canceled
-  stripeSessionId String?  @unique
-  guestEmail     String?
-  guestFirstName String?
-  guestName      String?
-  room           String?
-  checkIn        String?
-  checkOut       String?
-  manualReference String?
-  paidAt         DateTime?
-  expiresAt      DateTime
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  @@index([propertyId, status])
-  @@index([conversationId])
-  @@index([bookingCode])
-}
 
 // Guest helpful vote (one-tap post-chat rating). One row per
 // conversation (upsert — the guest may change their mind). No PII of

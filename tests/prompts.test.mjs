@@ -1,6 +1,7 @@
-// Prompt assembly tests: the PAYMENT section appears only for turns
-// that take payments, and the METHODS placeholder is replaced with
-// exactly the resort's accepted methods — never leaked verbatim.
+// Prompt assembly tests: the PAYMENT section appears only when the
+// resort configured its own payment page, and it points (never takes,
+// never confirms). Citations, hold-release, and card-details rules ride
+// in both languages regardless.
 import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
 import { PROMPT_VERSION, systemPrompt } from "@/lib/prompts";
@@ -17,31 +18,29 @@ const ROOMS = [
 ];
 
 describe("systemPrompt payments section", () => {
-  it("omits PAYMENT rules when payments are off", () => {
-    const p = systemPrompt("en", null, ROOMS, null, { payments: false });
-    assert.ok(!p.includes("PAYMENT — booking payments are ENABLED"));
+  it("omits PAYMENT rules when the resort set no payment page", () => {
+    const p = systemPrompt("en", null, ROOMS, null, { resortPay: false });
+    assert.ok(!p.includes("PAYMENT — this resort configured its own payment page"));
     assert.ok(p.includes("never invent a payment link or flow"));
+    assert.ok(p.includes("never say whether a payment happened"));
   });
-  it("includes methods exactly when payments are on", () => {
-    const p = systemPrompt("en", null, ROOMS, null, {
-      payments: true,
-      methods: ["card (Visa via Stripe)", "manual transfer (bKash)"],
-    });
-    assert.ok(p.includes("PAYMENT — booking payments are ENABLED"));
-    assert.ok(p.includes("card (Visa via Stripe); manual transfer (bKash)"));
-    assert.ok(!p.includes("METHODS"));
+  it("points at the resort page when configured", () => {
+    const p = systemPrompt("en", null, ROOMS, null, { resortPay: true });
+    assert.ok(p.includes("PAYMENT — this resort configured its own payment page"));
+    assert.ok(p.includes("get_resort_payment_link"));
+    assert.ok(p.includes("NEVER confirm, deny, or guess a payment happened"));
   });
   it("covers Bengali turns with a Bengali payment block", () => {
-    const p = systemPrompt("bn", null, ROOMS, null, { payments: true, methods: ["card"] });
-    assert.ok(p.includes("PAYMENT — booking payments are ENABLED"));
-    assert.ok(p.includes("create_payment_link"));
+    const p = systemPrompt("bn", null, ROOMS, null, { resortPay: true });
+    assert.ok(p.includes("PAYMENT — this resort configured its own payment page"));
+    assert.ok(p.includes("get_resort_payment_link"));
   });
 });
 
 describe("systemPrompt citation rule", () => {
   it("tells the model to name knowledge sources in both languages", () => {
     for (const lang of ["en", "bn"]) {
-      const p = systemPrompt(lang, null, ROOMS, null, { payments: false });
+      const p = systemPrompt(lang, null, ROOMS, null, { resortPay: false });
       assert.ok(p.includes("name the source"), lang);
     }
   });
@@ -50,7 +49,7 @@ describe("systemPrompt citation rule", () => {
 describe("systemPrompt hold-release rule", () => {
   it("tells the 24h release on every draft in both languages", () => {
     for (const lang of ["en", "bn"]) {
-      const p = systemPrompt(lang, null, ROOMS, null, { payments: false });
+      const p = systemPrompt(lang, null, ROOMS, null, { resortPay: false });
       assert.ok(p.includes("hold releases after 24 hours"), lang);
     }
   });
@@ -59,10 +58,10 @@ describe("systemPrompt hold-release rule", () => {
 describe("systemPrompt card-details rule", () => {
   it("is present in both languages with payments on or off", () => {
     for (const lang of ["en", "bn"]) {
-      for (const payments of [false, true]) {
-        const p = systemPrompt(lang, null, ROOMS, null, { payments, methods: ["card"] });
-        assert.ok(p.includes("NEVER repeat, confirm, or process them"), `${lang}/${payments}`);
-        assert.ok(p.includes("chat is not a payment channel"), `${lang}/${payments}`);
+      for (const resortPay of [false, true]) {
+        const p = systemPrompt(lang, null, ROOMS, null, { resortPay });
+        assert.ok(p.includes("NEVER repeat, confirm, or process them"), `${lang}/${resortPay}`);
+        assert.ok(p.includes("chat is not a payment channel"), `${lang}/${resortPay}`);
       }
     }
   });

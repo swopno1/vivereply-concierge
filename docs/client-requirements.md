@@ -62,17 +62,15 @@ repo. Owner-friendly version: docs/owner-guide.md.
   Either way: assign someone to handoffs — unanswered handoffs are
   an operations failure, not a software one.
 
-## 5. Payments (only if enabled for you)
+## 5. Guest payments (your site collects, we point)
 
-- Card: a Stripe account (test mode first). Register our webhook
-  URL (Settings shows it) for `checkout.session.completed` and
-  paste the webhook secret — card links can't confirm without it.
-  Guests pay on Stripe-hosted pages; card data never touches us
-  or you.
-- Manual (bKash/bank): publish your receiving account details where
-  your staff can verify against them; confirm each transfer in
-  Settings → Booking payments (transaction ID checked first) —
-  confirmation emails fire on your click.
+- Paste your own payment page URL in Settings → Booking system
+  (e.g. `https://yourresort.com/pay`). After a draft, the chatbot
+  sends guests there with `?booking=CODE` — your page should read
+  the code and prefill it.
+- Guests pay entirely on your website, by whatever means you offer.
+  Concierge never takes resort money and can never confirm whether
+  a guest paid — that is known only on your site.
 
 ## 6. What Concierge guarantees back
 
@@ -94,5 +92,5 @@ repo. Owner-friendly version: docs/owner-guide.md.
 - [ ] Booking Test green in Settings; rooms listed with live prices.
 - [ ] Test quote → draft → lookup round-trip on the live site.
 - [ ] Staff can open the board (or embed) and resolve a test handoff.
-- [ ] Payments (if on): test-mode link paid + receipt received.
+- [ ] Guest payments: payment page URL saved; test draft links to your page with ?booking=CODE.
 - [ ] Handoff rota named (who answers, within how many minutes).

@@ -7,8 +7,9 @@
 // A card is only built from a successful tool output: get_quote output
 // with a total, create_booking_draft output with a bookingCode,
 // request_handoff input (reason + summary — its output carries neither),
-// and the payment tools (create_payment_link / check_payment_status —
-// the Pay button repeats the server-minted URL verbatim).
+// and get_resort_payment_link — the Pay button repeats the server-built
+// resort URL verbatim. The card is a pointer, not a receipt: paid or not
+// is known only on the resort's site, so the card carries no status.
 
 export type Card =
   | {
@@ -34,12 +35,7 @@ export type Card =
   | {
       kind: "payment";
       bookingCode: string;
-      amount: string;
-      methodLabel: string;
-      paymentUrl: string | null;
-      expiresAt: string | null;
-      status: "pending" | "paid" | "expired" | "canceled";
-      paidAt: string | null;
+      paymentUrl: string;
     };
 
 export type CardLogRow = {
@@ -102,54 +98,20 @@ export function buildCards(logs: CardLogRow[]): Card[] {
       if (reason && summary) {
         cards.push({ kind: "handoff", reason, summary });
       }
-    } else if (log.toolName === "create_payment_link" && out) {
-      // The Pay button carries ONLY the server-minted URL — the card
-      // builder never assembles a payment link, it repeats one.
+    } else if (log.toolName === "get_resort_payment_link" && out) {
+      // The Pay button carries ONLY the server-built resort URL — the
+      // card builder never assembles a payment link, it repeats one.
       const paymentUrl = str(out.paymentUrl);
       const bookingCode = str(out.bookingCode);
-      const amount = str(out.amount);
-      const methodLabel = str(out.methodLabel);
-      const expiresAt = str(out.expiresAt);
-      if (paymentUrl && bookingCode && amount && methodLabel && expiresAt) {
+      if (paymentUrl && bookingCode) {
         try {
           const u = new URL(paymentUrl);
           if (u.protocol !== "https:" && u.protocol !== "http:") continue;
         } catch {
           continue;
         }
-        cards.push({
-          kind: "payment",
-          bookingCode,
-          amount,
-          methodLabel,
-          paymentUrl,
-          expiresAt,
-          status: "pending",
-          paidAt: null,
-        });
+        cards.push({ kind: "payment", bookingCode, paymentUrl });
       }
-    } else if (log.toolName === "check_payment_status" && out) {
-      if (out.found !== true) continue;
-      const status = str(out.status);
-      if (status !== "pending" && status !== "paid" && status !== "expired" && status !== "canceled") {
-        continue;
-      }
-      const bookingCode = str(out.bookingCode);
-      const amount = str(out.amount);
-      const methodLabel = str(out.methodLabel);
-      if (!bookingCode || !amount || !methodLabel) continue;
-      const paymentUrl = status === "pending" ? str(out.paymentUrl) : null;
-      if (status === "pending" && !paymentUrl) continue;
-      cards.push({
-        kind: "payment",
-        bookingCode,
-        amount,
-        methodLabel,
-        paymentUrl,
-        expiresAt: str(out.expiresAt),
-        status,
-        paidAt: str(out.paidAt),
-      });
     }
   }
   return cards;

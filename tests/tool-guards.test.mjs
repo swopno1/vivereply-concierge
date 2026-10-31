@@ -1,6 +1,6 @@
 // Tool guard tests: the architecture's promises with a fake ToolDb and
 // a stub Suite adapter — quote-first, one-draft, catalogue membership,
-// date validity, and the payments fail-closed gate. No database.
+// date validity, and the resort-pay fail-closed gate. No database.
 import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
 import { createToolExecutor } from "@/lib/tools";
@@ -20,10 +20,10 @@ function fakeDb(over = {}) {
     releaseDraftClaim: async () => {},
     getDraft: async () => null,
     createHandoff: async () => {},
-    createPaymentLink: async () => {
-      throw new Error("unexpected mint");
-    },
-    getPaymentStatus: async () => ({ found: false }),
+    getResortPaymentLink: async () => ({
+      paymentUrl: "https://resort.example.com/pay?booking=RES-1",
+      bookingCode: "RES-1",
+    }),
     ...over,
   };
 }
@@ -130,21 +130,29 @@ describe("quote-first + one-draft", () => {
   });
 });
 
-describe("payments gate", () => {
-  it("fails closed when the turn takes no payments", async () => {
-    const link = await run(fakeDb(), stubSuite(), CATALOGUE, { payments: false })(
-      "create_payment_link",
-      JSON.stringify({ method: "stripe" })
+describe("resort-pay gate", () => {
+  it("fails closed when the resort set no payment page", async () => {
+    const out = await run(fakeDb(), stubSuite(), CATALOGUE, { resortPay: false })(
+      "get_resort_payment_link",
+      "{}"
     );
-    assert.match(link.error, /not enabled/);
-    const st = await run(fakeDb(), stubSuite(), CATALOGUE) ("check_payment_status", "{}");
-    assert.match(st.error, /not enabled/);
+    assert.match(out.error, /hasn't set up its payment page/);
+    const def = await run(fakeDb(), stubSuite(), CATALOGUE)("get_resort_payment_link", "{}");
+    assert.match(def.error, /hasn't set up its payment page/);
   });
-  it("needs a draft even when payments are on", async () => {
-    const out = await run(fakeDb({ hasDraft: async () => false }), stubSuite(), CATALOGUE, { payments: true })(
-      "create_payment_link",
-      JSON.stringify({ method: "stripe" })
+  it("needs a draft even when the page is set", async () => {
+    const out = await run(fakeDb({ hasDraft: async () => false }), stubSuite(), CATALOGUE, { resortPay: true })(
+      "get_resort_payment_link",
+      "{}"
     );
     assert.match(out.error, /no booking draft/i);
+  });
+  it("returns the server-built pointer verbatim with a draft", async () => {
+    const out = await run(fakeDb({ hasDraft: async () => true }), stubSuite(), CATALOGUE, { resortPay: true })(
+      "get_resort_payment_link",
+      "{}"
+    );
+    assert.equal(out.paymentUrl, "https://resort.example.com/pay?booking=RES-1");
+    assert.equal(out.bookingCode, "RES-1");
   });
 });

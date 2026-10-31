@@ -36,7 +36,7 @@ describe("segments", () => {
     assert.match(p, /Offer no travel\/dining\/transport advice/);
   });
   it("prompt version bumped for the segments change", () => {
-    assert.equal(PROMPT_VERSION, 5);
+    assert.equal(PROMPT_VERSION, 6);
   });
 });
 

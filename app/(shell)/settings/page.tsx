@@ -20,13 +20,11 @@ import BridgeTokens from "../../components/BridgeTokens";
 import PasswordChange from "../../components/PasswordChange";
 import EvalRunner from "../../components/EvalRunner";
 import VerifyPrompt from "../../components/VerifyPrompt";
-import Payments from "../../components/Payments";
 import ChatbotProfile from "../../components/ChatbotProfile";
 import OnboardingApprovals from "../../components/OnboardingApprovals";
 import OwnerActions from "../../components/OwnerActions";
 import PropertyStatusToggle from "../../components/PropertyStatusToggle";
 import AuditTrail from "../../components/AuditTrail";
-import { paymentsEnabledGlobal } from "@/lib/payments";
 import { CASES } from "@/eval/cases.mjs";
 
 export const dynamic = "force-dynamic";
@@ -172,45 +170,11 @@ export default async function SettingsPage({
     id: r.id,
     propertyId: r.propertyId,
     suiteBaseUrl: r.suiteBaseUrl,
+    paymentPageUrl: r.paymentPageUrl,
     version: r.version,
     secretSet: r.secretEnc !== null,
     lastTestedAt: r.lastTestedAt?.toISOString() ?? null,
     lastTestOk: r.lastTestOk,
-    createdAt: r.createdAt.toISOString(),
-  }));
-  // Booking payments (flag-gated): recent links, tokens never leave the server.
-  const paymentsOn = paymentsEnabledGlobal();
-  // Stripe mode indicator (server-computed; the key itself never leaves
-  // the server). Test vs live comes from the key prefix — secret (sk_)
-  // or restricted (rk_, the recommended kind); an unrecognized prefix
-  // is shown as-is rather than guessed.
-  const stripeKey = process.env.STRIPE_SECRET_KEY ?? "";
-  const stripeMode = !stripeKey
-    ? ("unset" as const)
-    : stripeKey.startsWith("sk_test_") || stripeKey.startsWith("rk_test_")
-      ? ("test" as const)
-      : stripeKey.startsWith("sk_live_") || stripeKey.startsWith("rk_live_")
-        ? ("live" as const)
-        : ("unrecognized" as const);
-  const stripeWebhook = Boolean(process.env.STRIPE_WEBHOOK_SECRET);
-  const paymentRows = paymentsOn
-    ? await prisma.paymentLink
-        .findMany({ where: { propertyId }, orderBy: { createdAt: "desc" }, take: 50 })
-        .catch(() => [])
-    : [];
-  const initialPayments = paymentRows.map((r) => ({
-    id: r.id,
-    bookingCode: r.bookingCode,
-    method: r.method,
-    status: r.status,
-    amountPoisha: r.amountPoisha,
-    guestFirstName: r.guestFirstName,
-    room: r.room,
-    checkIn: r.checkIn,
-    checkOut: r.checkOut,
-    manualReference: r.manualReference,
-    paidAt: r.paidAt?.toISOString() ?? null,
-    expiresAt: r.expiresAt.toISOString(),
     createdAt: r.createdAt.toISOString(),
   }));
   // Super-admin oversight (relocated from the deleted /admin page):
@@ -333,7 +297,7 @@ export default async function SettingsPage({
       {isSuper && (
         <Section
           title="Recent activity"
-          blurb="Who signed in, changed domains/keys/connections, or confirmed payments. Names and outcomes only — never secrets."
+          blurb="Who signed in or changed domains/keys/connections. Names and outcomes only — never secrets."
         >
           <AuditTrail properties={allProperties.map((p) => ({ id: p.id, name: p.name }))} />
         </Section>
@@ -425,19 +389,6 @@ export default async function SettingsPage({
           )}
         </div>
       </Section>
-
-      {paymentsOn && (
-        <Section
-          title="Booking payments"
-          blurb="Payment links the chatbot minted for held drafts. Confirm manual transfers here after verifying them; card links flip automatically when Stripe confirms."
-        >
-          <Payments
-            initial={initialPayments}
-            initialPropertyId={propertyId}
-            stripe={{ mode: stripeMode, webhook: stripeWebhook }}
-          />
-        </Section>
-      )}
 
       <Section
         title="Room catalogues"

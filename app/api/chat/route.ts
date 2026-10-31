@@ -26,16 +26,7 @@ import { verifyChatToken } from "@/lib/auth";
 import { isDomainApproved } from "@/lib/domains";
 import { checkChatRate, checkChatRateByIp } from "@/lib/ratelimit";
 import { isPropertyActive } from "@/lib/tenant";
-import {
-  availableMethods,
-  methodLabel,
-  mintPaymentLink,
-  paymentOrigin,
-  paymentStatusForConversation,
-  paymentUrlFor,
-  propertyTakesPayments,
-  type PaymentMethod,
-} from "@/lib/payments";
+import { resortPaymentUrl } from "@/lib/resort-pay";
 import { formatTaka } from "@/demo-config/rates";
 
 /**
@@ -80,10 +71,8 @@ function toolDetail(name: string, argsJson: string): string {
       return "Sending your booking details";
     case "verify_booking":
       return "Double-checking your booking";
-    case "create_payment_link":
-      return "Preparing your secure payment link";
-    case "check_payment_status":
-      return "Checking your payment";
+    case "get_resort_payment_link":
+      return "Finding the resort's payment page";
     default:
       return "Checking with the resort";
   }
@@ -318,97 +307,32 @@ export async function POST(req: NextRequest) {
               data: { status: "HANDED_OFF" },
             });
           },
-          // Booking payments: the draft's OUTPUT carries stay + totals,
-          // its INPUT carries the guest contact — both server-side, both
-          // re-read here, never trusted from the model. The URL origin is
-          // the configured canonical domain (paymentOrigin), never the
-          // request's Host header.
-          createPaymentLink: async (cid, method: "stripe" | "manual") => {
-            const origin = paymentOrigin();
+          // Resort payment pointer: the booking code comes from this
+          // conversation's draft log (server-side, never the model), the
+          // page URL from the property's binding (owner-configured). No
+          // code + no page = honest error, never an invented link.
+          getResortPaymentLink: async (cid) => {
+            const binding = await prisma.propertyBinding.findUnique({
+              where: { propertyId: activeConversation.propertyId },
+              select: { paymentPageUrl: true },
+            });
+            if (!binding?.paymentPageUrl) {
+              throw new Error("This resort hasn't set up its payment page yet.");
+            }
             const logs = await prisma.toolCallLog.findMany({
               where: { conversationId: cid, toolName: "create_booking_draft" },
               orderBy: { createdAt: "desc" },
             });
             for (const l of logs) {
-              const output = l.output as {
-                bookingCode?: string;
-                room?: string;
-                checkIn?: string;
-                checkOut?: string;
-                suiteTotalPoisha?: number;
-              } | null;
-              const input = l.input as {
-                guestName?: string;
-                guestEmail?: string;
-                guestPhone?: string;
-              } | null;
-              if (
-                output?.bookingCode &&
-                output.room &&
-                output.checkIn &&
-                output.checkOut &&
-                typeof output.suiteTotalPoisha === "number" &&
-                input?.guestName &&
-                input?.guestEmail
-              ) {
-                const link = await mintPaymentLink({
-                  propertyId: activeConversation.propertyId,
-                  conversationId: cid,
-                  draft: {
-                    bookingCode: output.bookingCode,
-                    room: output.room,
-                    checkIn: output.checkIn,
-                    checkOut: output.checkOut,
-                    suiteTotalPoisha: output.suiteTotalPoisha,
-                    guestName: input.guestName,
-                    guestEmail: input.guestEmail,
-                  },
-                  method,
-                });
-                const linkMethod = link.method as PaymentMethod;
+              const output = l.output as { bookingCode?: string } | null;
+              if (output?.bookingCode) {
                 return {
-                  paymentUrl: paymentUrlFor(link, origin),
-                  method: linkMethod,
-                  methodLabel: methodLabel(linkMethod),
-                  bookingCode: link.bookingCode,
-                  amount: formatTaka(link.amountPoisha),
-                  expiresAt: link.expiresAt.toISOString(),
-                  reused: Date.now() - link.createdAt.getTime() > 10_000,
+                  paymentUrl: resortPaymentUrl(binding.paymentPageUrl, output.bookingCode),
+                  bookingCode: output.bookingCode,
                 };
               }
             }
             throw new Error("No booking draft is held in this conversation yet.");
-          },
-          getPaymentStatus: async (cid) => {
-            // No link yet → answer without touching origin config, so a
-            // resort still setting up payments gets "no link" not noise.
-            const any = await prisma.paymentLink.findFirst({ where: { conversationId: cid } });
-            if (!any) {
-              return {
-                found: false as const,
-                status: "pending" as const,
-                method: null,
-                methodLabel: null,
-                bookingCode: null,
-                amount: null,
-                paidAt: null,
-                expiresAt: null,
-                paymentUrl: null,
-              };
-            }
-            const st = await paymentStatusForConversation(cid, paymentOrigin());
-            const stMethod = st.method as PaymentMethod | null;
-            return {
-              found: st.found,
-              status: st.status,
-              method: stMethod,
-              methodLabel: stMethod ? methodLabel(stMethod) : null,
-              bookingCode: st.bookingCode,
-              amount: st.amountPoisha !== null ? formatTaka(st.amountPoisha) : null,
-              paidAt: st.paidAt,
-              expiresAt: st.expiresAt,
-              paymentUrl: st.paymentUrl,
-            };
           },
         };
 
@@ -430,14 +354,20 @@ export async function POST(req: NextRequest) {
           send({ type: "error", error: "The resort's booking connection needs attention. Please try again later." });
           return;
         }
-        // Booking payments for THIS turn: flag on + Suite backend. The
-        // fixture check is belt-and-braces (propertyTakesPayments already
-        // excludes fixtures) — a demo backend must never mint a pay link.
-        const paymentsOn =
-          propertyTakesPayments(activeConversation.propertyId) &&
-          !(suite instanceof FixtureSuiteAdapter);
+        // Resort-pay pointer for THIS turn: on when the property
+        // configured its own payment page AND runs a real Suite backend
+        // (fixture demos have no resort site to point at). One cheap row
+        // read; the executor re-checks per call anyway.
+        const bindingPay = await prisma.propertyBinding
+          .findUnique({
+            where: { propertyId: activeConversation.propertyId },
+            select: { paymentPageUrl: true },
+          })
+          .catch(() => null);
+        const resortPayOn =
+          bindingPay?.paymentPageUrl != null && !(suite instanceof FixtureSuiteAdapter);
         const baseExecute = createToolExecutor(activeConversation.id, db, suite, catalogue, {
-          payments: paymentsOn,
+          resortPay: resortPayOn,
         });
         // Reply identity (onboarding Phase 3): absent profile = default voice.
         const profile = await prisma.propertyProfile
@@ -525,16 +455,14 @@ export async function POST(req: NextRequest) {
                 grounding,
                 catalogue,
                 profile,
-                paymentsOn
-                  ? { payments: true as const, methods: availableMethods().map(methodLabel) }
-                  : { payments: false as const }
+                resortPayOn ? { resortPay: true as const } : { resortPay: false as const }
               ),
             },
             // Token budget: 20 messages kept, each capped (lib/history)
             // so old pastes can't tax every later turn.
             ...capHistoryForModel(history),
           ],
-          tools: toolDefinitionsFor(catalogue, { payments: paymentsOn }),
+          tools: toolDefinitionsFor(catalogue, { resortPay: resortPayOn }),
           execute,
           onModelCall: async (usage) => {
             await prisma.toolCallLog.create({

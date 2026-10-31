@@ -36,47 +36,26 @@ export type ToolDb = {
   releaseDraftClaim(conversationId: string): Promise<void>;
   getDraft(conversationId: string): Promise<BookingDraftRecord | null>;
   createHandoff(conversationId: string, reason: string, summary: string): Promise<void>;
-  createPaymentLink(
-    conversationId: string,
-    method: "stripe" | "manual"
-  ): Promise<PaymentLinkResult>;
-  getPaymentStatus(conversationId: string): Promise<PaymentStatusResult>;
+  getResortPaymentLink(conversationId: string): Promise<ResortPaymentLinkResult>;
 };
 
-// Server-minted payment data (booking payments). The model repeats the
-// paymentUrl EXACTLY as returned — it must never invent, shorten, or
-// rephrase a payment URL, and it never takes payment itself.
-export type PaymentLinkResult = {
+// Server-built resort payment pointer. The model repeats the paymentUrl
+// EXACTLY as returned — it must never invent, shorten, or rephrase it.
+// Concierge never takes resort money: this URL is the resort's OWN pay
+// page with ?booking=CODE. There is deliberately NO status side — paid
+// or not is known only on the resort's site, never here.
+export type ResortPaymentLinkResult = {
   paymentUrl: string;
-  method: "stripe" | "manual";
-  methodLabel: string;
   bookingCode: string;
-  amount: string;
-  expiresAt: string;
-  reused: boolean;
-};
-
-export type PaymentStatusResult = {
-  found: boolean;
-  status: "pending" | "paid" | "expired" | "canceled";
-  method: "stripe" | "manual" | null;
-  methodLabel: string | null;
-  bookingCode: string | null;
-  amount: string | null;
-  paidAt: string | null;
-  expiresAt: string | null;
-  paymentUrl: string | null;
-  // NOTE: no token field on purpose — the model gets the full payment
-  // URL and must never see the raw token it could rephrase or leak.
 };
 
 const DATE_DESC = "Exact date in YYYY-MM-DD format.";
 
 // Tool schemas built per request from the property's catalogue (adapter
 // Phase 3): the model can only name rooms the property actually has.
-// Payment tools join the list only when the route says this turn takes
-// payments (flag on + Suite backend — never fixtures).
-function buildToolDefinitions(roomSlugs: string[], opts?: { payments?: boolean }): ToolDefinition[] {
+// The resort-pay pointer joins the list only when the route says this
+// property configured its own payment page (binding.paymentPageUrl set).
+function buildToolDefinitions(roomSlugs: string[], opts?: { resortPay?: boolean }): ToolDefinition[] {
   const defs: ToolDefinition[] = [
   {
     type: "function",
@@ -186,41 +165,20 @@ function buildToolDefinitions(roomSlugs: string[], opts?: { payments?: boolean }
     },
   },
   ];
-  if (opts?.payments) {
-    defs.push(
-      {
-        type: "function",
-        function: {
-          name: "create_payment_link",
-          description:
-            "Mint the guest's payment link for the draft held in this conversation. Call ONLY after the guest agreed to pay AND picked a method. Returns the payment URL — repeat it EXACTLY as returned, never invent, shorten, or rephrase it. You never take payment yourself.",
-          parameters: {
-            type: "object",
-            properties: {
-              method: {
-                type: "string",
-                enum: ["stripe", "manual"],
-                description: "\"stripe\" for card payment, \"manual\" for bKash/bank transfer verified by staff.",
-              },
-            },
-            required: ["method"],
-          },
+  if (opts?.resortPay) {
+    defs.push({
+      type: "function",
+      function: {
+        name: "get_resort_payment_link",
+        description:
+          "Get the resort's own payment page for the draft held in this conversation. Call after a draft exists. Returns the payment URL — repeat it EXACTLY as returned, never invent, shorten, or rephrase it. You never take payment yourself and you can never say whether the guest paid.",
+        parameters: {
+          type: "object",
+          properties: {},
+          required: [],
         },
       },
-      {
-        type: "function",
-        function: {
-          name: "check_payment_status",
-          description:
-            "Check whether the booking held in this conversation is paid. Use when the guest asks about payment. Reports the paid time and amount, or pending + expiry + the payment URL again.",
-          parameters: {
-            type: "object",
-            properties: {},
-            required: [],
-          },
-        },
-      }
-    );
+    });
   }
   return defs;
 }
@@ -229,7 +187,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = buildToolDefinitions(
   DEMO_ROOMS.map((r) => r.slug)
 );
 
-export function toolDefinitionsFor(rooms: DemoRoom[], opts?: { payments?: boolean }): ToolDefinition[] {
+export function toolDefinitionsFor(rooms: DemoRoom[], opts?: { resortPay?: boolean }): ToolDefinition[] {
   return buildToolDefinitions(
     rooms.map((r) => r.slug),
     opts
@@ -272,9 +230,9 @@ export function createToolExecutor(
   db: ToolDb,
   suite: SuiteAdapter,
   catalogue: DemoRoom[],
-  opts?: { payments?: boolean }
+  opts?: { resortPay?: boolean }
 ) {
-  const paymentsOn = opts?.payments === true;
+  const resortPayOn = opts?.resortPay === true;
   return async function execute(name: string, argsJson: string): Promise<unknown> {
     let args: Record<string, unknown>;
     try {
@@ -283,44 +241,23 @@ export function createToolExecutor(
       return err("Invalid tool arguments.");
     }
 
-    // Booking payments (suite users only, flag-gated). The gate is
-    // enforced here too — not just by hiding the definitions — so a
-    // smuggled tool call fails closed with a guest-safe message.
-    if (name === "create_payment_link") {
-      if (!paymentsOn) return err("Payments are not enabled for this resort. Offer a handoff to staff instead.");
-      const method = args.method === "stripe" || args.method === "manual" ? args.method : null;
-      if (!method) return err("Pick a payment method first: card or manual transfer. Ask the guest which they prefer.");
+    // Resort payment pointer. The gate is enforced here too — not just
+    // by hiding the definition — so a smuggled tool call fails closed
+    // with a guest-safe message.
+    if (name === "get_resort_payment_link") {
+      if (!resortPayOn) return err("This resort hasn't set up its payment page yet. Tell the guest to pay on the resort's website or offer a handoff to staff.");
       if (!(await db.hasDraft(conversationId))) {
         return err("There is no booking draft in this conversation yet. Confirm a quote and the guest's details first.");
       }
       try {
-        const link = await db.createPaymentLink(conversationId, method);
+        const link = await db.getResortPaymentLink(conversationId);
         return {
           ...link,
           message:
-            "Give the guest this payment URL EXACTLY as shown (it opens in a new tab) with the amount and the expiry. Remind them: pay only through this link, on this domain — you never take card details or codes in chat, and staff never ask for them either.",
+            "Give the guest this resort payment URL EXACTLY as shown (it opens the resort's own pay page in a new tab). Remind them: pay only on the resort's official site, and you never take card details or codes in chat — staff never ask for them either. If they ask whether payment is done, say you can't see resort-site payments and offer a handoff.",
         };
       } catch (e) {
-        return err(e instanceof Error ? e.message : "The payment link could not be created.");
-      }
-    }
-
-    if (name === "check_payment_status") {
-      if (!paymentsOn) return err("Payments are not enabled for this resort. Offer a handoff to staff instead.");
-      try {
-        const st = await db.getPaymentStatus(conversationId);
-        if (!st.found) {
-          return { ...st, message: "No payment link exists in this conversation yet. If the guest wants to pay, walk them through picking a method first." };
-        }
-        if (st.status === "paid") {
-          return { ...st, message: "Confirm the payment to the guest with the amount and time. Their room is secured." };
-        }
-        if (st.status === "pending") {
-          return { ...st, message: "The booking is still unpaid. Insist once more: share the payment URL EXACTLY as shown and the expiry — after that the hold releases." };
-        }
-        return { ...st, message: "This payment link is no longer usable. Offer to mint a fresh one if the draft hold is still alive." };
-      } catch (e) {
-        return err(e instanceof Error ? e.message : "The payment status could not be checked.");
+        return err(e instanceof Error ? e.message : "The resort payment link could not be built.");
       }
     }
 

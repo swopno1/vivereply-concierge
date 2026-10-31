@@ -45,12 +45,7 @@ type Card =
   | {
       kind: "payment";
       bookingCode: string;
-      amount: string;
-      methodLabel: string;
-      paymentUrl: string | null;
-      expiresAt: string | null;
-      status: "pending" | "paid" | "expired" | "canceled";
-      paidAt: string | null;
+      paymentUrl: string;
     };
 
 type Message = {
@@ -166,51 +161,28 @@ function CardView({ card }: { card: Card }) {
     );
   }
   if (card.kind === "payment") {
-    if (card.status === "paid") {
-      return (
-        <div className="w-full rounded-xl border border-green-200 bg-green-50 px-4 py-3 shadow-sm">
-          <p className="text-sm font-semibold text-green-900">
-            Payment confirmed — {card.amount}
-          </p>
-          <p className="mt-0.5 text-sm text-green-800">
-            Booking {card.bookingCode} is secured
-            {card.paidAt ? ` · paid ${new Date(card.paidAt).toLocaleString()}` : ""}. A receipt
-            went to your email.
-          </p>
-        </div>
-      );
-    }
-    if (card.status === "pending" && card.paymentUrl) {
-      return (
-        <div className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-          <p className="text-sm font-semibold text-gray-900">
-            Secure your booking — {card.amount}
-          </p>
-          <p className="mt-0.5 text-sm text-gray-700">
-            {card.bookingCode} · {card.methodLabel}
-            {card.expiresAt ? ` · pay before ${new Date(card.expiresAt).toLocaleString()}` : ""}{" "}
-            or the hold releases.
-          </p>
-          <a
-            href={card.paymentUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2 inline-flex min-h-[44px] items-center rounded-lg bg-black px-5 py-2 text-sm font-semibold text-white"
-          >
-            Pay now (opens in a new tab)
-          </a>
-          <p className="mt-2 text-xs text-gray-500">
-            Pay only through this button. We never ask for card details or codes in chat.
-          </p>
-        </div>
-      );
-    }
+    // Pointer to the resort's OWN pay page — never our checkout. No
+    // status exists: paid or not is known only on the resort's site.
     return (
       <div className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-        <p className="text-sm font-semibold text-gray-900">Payment link {card.status}</p>
+        <p className="text-sm font-semibold text-gray-900">
+          Pay on the resort website — booking {card.bookingCode}
+        </p>
         <p className="mt-0.5 text-sm text-gray-700">
-          Booking {card.bookingCode} · {card.amount}. Ask me for a fresh link if your hold is
-          still alive.
+          Your hold releases after 24 hours unless the resort confirms it — paying now on
+          their page secures your room.
+        </p>
+        <a
+          href={card.paymentUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 inline-flex min-h-[44px] items-center rounded-lg bg-black px-5 py-2 text-sm font-semibold text-white"
+        >
+          Pay on resort site (opens in a new tab)
+        </a>
+        <p className="mt-2 text-xs text-gray-500">
+          Pay only on the resort&apos;s official site. We never ask for card details or codes
+          in chat.
         </p>
       </div>
     );

@@ -94,17 +94,21 @@ Companion docs: `supabase-record.md` (project facts), `key-rotation.md`
    between ingestion runs. No shutdown ritual needed.
 5. Full CLI transcript lives in `worker/README.md`.
 
-## 6. Stripe (booking payments — optional, OFF by default)
+## 6. Stripe (PLACEHOLDER — our subscription billing, NOT guest payments)
 
-1. Test mode first: restricted secret key (`rk_…`) →
-   `STRIPE_SECRET_KEY`; register the webhook endpoint
-   `https://app.vivereply.com/api/pay/webhook` for
-   `checkout.session.completed` → `STRIPE_WEBHOOK_SECRET` (`whsec_…`).
-2. Set `PAYMENTS_ENABLED=true` ONLY for suite properties (fixture
-   tenants never get payment tools, even when on). Needs `APP_BASE_URL`
-   — deep links build solely from it.
-3. Go live: swap to live keys + live webhook, re-run one real
-   quote → hold → pay → receipt loop before telling any tenant.
+Guest money NEVER touches our Stripe: guests pay on the resort's own
+website (owner pastes the page URL in Settings → Booking system; no
+env, no setup here). This section is the post-hackathon shape for
+resorts paying US — nothing is wired (`lib/billing.ts` throws):
+
+1. Test mode first: restricted key (`rk_…`) →
+   `BILLING_STRIPE_SECRET_KEY`; register
+   `https://app.vivereply.com/api/billing/webhook` →
+   `BILLING_STRIPE_WEBHOOK_SECRET` (`whsec_…`).
+2. Create the monthly Price in the Stripe dashboard →
+   `BILLING_PRICE_MONTHLY`.
+3. Build the `/api/billing/*` routes + `Subscription` model first —
+   setting these vars today changes nothing.
 
 ## 7. First boot + verify (15 min)
 
@@ -132,4 +136,4 @@ Companion docs: `supabase-record.md` (project facts), `key-rotation.md`
 | Turnstile | signup spam defense | Cloudflare + Vercel | no |
 | Modal | ingestion worker | CLI + Secret | yes (RAG only) |
 | Baseten | model fallback | Vercel env | yes |
-| Stripe | booking payments | dashboard + Vercel | yes |
+| Stripe | OUR billing (placeholder) | dashboard + Vercel | yes (post-hackathon) |

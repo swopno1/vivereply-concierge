@@ -15,6 +15,7 @@ type Binding = {
   id: string;
   propertyId: string;
   suiteBaseUrl: string;
+  paymentPageUrl: string | null;
   version: number;
   secretSet: boolean;
   lastTestedAt: string | null;
@@ -38,6 +39,7 @@ export default function SuiteBindings({
   const [status, setStatus] = useState<Status | null>(null);
   const [baseUrl, setBaseUrl] = useState("");
   const [secret, setSecret] = useState("");
+  const [payPage, setPayPage] = useState("");
   const [editing, setEditing] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
@@ -75,13 +77,17 @@ export default function SuiteBindings({
     // NOTE: PATCH treats secret "" as CLEAR, so the key is sent ONLY when
     // the box is non-empty — submitting an empty box keeps the stored key.
     const secretPart = secret ? { secret } : {};
+    // Payment page: sent only when the box changed from the stored value —
+    // untouched keeps it, cleared box clears it (PATCH "" = clear).
+    const payPart =
+      !mine || payPage !== (mine.paymentPageUrl ?? "") ? { paymentPageUrl: payPage } : {};
     const r = await fetch("/api/admin/suite-bindings", {
       method: mine ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
         mine
-          ? { id: mine.id, suiteBaseUrl: baseUrl || mine.suiteBaseUrl, ...secretPart }
-          : { propertyId: initialPropertyId, suiteBaseUrl: baseUrl, ...secretPart }
+          ? { id: mine.id, suiteBaseUrl: baseUrl || mine.suiteBaseUrl, ...secretPart, ...payPart }
+          : { propertyId: initialPropertyId, suiteBaseUrl: baseUrl, ...secretPart, ...payPart }
       ),
     });
     const j = await r.json().catch(() => ({}));
@@ -92,6 +98,7 @@ export default function SuiteBindings({
     setEditing(false);
     setBaseUrl("");
     setSecret("");
+    setPayPage("");
     setMsg(
       r.status === 201
         ? "Saved. Your booking system now answers this property's guest chats."
@@ -118,6 +125,7 @@ export default function SuiteBindings({
       setEditing(false);
       setBaseUrl("");
       setSecret("");
+      setPayPage("");
       setMsg("Connection removed. The property now uses the demo default.");
       void reload();
     } else {
@@ -153,6 +161,7 @@ export default function SuiteBindings({
     if (!mine) return;
     setEditing(true);
     setBaseUrl(mine.suiteBaseUrl);
+    setPayPage(mine.paymentPageUrl ?? "");
     setSecret(""); // Always starts EMPTY: submitting it untouched keeps the stored key.
     setMsg(
       mine.secretSet
@@ -203,7 +212,11 @@ export default function SuiteBindings({
             <span className={pill}>{mine.suiteBaseUrl}</span>
             <span className={pill}>protocol v{mine.version}</span>
             <span className={pill}>{mine.secretSet ? "key stored" : "no key"}</span>
+            <span className={pill}>{mine.paymentPageUrl ? "pay page set" : "no pay page"}</span>
           </div>
+          {mine.paymentPageUrl && (
+            <p className="break-all font-mono text-xs text-gray-600">{mine.paymentPageUrl}</p>
+          )}
           <p className="text-xs text-gray-500">
             {mine.propertyId}
             {mine.lastTestedAt
@@ -273,6 +286,20 @@ export default function SuiteBindings({
               className="rounded-lg border border-gray-300 px-3 py-2 font-mono"
             />
           </label>
+          <label className="flex flex-col gap-1 text-sm">
+            Your payment page (https URL, optional)
+            <input
+              value={payPage}
+              onChange={(e) => setPayPage(e.target.value)}
+              placeholder="https://yourresort.com/pay"
+              className="rounded-lg border border-gray-300 px-3 py-2 font-mono"
+            />
+            <span className="text-xs text-gray-500">
+              After a draft, the chatbot sends guests here with ?booking=CODE. Guests pay on
+              your site — Concierge never takes resort money. Empty = the bot says to pay on
+              your website instead.
+            </span>
+          </label>
           <div className="flex gap-2">
             <button type="submit" className="rounded-lg bg-black px-4 py-2 text-sm text-white">
               {editing ? "Save changes" : "Save connection"}
@@ -284,6 +311,7 @@ export default function SuiteBindings({
                   setEditing(false);
                   setBaseUrl("");
                   setSecret("");
+                  setPayPage("");
                   setMsg(null);
                 }}
                 className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm"

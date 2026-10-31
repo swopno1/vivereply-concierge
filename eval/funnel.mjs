@@ -1,8 +1,9 @@
 // Booking funnel from the events we already log, per property:
-// widget opens -> conversations -> quoted -> drafted -> payment link
-// -> paid -> handoff. Success = a tool output WITHOUT an error field.
+// widget opens -> conversations -> quoted -> drafted -> resort-pay
+// pointer -> handoff. Success = a tool output WITHOUT an error field.
 // Opens come from the widget.js sendBeacon (WidgetOpen rows, property
-// + timestamp only); only panel taps count, never page loads.
+// + timestamp only); only panel taps count, never page loads. There is
+// deliberately no "paid" stage: resort-site payments are invisible here.
 //
 //   pnpm funnel                 # last 30 days
 //   pnpm funnel -- --days=7
@@ -36,7 +37,7 @@ async function main() {
     const since = new Date(Date.now() - DAYS * 24 * 60 * 60 * 1000);
     console.log(`funnel: last ${DAYS} day(s).`);
 
-    const [opens, convs, logs, links, handoffs] = await Promise.all([
+    const [opens, convs, logs, handoffs] = await Promise.all([
       prisma.widgetOpen.findMany({
         where: { createdAt: { gte: since } },
         select: { propertyId: true },
@@ -48,13 +49,9 @@ async function main() {
       prisma.toolCallLog.findMany({
         where: {
           createdAt: { gte: since },
-          toolName: { in: ["get_quote", "create_booking_draft"] },
+          toolName: { in: ["get_quote", "create_booking_draft", "get_resort_payment_link"] },
         },
         select: { toolName: true, output: true, conversationId: true },
-      }),
-      prisma.paymentLink.findMany({
-        where: { createdAt: { gte: since } },
-        select: { conversationId: true, status: true },
       }),
       prisma.handoffRecord.findMany({
         where: { createdAt: { gte: since } },
@@ -71,8 +68,9 @@ async function main() {
     const drafted = new Set(
       logs.filter((l) => l.toolName === "create_booking_draft" && ok(l)).map((l) => l.conversationId)
     );
-    const linked = new Set(links.map((l) => l.conversationId));
-    const paid = new Set(links.filter((l) => l.status === "paid").map((l) => l.conversationId));
+    const linked = new Set(
+      logs.filter((l) => l.toolName === "get_resort_payment_link" && ok(l)).map((l) => l.conversationId)
+    );
     const handed = new Set(handoffs.map((h) => h.conversationId));
 
     const props = [...new Set(convs.map((c) => c.propertyId))].sort();
@@ -87,7 +85,6 @@ async function main() {
     row("quoted", quoted);
     row("drafted", drafted);
     row("pay-linked", linked);
-    row("paid", paid);
     row("handoffs", handed);
   } finally {
     await prisma.$disconnect();
