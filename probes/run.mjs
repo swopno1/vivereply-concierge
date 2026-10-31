@@ -29,6 +29,16 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { extractDirectToken, parseSseDone } from "../eval/run.mjs";
 
+// Local-first env (same as eval/funnel): .env.local, then .env.
+// dotenv never overrides real environment vars, so inline values still win.
+try {
+  const dotenv = await import("dotenv").catch(() => null);
+  dotenv?.config?.({ path: ".env.local" });
+  dotenv?.config?.();
+} catch {
+  /* env-only is fine */
+}
+
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => {
     const m = a.match(/^--([^=]+)(?:=(.*))?$/);

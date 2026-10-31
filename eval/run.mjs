@@ -19,6 +19,17 @@ import { fileURLToPath } from "node:url";
 import { CASES, CATEGORIES, EVAL_PROPERTY_ID } from "./cases.mjs";
 import { PROMPT_VERSION } from "../lib/prompts.ts";
 
+// Local-first env (same as funnel/dashboard): .env.local, then .env.
+// dotenv never overrides real environment vars, so inline values still
+// win — `EVAL_PASSWORD='...' pnpm eval` keeps working.
+try {
+  const dotenv = await import("dotenv").catch(() => null);
+  dotenv?.config?.({ path: ".env.local" });
+  dotenv?.config?.();
+} catch {
+  /* env-only is fine */
+}
+
 // Import-guarded (same pattern as prisma/seed-tenants.mjs): importing this
 // file runs nothing — the /tmp harness test imports the helpers below.
 
