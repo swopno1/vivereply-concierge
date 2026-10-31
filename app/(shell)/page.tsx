@@ -61,6 +61,35 @@ export default async function Home({
             </>
           )}
         </p>
+        <nav
+          aria-label="Project links"
+          className="mx-auto flex w-full max-w-3xl flex-wrap gap-x-4 gap-y-1 pt-1 text-sm"
+        >
+          <a
+            href="https://demo1.vivereply.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-600 underline underline-offset-2 hover:text-gray-900"
+          >
+            Live resort demo
+          </a>
+          <a
+            href="https://vivereply.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-600 underline underline-offset-2 hover:text-gray-900"
+          >
+            ViveReply
+          </a>
+          <a
+            href="https://vivereply.com/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-600 underline underline-offset-2 hover:text-gray-900"
+          >
+            Chatbot docs
+          </a>
+        </nav>
       </div>
       <div className="min-h-0 flex-1">
         <Chat token={token ?? ""} source="direct" />

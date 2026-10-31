@@ -1,0 +1,105 @@
+{
+  "date": "2026-10-31T01:20:46.750Z",
+  "commit": "ebd7c0a",
+  "baseUrl": "https://app.vivereply.com",
+  "aProperty": "seabreeze-test",
+  "bProperty": "krishnachura-retreat",
+  "results": [
+    {
+      "id": "cross-conversation",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "B conversation ignored; A got a fresh thread"
+      ],
+      "ms": 22247
+    },
+    {
+      "id": "forged-property",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "forged field ignored; no B quote produced"
+      ],
+      "ms": 10783
+    },
+    {
+      "id": "owner-cross-read",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "/api/admin/domains: 0 row(s), all seabreeze-test",
+        "/api/admin/suite-bindings: 0 row(s), all seabreeze-test",
+        "/api/admin/bridge-tokens: 0 row(s), all seabreeze-test",
+        "override ?property=B ignored on /staff"
+      ],
+      "ms": 9989
+    },
+    {
+      "id": "rag-silence",
+      "pass": false,
+      "skipped": false,
+      "notes": [
+        "FAIL: B did not ground from its own docs — probe is indiscriminate, investigate before trusting A"
+      ],
+      "ms": 12901
+    },
+    {
+      "id": "domain-toggle",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "deny-on-next-message + handshake gate + recovery verified"
+      ],
+      "ms": 22968
+    },
+    {
+      "id": "suspend-killswitch",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "suspended",
+        "issuance + both chat scopes + login + live session all refused",
+        "resume restores every surface"
+      ],
+      "ms": 33345
+    },
+    {
+      "id": "owner-deactivate",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "session killed + login blocked",
+        "recovery login works"
+      ],
+      "ms": 10912
+    },
+    {
+      "id": "cross-catalogue",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "B-only room unquotable from A"
+      ],
+      "ms": 12099
+    },
+    {
+      "id": "shared-domain",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "per-key resolution holds; no merge"
+      ],
+      "ms": 7969
+    },
+    {
+      "id": "bootstrap-closed",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "wrong password refused, generic message; env-unset half is code-verified (auth.ts)"
+      ],
+      "ms": 1107
+    }
+  ]
+}

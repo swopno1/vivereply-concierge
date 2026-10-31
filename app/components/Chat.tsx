@@ -214,6 +214,13 @@ export default function Chat({
     { id: "greeting", role: "assistant", text: firstLine },
   ]);
   const [input, setInput] = useState("");
+  // Date picker: native calendar inputs (free on mobile + screen
+  // readers, zero deps). Apply inserts exact YYYY-MM-DD dates into the
+  // draft — never auto-sends, so the guest reviews before sending.
+  const [showDates, setShowDates] = useState(false);
+  const [checkIn, setCheckIn] = useState("");
+  const [checkOut, setCheckOut] = useState("");
+  const [dateError, setDateError] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [phaseDetail, setPhaseDetail] = useState("");
   const [reassurance, setReassurance] = useState("");
@@ -671,6 +678,79 @@ export default function Chat({
 
       <div className="border-t border-gray-200 bg-white px-4 pb-3 pt-3">
         <div className={columnWidth}>
+          {showDates ? (
+            <div className="mb-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="flex min-h-[44px] flex-col gap-1 text-xs text-gray-600">
+                  Check-in
+                  <input
+                    type="date"
+                    value={checkIn}
+                    min={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setCheckIn(e.target.value)}
+                    className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900"
+                  />
+                </label>
+                <label className="flex min-h-[44px] flex-col gap-1 text-xs text-gray-600">
+                  Check-out
+                  <input
+                    type="date"
+                    value={checkOut}
+                    min={checkIn || new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setCheckOut(e.target.value)}
+                    className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900"
+                  />
+                </label>
+                <button
+                  onClick={() => {
+                    setDateError("");
+                    if (!checkIn || !checkOut) {
+                      setDateError("Pick both a check-in and a check-out date.");
+                      return;
+                    }
+                    if (checkOut <= checkIn) {
+                      setDateError("Check-out must be after check-in.");
+                      return;
+                    }
+                    const tag = `(dates: ${checkIn} → ${checkOut})`;
+                    setInput((prev) =>
+                      prev.trim() ? `${prev.trim()} ${tag}` : `I'd like to stay ${tag}`
+                    );
+                    setShowDates(false);
+                    inputRef.current?.focus();
+                  }}
+                  className="min-h-[44px] rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
+                >
+                  Use these dates
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDates(false);
+                    setDateError("");
+                  }}
+                  aria-label="Close date picker"
+                  className="min-h-[44px] rounded-full px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900"
+                >
+                  Cancel
+                </button>
+              </div>
+              {dateError && (
+                <p role="alert" className="mt-2 text-sm text-red-700">
+                  {dateError}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="mb-2">
+              <button
+                onClick={() => setShowDates(true)}
+                aria-label="Pick check-in and check-out dates"
+                className="min-h-[44px] rounded-full border border-gray-300 bg-white px-4 py-1.5 text-sm text-gray-700 shadow-sm hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
+              >
+                Pick dates
+              </button>
+            </div>
+          )}
           <div className="flex items-end gap-2 rounded-[28px] border border-gray-300 bg-white px-2 py-2 shadow-sm focus-within:border-gray-500">
             <input
               ref={inputRef}
