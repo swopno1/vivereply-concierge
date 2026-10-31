@@ -13,7 +13,9 @@ Companion docs: `supabase-record.md` (project facts), `key-rotation.md`
 - Repo `swopno1/vivereply-concierge`, branch `main` is production.
 - CI runs typecheck + tests + build on PRs; nightly contracts probe
   the live Suite. Repo secrets for that workflow ONLY:
-  `SUITE_CONTRACT_ROOM_ID`, `SUITE_API_KEY` (if the backend needs one).
+  `SUITE_API_BASE_URL`, `SUITE_CONTRACT_ROOM_ID` (a real room UUID —
+  non-UUID ids false-alarm, see `.env.example` §5), `SUITE_API_KEY`
+  (if the backend needs one; else don't create it).
 - Nobody else's repo is ours: `vivereply` (site), `travel-scaffold`
   `client/demo1` (demo backend), `vivereply-documentation` (docs) are
   Cosmo's — change requests only, never direct edits.

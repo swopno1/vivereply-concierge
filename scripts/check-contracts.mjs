@@ -57,9 +57,11 @@ async function main() {
     } else ok(`availability { available:${body.available} }`);
   }
 
-  // 3. Unknown room -> 404 with error shape.
+  // 3. Unknown room -> 404 with error shape. The id MUST be a valid
+  // UUID: demo1 validates the shape first, so a non-UUID string answers
+  // 400 (false alarm), while a well-formed but nonexistent UUID 404s.
   {
-    const { status, body } = await get("/api/rooms/no-such-room-xyz/availability?checkIn=2026-12-01&checkOut=2026-12-03");
+    const { status, body } = await get("/api/rooms/00000000-0000-4000-8000-000000000000/availability?checkIn=2026-12-01&checkOut=2026-12-03");
     if (status !== 404 || typeof body?.error !== "string") {
       fail(`unknown room: status ${status}, body ${JSON.stringify(body)?.slice(0, 200)}`);
     } else ok("unknown room -> 404 { error }");
