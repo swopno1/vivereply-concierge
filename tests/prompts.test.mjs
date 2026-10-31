@@ -46,6 +46,16 @@ describe("systemPrompt citation rule", () => {
   });
 });
 
+describe("systemPrompt greeting + group rules", () => {
+  it("keeps bare greetings minimal and hands off large parties, both languages", () => {
+    for (const lang of ["en", "bn"]) {
+      const p = systemPrompt(lang, null, ROOMS, null, { resortPay: false });
+      assert.ok(p.includes("do not list rooms or prices until asked"), lang);
+      assert.ok(p.includes("request_handoff right away instead of quoting"), lang);
+    }
+  });
+});
+
 describe("systemPrompt hold-release rule", () => {
   it("tells the 24h release on every draft in both languages", () => {
     for (const lang of ["en", "bn"]) {
