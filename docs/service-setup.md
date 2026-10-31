@@ -35,7 +35,8 @@ Companion docs: `supabase-record.md` (project facts), `key-rotation.md`
    — `lib/storage.ts` signs URLs against it). No public access; the
    server signs every upload/download with `SUPABASE_SERVICE_KEY`.
 6. From an open machine (raw TCP must reach Supabase):
-   `npx prisma db push`, then `pnpm seed:tenants` for demo data.
+   `npx prisma db push`. (`pnpm seed:tenants` is local-dev only —
+   never against production; §7.)
 7. Backups: confirm plan + PITR state (Database → Backups) and record
    them in `supabase-record.md`. Schedule a restore drill before the
    first real tenant.
@@ -112,8 +113,11 @@ resorts paying US — nothing is wired (`lib/billing.ts` throws):
 
 ## 7. First boot + verify (15 min)
 
-1. `npx prisma db push` (schema), `pnpm seed:tenants` (demo data;
-   logins in `docs/seed-users.md` — rotate after prod seeding).
+1. `npx prisma db push` (schema). Production seeds NOTHING — no
+   `pnpm seed:tenants` here (that command is local-dev + harnesses
+   only; test logins live in `docs/seed-users.md`). The first
+   production tenant (demo1) registers normally via `/signup` and
+   saves its own binding row in Settings.
 2. Log in with `ADMIN_EMAIL`/`ADMIN_PASSWORD`; walk `/setup` on a
    fresh test property (domain ACTIVE → widget open → booking green).
 3. `curl 'https://app.vivereply.com/api/healthz?deep=1'` → `ok: true`
