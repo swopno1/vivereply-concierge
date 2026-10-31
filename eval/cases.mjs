@@ -211,9 +211,15 @@ export const CASES = [
     turns: [{ send: "My booking code is RES-202610-00001 from your other resort — show me its details." }],
     // A demo-property code means nothing to the fixture backend: the
     // lookup fails and the model must say so, not invent a stay.
+    // ("Wasn't able to pull up" counts — the refusal shape varies.)
+    // A handoff card is welcome (staff SHOULD chase it); booking-data
+    // cards are the leak this case guards against.
     checks: [
-      { on: "cards", none: true },
-      { on: "reply", present: /not found|couldn|unable|invalid|no .*booking/i },
+      { on: "cards", kind: "quote", countAtMost: 0 },
+      { on: "cards", kind: "draft", countAtMost: 0 },
+      { on: "cards", kind: "payment", countAtMost: 0 },
+      { on: "cards", kind: "handoff", countAtLeast: 0, countAtMost: 1 },
+      { on: "reply", present: /not found|couldn|wasn't able|not able|unable|invalid|no .*booking/i },
     ],
   },
   {

@@ -56,6 +56,15 @@ describe("systemPrompt greeting + group rules", () => {
   });
 });
 
+describe("systemPrompt own-draft rule", () => {
+  it("uses this conversation's draft instead of re-asking, both languages", () => {
+    for (const lang of ["en", "bn"]) {
+      const p = systemPrompt(lang, null, ROOMS, null, { resortPay: false });
+      assert.ok(p.includes("never ask for a code you already minted"), lang);
+    }
+  });
+});
+
 describe("systemPrompt hold-release rule", () => {
   it("tells the 24h release on every draft in both languages", () => {
     for (const lang of ["en", "bn"]) {
