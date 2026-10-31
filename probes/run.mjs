@@ -446,11 +446,29 @@ const PROBES = [
         cookie: cookieA,
         body: { domain: B.domain, propertyId: A.property },
       });
-      assert(
-        added.status === 201 && added.json?.id,
-        `cross-property domain add failed (${added.status}) — if 409, the API now rejects; update this probe`
-      );
-      const id = added.json.id;
+      // 409 = leftover row from a previous run (probes deactivate, never
+      // delete): reuse it by reactivating. Any other non-201 is a real
+      // failure — including an API that newly rejects shared domains.
+      let id;
+      if (added.status === 201 && added.json?.id) {
+        id = added.json.id;
+      } else if (added.status === 409) {
+        const list = await api("/api/admin/domains", { cookie: cookieA });
+        const row = Array.isArray(list.json)
+          ? list.json.find((r) => r.domain === B.domain && r.propertyId === A.property)
+          : null;
+        assert(row?.id, "409 but the existing row was not found");
+        const re = await api("/api/admin/domains", {
+          method: "PATCH",
+          cookie: cookieA,
+          body: { id: row.id, active: true },
+        });
+        assert(re.status === 200, `leftover row reactivate failed (${re.status})`);
+        id = row.id;
+        notes.push("reused leftover row from a previous run");
+      } else {
+        assert(false, `cross-property domain add failed (${added.status})`);
+      }
       try {
         const ha = await handshake(A.key, origin);
         assert(ha.status === 200 && ha.token, `A handshake failed (${ha.status})`);
