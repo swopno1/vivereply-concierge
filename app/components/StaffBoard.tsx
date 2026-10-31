@@ -315,7 +315,7 @@ export default function StaffBoard({
                   <button
                     type="button"
                     onClick={() => void setStatus("IN_PROGRESS")}
-                    className="min-h-[44px] rounded-lg bg-black px-4 py-1.5 text-sm font-medium text-white"
+                    className="min-h-[44px] rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white"
                   >
                     Start progress
                   </button>
@@ -324,7 +324,7 @@ export default function StaffBoard({
                   <button
                     type="button"
                     onClick={() => void setStatus("CLOSED")}
-                    className="min-h-[44px] rounded-lg border border-gray-300 px-4 py-1.5 text-sm font-medium hover:bg-gray-100"
+                    className="min-h-[44px] rounded-full border border-gray-300 px-4 py-1.5 text-sm font-medium hover:bg-gray-100"
                   >
                     Resolve
                   </button>
@@ -333,7 +333,7 @@ export default function StaffBoard({
                   <button
                     type="button"
                     onClick={() => void setStatus("OPEN")}
-                    className="min-h-[44px] rounded-lg border border-gray-300 px-4 py-1.5 text-sm font-medium hover:bg-gray-100"
+                    className="min-h-[44px] rounded-full border border-gray-300 px-4 py-1.5 text-sm font-medium hover:bg-gray-100"
                   >
                     Reopen
                   </button>
@@ -354,7 +354,7 @@ export default function StaffBoard({
                     <button
                       type="button"
                       onClick={() => void saveAssignment()}
-                      className="shrink-0 rounded-lg bg-black px-4 py-1.5 text-sm font-medium text-white"
+                      className="shrink-0 rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white"
                     >
                       Save
                     </button>
@@ -442,7 +442,7 @@ export default function StaffBoard({
                   <button
                     type="button"
                     onClick={() => void addNote()}
-                    className="shrink-0 rounded-lg bg-black px-4 py-1.5 text-sm font-medium text-white"
+                    className="shrink-0 rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white"
                   >
                     Add note
                   </button>

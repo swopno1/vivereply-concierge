@@ -41,14 +41,14 @@ export default async function VerifyEmailPage({
         <>
           <h1 className="text-2xl font-semibold text-gray-900">Email verified</h1>
           <p className="mt-2 text-sm text-gray-600">
-            Your resort&apos;s configuration is unlocked. Set up your rooms,
-            backend, and widget next.
+            Your resort&apos;s configuration is unlocked. The guided setup
+            walks through rooms, backend, and widget next.
           </p>
           <Link
-            href="/settings"
+            href="/setup"
             className="mt-6 rounded-full bg-black px-5 py-2 text-center text-sm font-medium text-white"
           >
-            Open Settings
+            Continue setup
           </Link>
         </>
       ) : (

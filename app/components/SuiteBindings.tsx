@@ -228,21 +228,21 @@ export default function SuiteBindings({
               type="button"
               onClick={() => void test()}
               disabled={testing}
-              className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-sm disabled:opacity-50"
+              className="rounded-full border border-gray-300 bg-white px-3 py-1 text-sm disabled:opacity-50"
             >
               {testing ? "Testing…" : "Test connection"}
             </button>
             <button
               type="button"
               onClick={startEdit}
-              className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-sm"
+              className="rounded-full border border-gray-300 bg-white px-3 py-1 text-sm"
             >
               Edit
             </button>
             <button
               type="button"
               onClick={() => void remove()}
-              className="rounded-lg border border-red-300 bg-white px-3 py-1 text-sm text-red-600"
+              className="rounded-full border border-red-300 bg-white px-3 py-1 text-sm text-red-600"
             >
               Remove
             </button>
@@ -301,7 +301,7 @@ export default function SuiteBindings({
             </span>
           </label>
           <div className="flex gap-2">
-            <button type="submit" className="rounded-lg bg-black px-4 py-2 text-sm text-white">
+            <button type="submit" className="rounded-full bg-black px-4 py-2 text-sm text-white">
               {editing ? "Save changes" : "Save connection"}
             </button>
             {editing && (
@@ -314,7 +314,7 @@ export default function SuiteBindings({
                   setPayPage("");
                   setMsg(null);
                 }}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm"
+                className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm"
               >
                 Cancel
               </button>

@@ -92,7 +92,7 @@ export default function EvalRunner({ cases, commit }: { cases: EvalCaseInfo[]; c
           onChange={(e) => setSelection(e.target.value)}
           disabled={running}
           aria-label="Eval cases to run"
-          className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900"
+          className="rounded-full border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900"
         >
           <option value="__full__">Full set ({cases.length} cases)</option>
           {cases.map((c) => (

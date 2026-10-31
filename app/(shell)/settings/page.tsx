@@ -33,13 +33,15 @@ function Section({
   title,
   blurb,
   children,
+  id,
 }: {
   title: string;
   blurb: string;
   children: React.ReactNode;
+  id?: string;
 }) {
   return (
-    <section className="flex flex-col gap-3">
+    <section id={id} className="flex scroll-mt-20 flex-col gap-3">
       <header className="border-b border-gray-200 pb-2">
         <h2 className="text-lg font-bold text-gray-900">{title}</h2>
         <p className="text-sm text-gray-500">{blurb}</p>
@@ -254,8 +256,46 @@ export default async function SettingsPage({
         </p>
       </header>
 
+      <nav
+        aria-label="Settings sections"
+        className="sticky top-0 z-10 -mx-4 overflow-x-auto whitespace-nowrap border-b border-gray-200 bg-white/95 px-4 py-2 backdrop-blur"
+      >
+        {(isSuper
+          ? [
+              ["tenants", "Tenants"],
+              ["reruns", "Re-runs"],
+              ["activity", "Activity"],
+            ]
+          : []
+        )
+          .concat([
+            ["chatbot", "Name + topics"],
+            ["widget-codes", "Widget codes"],
+            ["domains", "Domains"],
+            ["bridge-codes", "Bridge codes"],
+            ["bridge-keys", "Bridge keys"],
+            ["booking", "Booking system"],
+            ["rooms", "Rooms"],
+            ["secrets", "Secrets"],
+            ["security", "Security"],
+            ["exam", "Exam"],
+            ["profile", "Profile"],
+            ["appearance", "Appearance"],
+          ])
+          .map(([id, label]) => (
+            <a
+              key={id}
+              href={`#${id}`}
+              className="mr-4 text-sm text-gray-600 underline-offset-2 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900"
+            >
+              {label}
+            </a>
+          ))}
+      </nav>
+
       {isSuper && (
         <Section
+          id="tenants"
           title="Tenants"
           blurb="Registered resorts (public signup + seed file). Owners see exactly their property; suspending a property stops its chat immediately."
         >
@@ -287,6 +327,7 @@ export default async function SettingsPage({
 
       {isSuper && (
         <Section
+          id="reruns"
           title="Onboarding re-runs"
           blurb="Each property gets one ingestion run. Approving unlocks exactly one more."
         >
@@ -296,6 +337,7 @@ export default async function SettingsPage({
 
       {isSuper && (
         <Section
+          id="activity"
           title="Recent activity"
           blurb="Who signed in or changed domains/keys/connections. Names and outcomes only — never secrets."
         >
@@ -304,6 +346,7 @@ export default async function SettingsPage({
       )}
 
       <Section
+        id="chatbot"
         title="Chatbot name + topics"
         blurb="What guests see (name, greeting, tone) and what the chatbot may advise on. Saving here takes effect on the next widget load — no re-ingestion."
       >
@@ -319,6 +362,7 @@ export default async function SettingsPage({
       </Section>
 
       <Section
+        id="widget-codes"
         title="Chat widget codes"
         blurb="One script tag per key. It only runs on that property's approved domains."
       >
@@ -340,6 +384,7 @@ export default async function SettingsPage({
       </Section>
 
       <Section
+        id="domains"
         title="Widget domains"
         blurb="Only these sites can host this property's chat widget. Deactivating a domain stops its widget on the next chat message."
       >
@@ -347,6 +392,7 @@ export default async function SettingsPage({
       </Section>
 
       <Section
+        id="bridge-codes"
         title="Staff bridge codes"
         blurb="Server-to-server snippets for client dashboards. Keys are minted below and stay on the client server."
       >
@@ -361,6 +407,7 @@ export default async function SettingsPage({
       </Section>
 
       <Section
+        id="bridge-keys"
         title="Bridge keys"
         blurb="Server-to-server keys for this property's dashboards and staff widget. A key sees only this property's handoffs; the full token shows once, at mint time."
       >
@@ -372,6 +419,7 @@ export default async function SettingsPage({
       </Section>
 
       <Section
+        id="booking"
         title="Booking system"
         blurb="One connection per property: the address above is what answers your guests' price and availability questions. Test runs server-side and never reveals the key. Changes apply on the next chat message."
       >
@@ -391,6 +439,7 @@ export default async function SettingsPage({
       </Section>
 
       <Section
+        id="rooms"
         title="Room catalogues"
         blurb="One room list per property. Rows govern chat once present; seed the demo file to start."
       >
@@ -398,13 +447,18 @@ export default async function SettingsPage({
       </Section>
 
       <Section
+        id="secrets"
         title="Secrets"
         blurb="Reserved room for secret configuration. Nothing to configure here yet."
       >
         <Later what="Secret rooms will live here (webhook signers and future integrations) once more of them need UI. Bridge keys already have their own room above." />
       </Section>
 
-      <Section title="Security" blurb="What protects this app right now — live status, not promises.">
+      <Section
+        id="security"
+        title="Security"
+        blurb="What protects this app right now — live status, not promises."
+      >
         <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm shadow-sm">
           {[
             ["Owner + super-admin logins (scrypt / signed session cookie)", true],
@@ -431,6 +485,7 @@ export default async function SettingsPage({
 
       {session.role === "SUPER_ADMIN" && (
         <Section
+          id="exam"
           title="Chatbot exam"
           blurb="The 19-case eval, runnable from here. Demo hotel only — a run can never touch real bookings. Same exam as the terminal runner."
         >
@@ -446,6 +501,7 @@ export default async function SettingsPage({
       )}
 
       <Section
+        id="profile"
         title="Profile"
         blurb={
           session.role === "SUPER_ADMIN"
@@ -470,6 +526,7 @@ export default async function SettingsPage({
       </Section>
 
       <Section
+        id="appearance"
         title="Appearance"
         blurb="Reserved room for widget look-and-feel. Nothing to configure here yet."
       >

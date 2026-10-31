@@ -40,7 +40,7 @@ export default function BridgeMint({ propertyId }: { propertyId: string }) {
         <button
           type="button"
           onClick={() => void mint()}
-          className="rounded-lg bg-black px-4 py-1.5 text-sm text-white"
+          className="rounded-full bg-black px-4 py-1.5 text-sm text-white"
         >
           Mint key
         </button>

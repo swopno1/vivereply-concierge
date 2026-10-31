@@ -51,7 +51,9 @@ export default function SignupPage() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "Registration failed.");
-      window.location.href = "/settings";
+      // New owners start guided: the wizard walks property → domain →
+      // widget → booking in order. Settings stays one click away.
+      window.location.href = "/setup";
     } catch (e) {
       setError(e instanceof Error ? e.message : "Registration failed.");
     } finally {

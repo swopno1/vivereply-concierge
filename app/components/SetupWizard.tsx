@@ -108,7 +108,7 @@ export default function SetupWizard({ initial, propertyId, origin, statusUrl }: 
                 <button
                   type="button"
                   onClick={() => void addDomain()}
-                  className="rounded-lg bg-black px-4 py-1.5 text-sm text-white"
+                  className="rounded-full bg-black px-4 py-1.5 text-sm text-white"
                 >
                   Add + activate
                 </button>
@@ -127,7 +127,7 @@ export default function SetupWizard({ initial, propertyId, origin, statusUrl }: 
                   type="button"
                   onClick={() => void refresh()}
                   disabled={checking}
-                  className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-sm text-gray-700 disabled:opacity-50"
+                  className="rounded-full border border-gray-300 bg-white px-4 py-1.5 text-sm text-gray-700 disabled:opacity-50"
                 >
                   {checking ? "Checking…" : "Check for loads"}
                 </button>
@@ -142,7 +142,7 @@ export default function SetupWizard({ initial, propertyId, origin, statusUrl }: 
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <a
                 href="/settings"
-                className="rounded-lg bg-black px-4 py-1.5 text-sm text-white"
+                className="rounded-full bg-black px-4 py-1.5 text-sm text-white"
               >
                 Open Settings → Booking system
               </a>
@@ -150,7 +150,7 @@ export default function SetupWizard({ initial, propertyId, origin, statusUrl }: 
                 type="button"
                 onClick={() => void refresh()}
                 disabled={checking}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-sm text-gray-700 disabled:opacity-50"
+                className="rounded-full border border-gray-300 bg-white px-4 py-1.5 text-sm text-gray-700 disabled:opacity-50"
               >
                 {checking ? "Checking…" : "Re-check"}
               </button>
@@ -170,7 +170,7 @@ export default function SetupWizard({ initial, propertyId, origin, statusUrl }: 
           type="button"
           onClick={() => void refresh()}
           disabled={checking}
-          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 disabled:opacity-50"
+          className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 disabled:opacity-50"
         >
           {checking ? "Refreshing…" : "Refresh all checks"}
         </button>

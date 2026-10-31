@@ -81,7 +81,7 @@ export default function AuditTrail({ properties }: { properties: { id: string; n
         <select
           value={scope}
           onChange={(e) => setScope(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm"
+          className="rounded-full border border-gray-300 bg-white px-2 py-1 text-sm"
         >
           <option value="">All properties</option>
           {properties.map((p) => (

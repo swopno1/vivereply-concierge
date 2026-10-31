@@ -176,7 +176,7 @@ function CardView({ card }: { card: Card }) {
           href={card.paymentUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-2 inline-flex min-h-[44px] items-center rounded-lg bg-black px-5 py-2 text-sm font-semibold text-white"
+          className="mt-2 inline-flex min-h-[44px] items-center rounded-full bg-black px-5 py-2 text-sm font-semibold text-white"
         >
           Pay on resort site (opens in a new tab)
         </a>
