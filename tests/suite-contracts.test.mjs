@@ -19,13 +19,16 @@ describe("fixture idempotency", () => {
     const suite = new FixtureSuiteAdapter("seabreeze-test");
     const first = await suite.createBooking("fx-harbor-suite", GUEST, "2026-11-10", "2026-11-12", {
       idempotencyKey: "conv-1",
+      terms: { accepted: true, version: "v1" },
     });
     const replay = await suite.createBooking("fx-harbor-suite", GUEST, "2026-11-10", "2026-11-12", {
       idempotencyKey: "conv-1",
+      terms: { accepted: true, version: "v1" },
     });
     assert.equal(replay.bookingCode, first.bookingCode);
     const other = await suite.createBooking("fx-harbor-suite", GUEST, "2026-11-10", "2026-11-12", {
       idempotencyKey: "conv-2",
+      terms: { accepted: true, version: "v1" },
     });
     assert.notEqual(other.bookingCode, first.bookingCode);
   });
@@ -57,8 +60,37 @@ describe("HTTP adapter errors", () => {
       };
     });
     const suite = new HttpSuiteAdapter({ baseUrl: "https://suite.test", secret: "s3cr3t", version: 1 });
-    await suite.createBooking("r1", GUEST, "2026-11-10", "2026-11-12", { idempotencyKey: "conv-9" });
+    await suite.createBooking("r1", GUEST, "2026-11-10", "2026-11-12", {
+      idempotencyKey: "conv-9",
+      terms: { accepted: true, version: "v1" },
+    });
     assert.equal(seen["Idempotency-Key"], "conv-9");
     assert.equal(seen.Authorization, "Bearer s3cr3t");
+  });
+  it("puts the idempotency key plus terms in the POST body (CA-1/CA-2)", async () => {
+    let capturedBody;
+    globalThis.fetch = (async (_url, init) => {
+      capturedBody = JSON.parse(init?.body ?? "{}");
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ booking: { bookingCode: "RES-1", totalAmountPoisha: 100 } }),
+      };
+    });
+    const suite = new HttpSuiteAdapter({ baseUrl: "https://suite.test", secret: null, version: 1 });
+    await suite.createBooking("r1", GUEST, "2026-11-10", "2026-11-12", {
+      idempotencyKey: "conv-9",
+      terms: { accepted: true, version: "v1" },
+    });
+    assert.equal(capturedBody.idempotencyKey, "conv-9");
+    assert.equal(capturedBody.termsAccepted, true);
+    assert.equal(capturedBody.termsVersion, "v1");
+  });
+  it("refuses to draft without confirmed terms", async () => {
+    const suite = new HttpSuiteAdapter({ baseUrl: "https://suite.test", secret: null, version: 1 });
+    await assert.rejects(
+      suite.createBooking("r1", GUEST, "2026-11-10", "2026-11-12", { idempotencyKey: "conv-9" }),
+      /Terms confirmation is required/
+    );
   });
 });

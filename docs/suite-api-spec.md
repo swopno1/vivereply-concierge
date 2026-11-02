@@ -8,7 +8,11 @@ Conventions: JSON everywhere. Dates are `YYYY-MM-DD` (check-out exclusive).
 Money is integer **poisha** (1 taka = 100 poisha), never floats. Times are
 ISO strings. The Concierge sends `X-Concierge-Suite-Version: 1` on every
 call and, when the binding stores a secret, `Authorization: Bearer <secret>`
-(backends that need no key ignore the header). Timeout: 15s per call.
+(backends that need no key ignore the header). The Suite exempts
+secret-carrying requests from IP rate limits (shared secret,
+`CONCIERGE_SHARED_SECRET`, must match the binding secret). Timeout: 15s
+per call. Chat bookings default to 1 guest (the adapter sends no guest
+count yet).
 
 ## 1. Ping (REQUIRED)
 
@@ -38,7 +42,9 @@ GET /api/rooms/<roomId>/availability?checkIn=YYYY-MM-DD&checkOut=YYYY-MM-DD
 ```
 POST /api/bookings
 { "roomId": "<id>", "guestName": "…", "guestEmail": "…", "guestPhone": "…",
-  "checkInDate": "YYYY-MM-DD", "checkOutDate": "YYYY-MM-DD" }
+  "checkInDate": "YYYY-MM-DD", "checkOutDate": "YYYY-MM-DD",
+  "termsAccepted": true, "termsVersion": "v1",
+  "idempotencyKey": "<conversation-id>" }
 → 200 { "success": true,
         "booking": { "id": "…", "bookingCode": "RES-…", "totalAmountPoisha": 2900000 } }
 ```
@@ -53,8 +59,16 @@ POST /api/bookings
 - Missing/invalid fields → `400`. Unknown room → `404`. No free unit → `409`
   (message SHOULD read like "sold out" — the Concierge maps 409 to sold-out
   wording when the message is empty).
-- Idempotency: the Concierge sends `Idempotency-Key: <conversation-id>`
-  (one draft per conversation, so the key is stable across retries).
+- Terms (REQUIRED since Suite 2026-11): the Concierge reads the guest the
+  terms summary, gets explicit acceptance in chat, and sends
+  `termsAccepted: true` + `termsVersion`. The acceptance is traceable both
+  ways: the Suite stores both fields on the booking, and the Concierge
+  tool-call log records the call (with `termsAccepted: true`) under the
+  conversation id, which is also the booking idempotency key.
+- Idempotency: the Concierge sends the key BOTH as an
+  `Idempotency-Key: <conversation-id>` header and as an `idempotencyKey`
+  JSON body field (one draft per conversation, so the key is stable across
+  retries; the Suite reads the body field).
   Backends MUST return the ORIGINAL booking (same code, same total) when
   a key repeats — never a second hold. A repeated key with DIFFERENT
   booking fields SHOULD answer `422` (key reuse across conversations is

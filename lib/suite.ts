@@ -26,6 +26,9 @@ export type SuiteBinding = {
 
 export const SUITE_API_VERSION = 1;
 
+/** Must match the Suite CURRENT_TERMS_VERSION (travel-scaffold src/lib/legal/version.ts). Bump together. */
+export const SUITE_TERMS_VERSION = "v1";
+
 function suiteBaseUrl(): string {
   const base = process.env.SUITE_API_BASE_URL;
   if (!base) throw new Error("SUITE_API_BASE_URL is not set");
@@ -33,7 +36,10 @@ function suiteBaseUrl(): string {
 }
 
 export function defaultBinding(): SuiteBinding {
-  return { baseUrl: suiteBaseUrl(), secret: null, version: SUITE_API_VERSION };
+  // Demo-env path: SUITE_API_SECRET identifies Concierge traffic so the
+  // Suite can exempt it from IP rate limits (CA-3). Unset = anonymous.
+  const secret = process.env.SUITE_API_SECRET?.trim() || null;
+  return { baseUrl: suiteBaseUrl(), secret, version: SUITE_API_VERSION };
 }
 
 type SuiteError = { error: string };
@@ -105,7 +111,7 @@ export interface SuiteAdapter {
     guest: BookingGuest,
     checkIn: string,
     checkOut: string,
-    opts?: { idempotencyKey?: string }
+    opts?: { idempotencyKey?: string; terms?: { accepted: boolean; version: string } }
   ): Promise<BookingDraft>;
   lookupBookingByCode(code: string): Promise<BookingLookup>;
   requestBookingDetails(contact: { email?: string; phone?: string }): Promise<{ sent: boolean }>;
@@ -129,8 +135,13 @@ export class HttpSuiteAdapter implements SuiteAdapter {
     guest: BookingGuest,
     checkIn: string,
     checkOut: string,
-    opts?: { idempotencyKey?: string }
+    opts?: { idempotencyKey?: string; terms?: { accepted: boolean; version: string } }
   ): Promise<BookingDraft> {
+    // The Suite 400s drafts without terms; enforcing here keeps every
+    // caller honest instead of failing at the network boundary.
+    if (opts?.terms?.accepted !== true || !opts.terms.version) {
+      throw new Error("Terms confirmation is required before drafting a booking.");
+    }
     const data = (await suiteFetch(this.binding, "/api/bookings", {
       method: "POST",
       headers: opts?.idempotencyKey ? { "Idempotency-Key": opts.idempotencyKey } : {},
@@ -141,6 +152,10 @@ export class HttpSuiteAdapter implements SuiteAdapter {
         guestPhone: guest.guestPhone,
         checkInDate: checkIn,
         checkOutDate: checkOut,
+        // The Suite reads the key from the body; the header stays for spec compliance.
+        ...(opts?.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : {}),
+        termsAccepted: true,
+        termsVersion: opts.terms.version,
       }),
     })) as { booking: BookingDraft };
     const booking = data?.booking;
@@ -234,8 +249,11 @@ export class FixtureSuiteAdapter implements SuiteAdapter {
     guest: BookingGuest,
     checkIn: string,
     checkOut: string,
-    opts?: { idempotencyKey?: string }
+    opts?: { idempotencyKey?: string; terms?: { accepted: boolean; version: string } }
   ): Promise<BookingDraft> {
+    if (opts?.terms?.accepted !== true || !opts.terms.version) {
+      throw new Error("Terms confirmation is required before drafting a booking.");
+    }
     const room = this.room(roomId);
     if (!guest.guestName.trim() || !guest.guestEmail.trim() || !guest.guestPhone.trim()) {
       throw new Error("Guest name, email, and phone are required.");
@@ -286,23 +304,37 @@ export class FixtureSuiteAdapter implements SuiteAdapter {
 //   3. Demo env fallback — the demo property without a row (zero-downtime
 //      cutover until it is seeded).
 //   4. Anything else fails honestly instead of borrowing another backend.
-export async function adapterForProperty(propertyId: string): Promise<SuiteAdapter> {
+export type ResolvedSuiteBinding =
+  | { kind: "fixture" }
+  | { kind: "http"; baseUrl: string; secret: string | null; version: number }
+  | { kind: "none" };
+
+/** Shared resolution behind adapterForProperty and the mapping health probe. */
+export async function resolveSuiteBinding(propertyId: string): Promise<ResolvedSuiteBinding> {
   if (fixtureRoomsFor(propertyId)) {
-    return new FixtureSuiteAdapter(propertyId);
+    return { kind: "fixture" };
   }
   const row = await prisma.propertyBinding.findUnique({ where: { propertyId } });
   if (!row) {
     if (propertyId === (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat")) {
-      return new HttpSuiteAdapter(defaultBinding());
+      const demo = defaultBinding();
+      return { kind: "http", baseUrl: demo.baseUrl, secret: demo.secret, version: demo.version };
     }
-    throw new Error(`Property "${propertyId}" is not connected to a booking backend.`);
+    return { kind: "none" };
   }
   const secret = row.secretEnc ? decryptSecret(row.secretEnc) : null;
-  return new HttpSuiteAdapter({
-    baseUrl: row.suiteBaseUrl.replace(/\/$/, ""),
-    secret,
-    version: row.version,
-  });
+  return { kind: "http", baseUrl: row.suiteBaseUrl.replace(/\/$/, ""), secret, version: row.version };
+}
+
+export async function adapterForProperty(propertyId: string): Promise<SuiteAdapter> {
+  const resolved = await resolveSuiteBinding(propertyId);
+  if (resolved.kind === "fixture") {
+    return new FixtureSuiteAdapter(propertyId);
+  }
+  if (resolved.kind === "http") {
+    return new HttpSuiteAdapter({ baseUrl: resolved.baseUrl, secret: resolved.secret, version: resolved.version });
+  }
+  throw new Error(`Property "${propertyId}" is not connected to a booking backend.`);
 }
 
 export type BackendSource = "settings" | "demo-env" | "fixture" | "none";

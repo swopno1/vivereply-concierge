@@ -9,6 +9,7 @@
 import { DEMO_ROOMS, type DemoRoom } from "@/demo-config/rooms";
 import { isDateString, nightsBetween, quoteForStay, formatTaka } from "@/demo-config/rates";
 import type { SuiteAdapter } from "./suite";
+import { SUITE_TERMS_VERSION } from "./suite";
 import type { ToolDefinition } from "./meta";
 
 export type BookingDraftRecord = {
@@ -93,7 +94,7 @@ function buildToolDefinitions(roomSlugs: string[], opts?: { resortPay?: boolean 
     type: "function",
     function: {
       name: "create_booking_draft",
-      description: "Hold a room for the guest (PENDING booking, no payment). Only after the guest confirmed the quote and gave name, email, and phone.",
+      description: "Hold a room for the guest (PENDING booking, no payment). Only after the guest confirmed the quote, gave name, email, and phone, AND explicitly accepted the booking terms (read them the terms summary first).",
       parameters: {
         type: "object",
         properties: {
@@ -103,8 +104,9 @@ function buildToolDefinitions(roomSlugs: string[], opts?: { resortPay?: boolean 
           guestName: { type: "string", description: "Guest full name." },
           guestEmail: { type: "string", description: "Guest email address." },
           guestPhone: { type: "string", description: "Guest phone number." },
+          termsAccepted: { type: "boolean", description: "True only after the guest explicitly accepted the booking terms in this conversation. Never assume it." },
         },
-        required: ["roomSlug", "checkIn", "checkOut", "guestName", "guestEmail", "guestPhone"],
+        required: ["roomSlug", "checkIn", "checkOut", "guestName", "guestEmail", "guestPhone", "termsAccepted"],
       },
     },
   },
@@ -382,6 +384,9 @@ export function createToolExecutor(
       if (!guestName || !guestEmail.includes("@") || !guestPhone) {
         return err("A draft needs the guest's name, a valid email, and a phone number. Ask for any missing detail.");
       }
+      if (args.termsAccepted !== true) {
+        return err("Read the guest the booking terms summary and get their explicit acceptance before drafting — then call again with termsAccepted true.");
+      }
       if (!(await db.hasQuote(conversationId, room.slug, checkIn, checkOut))) {
         return err("Show the guest a quote for this room and these dates first, and get their confirmation, before drafting.");
       }
@@ -408,7 +413,7 @@ export function createToolExecutor(
           { guestName, guestEmail, guestPhone },
           checkIn,
           checkOut,
-          { idempotencyKey: conversationId }
+          { idempotencyKey: conversationId, terms: { accepted: true, version: SUITE_TERMS_VERSION } }
         );
         const quoted = quoteForStay(room.basePricePoisha, checkIn, checkOut);
         const totalsMatch = booking.totalAmountPoisha === quoted.totalPoisha;

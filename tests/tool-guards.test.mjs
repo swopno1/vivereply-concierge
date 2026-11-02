@@ -63,21 +63,28 @@ describe("quote-first + one-draft", () => {
   it("refuses a draft before its quote", async () => {
     const out = await run(fakeDb({ hasQuote: async () => false }), stubSuite())(
       "create_booking_draft",
-      JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1" })
+      JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1", termsAccepted: true })
     );
     assert.match(out.error, /quote.*first/i);
+  });
+  it("refuses a draft without explicit terms acceptance", async () => {
+    const out = await run(fakeDb({ hasQuote: async () => true }), stubSuite())(
+      "create_booking_draft",
+      JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1" })
+    );
+    assert.match(out.error, /explicit acceptance before drafting/);
   });
   it("refuses a second draft in one conversation", async () => {
     const out = await run(fakeDb({ hasQuote: async () => true, hasDraft: async () => true }), stubSuite())(
       "create_booking_draft",
-      JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1" })
+      JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1", termsAccepted: true })
     );
     assert.match(out.error, /already holds a booking draft/);
   });
   it("drafts when quoted, matching the Suite total", async () => {
     const out = await run(fakeDb({ hasQuote: async () => true }), stubSuite())(
       "create_booking_draft",
-      JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1" })
+      JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1", termsAccepted: true })
     );
     assert.equal(out.bookingCode, "RES-TEST-1");
     assert.equal(out.totalsMatch, true);
@@ -89,7 +96,7 @@ describe("quote-first + one-draft", () => {
       stubSuite({ createBooking: async () => { booked += 1; throw new Error("must not book"); } })
     )(
       "create_booking_draft",
-      JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1" })
+      JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1", termsAccepted: true })
     );
     assert.match(out.error, /already being created/);
     assert.equal(booked, 0);
@@ -103,7 +110,7 @@ describe("quote-first + one-draft", () => {
       stubSuite()
     )(
       "create_booking_draft",
-      JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1" })
+      JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1", termsAccepted: true })
     );
     assert.match(out.error, /already holds a booking draft/);
     assert.equal(reads, 2);
@@ -118,7 +125,7 @@ describe("quote-first + one-draft", () => {
     const draft = await run(
       fakeDb({ hasQuote: async () => true }),
       stubSuite({ createBooking: async () => { throw down; } })
-    )("create_booking_draft", JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1" }));
+    )("create_booking_draft", JSON.stringify({ ...STAY, guestName: "A", guestEmail: "a@b.c", guestPhone: "1", termsAccepted: true }));
     assert.match(draft.error, /staff handoff/);
   });
   it("reports sold-out instead of quoting zero availability", async () => {

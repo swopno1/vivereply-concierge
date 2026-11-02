@@ -31,6 +31,9 @@ export default function RoomCatalogues({ initialPropertyId }: { initialPropertyI
   const [message, setMessage] = useState("");
   const [notice, setNotice] = useState("");
   const [sending, setSending] = useState(false);
+  // CA-7 mapping health: slug -> last probe outcome (null = never probed).
+  const [health, setHealth] = useState<Record<string, { ok: boolean; detail?: string }>>({});
+  const [probing, setProbing] = useState(false);
 
   async function load(prop?: string) {
     const target = (prop ?? propertyId).trim();
@@ -47,6 +50,32 @@ export default function RoomCatalogues({ initialPropertyId }: { initialPropertyI
     setLoadedFor(target);
     setEditingId(null);
     setForm(EMPTY);
+    setHealth({});
+  }
+
+  // Probe each mapping against the backend availability endpoint: 404
+  // means the Suite room is gone/renamed, anything else resolves.
+  async function probe() {
+    if (!loadedFor || probing) return;
+    setProbing(true);
+    setMessage("");
+    try {
+      const res = await fetch(`/api/admin/room-mappings/health?propertyId=${encodeURIComponent(loadedFor)}`);
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !Array.isArray(data?.results)) {
+        setMessage(data?.error || "Could not check mappings.");
+        return;
+      }
+      const next: Record<string, { ok: boolean; detail?: string }> = {};
+      for (const r of data.results as { slug: string; ok: boolean; reason?: string; skipped?: string }[]) {
+        next[r.slug] = { ok: r.ok, detail: r.reason ?? r.skipped };
+      }
+      setHealth(next);
+      const broken = Object.values(next).filter((h) => !h.ok).length;
+      setNotice(broken ? `${broken} of ${rows.length} mappings broken.` : `All ${rows.length} mappings verified.`);
+    } finally {
+      setProbing(false);
+    }
   }
 
   function toPoisha(taka: string): number | null {
@@ -170,6 +199,16 @@ export default function RoomCatalogues({ initialPropertyId }: { initialPropertyI
         >
           Load
         </button>
+        {loadedFor && rows.length > 0 && (
+          <button
+            onClick={probe}
+            disabled={probing}
+            title="Check each backend room ID against the live availability endpoint (404 = broken mapping)"
+            className="rounded-full border px-5 py-2 text-sm disabled:opacity-40"
+          >
+            {probing ? "Checking…" : "Verify mappings"}
+          </button>
+        )}
         {loadedFor && (
           <button
             onClick={seed}
@@ -208,6 +247,16 @@ export default function RoomCatalogues({ initialPropertyId }: { initialPropertyI
                 <p className="text-sm text-gray-500">
                   ৳{(row.basePricePoisha / 100).toLocaleString("en-US")}/night · backend{" "}
                   <span className="font-mono">{row.suiteRoomId.slice(0, 8)}…</span>
+                  {health[row.slug] &&
+                    (health[row.slug].ok ? (
+                      <span className="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800" title={health[row.slug].detail ?? "Backend room resolves"}>
+                        OK
+                      </span>
+                    ) : (
+                      <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700" title={health[row.slug].detail ?? "Broken mapping"}>
+                        Broken
+                      </span>
+                    ))}
                 </p>
               </div>
               <div className="flex shrink-0 gap-2">
