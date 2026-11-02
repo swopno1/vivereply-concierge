@@ -1,6 +1,6 @@
 {
-  "date": "2026-10-31T08:53:17.371Z",
-  "commit": "622b61c",
+  "date": "2026-11-02T15:11:32.888Z",
+  "commit": "78f613f",
   "baseUrl": "https://app.vivereply.com",
   "aProperty": "seabreeze-test",
   "bProperty": "krishnachura-retreat",
@@ -12,7 +12,7 @@
       "notes": [
         "B conversation ignored; A got a fresh thread"
       ],
-      "ms": 20198
+      "ms": 20133
     },
     {
       "id": "forged-property",
@@ -21,19 +21,19 @@
       "notes": [
         "forged field ignored; no B quote produced"
       ],
-      "ms": 11700
+      "ms": 11638
     },
     {
       "id": "owner-cross-read",
       "pass": true,
       "skipped": false,
       "notes": [
-        "/api/admin/domains: 7 row(s), all seabreeze-test",
+        "/api/admin/domains: 15 row(s), all seabreeze-test",
         "/api/admin/suite-bindings: 0 row(s), all seabreeze-test",
         "/api/admin/bridge-tokens: 0 row(s), all seabreeze-test",
         "override ?property=B ignored on /staff"
       ],
-      "ms": 9661
+      "ms": 9810
     },
     {
       "id": "rag-silence",
@@ -42,7 +42,7 @@
       "notes": [
         "FAIL: B did not ground from its own docs — probe is indiscriminate, investigate before trusting A"
       ],
-      "ms": 12436
+      "ms": 16134
     },
     {
       "id": "domain-toggle",
@@ -51,7 +51,7 @@
       "notes": [
         "deny-on-next-message + handshake gate + recovery verified"
       ],
-      "ms": 19999
+      "ms": 20239
     },
     {
       "id": "suspend-killswitch",
@@ -62,7 +62,7 @@
         "issuance + both chat scopes + login + live session all refused",
         "resume restores every surface"
       ],
-      "ms": 27436
+      "ms": 29639
     },
     {
       "id": "owner-deactivate",
@@ -72,7 +72,7 @@
         "session killed + login blocked",
         "recovery login works"
       ],
-      "ms": 10582
+      "ms": 10819
     },
     {
       "id": "cross-catalogue",
@@ -81,7 +81,7 @@
       "notes": [
         "B-only room unquotable from A"
       ],
-      "ms": 11493
+      "ms": 18619
     },
     {
       "id": "shared-domain",
@@ -91,7 +91,7 @@
         "reused leftover row from a previous run",
         "per-key resolution holds; no merge"
       ],
-      "ms": 8813
+      "ms": 9099
     },
     {
       "id": "bootstrap-closed",
@@ -100,7 +100,7 @@
       "notes": [
         "wrong password refused, generic message; env-unset half is code-verified (auth.ts)"
       ],
-      "ms": 1151
+      "ms": 1159
     }
   ]
 }
