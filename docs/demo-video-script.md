@@ -24,12 +24,14 @@ Visual: panel opens, greeting + 3 suggestion taps visible.
 Script: "This is Vivereply Concierge — the AI front-of-house that never
 sleeps, and never invents an answer."
 
-[0:10-0:25] DEMO — LIVE QUOTE + HOLD (the money beat)
+[0:10-0:28] DEMO — LIVE QUOTE + HOLD (the money beat)
 Visual: type "Sea-facing room, Nov 10–12" → Checking phases stream →
-quote card ৳29,000 → confirm + details → draft card WITH booking code.
+quote card ৳29,000 → confirm + details → bot reads 3-line terms →
+"I accept" → draft card WITH booking code.
 Zoom each card as it lands (0.5s holds).
-Script: "Watch: live availability, an exact quote, and a held booking
-with a real code — ৳29,000 of booking value, held while staff sleep."
+Script: "Watch: live availability, an exact quote, terms read aloud
+and accepted, and a held booking with a real code — ৳29,000 of
+booking value, held while staff sleep."
 
 [0:25-0:38] DEMO — PAY POINTER + BENGALI (the trust beats)
 Visual: pay card → click opens resort's OWN pay page in a new tab

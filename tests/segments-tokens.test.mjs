@@ -36,7 +36,7 @@ describe("segments", () => {
     assert.match(p, /Offer no travel\/dining\/transport advice/);
   });
   it("prompt version bumped for the segments change", () => {
-    assert.equal(PROMPT_VERSION, 8);
+    assert.equal(PROMPT_VERSION, 9);
   });
 });
 
@@ -75,7 +75,9 @@ describe("token budgets", () => {
       assistantName: "Aria",
       suggestionSegments: ["dining", "transport", "area-plans", "spots", "activities"],
     });
-    // ~4 chars/token: grounded system prompt must stay under ~1800 tokens.
-    assert.ok(full.length < 7200, `system prompt ${full.length} chars over budget`);
+    // ~4 chars/token: grounded system prompt must stay under ~1900
+    // tokens. (1800 until v9; the Suite-mandated booking-terms block is
+    // non-optional content, so the line moved with a reason, not by drift.)
+    assert.ok(full.length < 7600, `system prompt ${full.length} chars over budget`);
   });
 });

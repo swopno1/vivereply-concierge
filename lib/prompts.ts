@@ -19,7 +19,27 @@ import { catalogueText, DEMO_ROOMS, type DemoRoom } from "@/demo-config/rooms";
 //     rule (eval 14/19 → both were real behavior gaps, not check bugs).
 //   v8 (2026-10-31): + use-this-conversation's-draft rule (verify-draft
 //     flaked asking for an already-minted code).
-export const PROMPT_VERSION = 8;
+//   v9 (2026-11-02): + fixed booking-terms summary (Suite requires
+//     terms acceptance since 2026-11; the model reads THIS text, never
+//     improvises terms).
+export const PROMPT_VERSION = 9;
+
+// Fixed booking-terms summary. The Suite 400s drafts without explicit
+// guest acceptance, so the tool requires termsAccepted — and the model
+// must read a REAL text, not invent legal terms. This summary states
+// only our own verifiable hold mechanics (free 24h hold, pay on the
+// resort site, contact used for this booking only). Resort-specific
+// policies (cancellation, check-in time) are NOT stated here — those
+// come from verified property information or staff, never from us.
+const TERMS_EN = `BOOKING TERMS — read this summary to the guest before drafting, then get their explicit acceptance ("I accept" or equivalent). Never draft without it, never paraphrase it into different promises:
+- This hold is free and releases automatically after 24 hours unless the resort confirms it.
+- You pay on the resort's own website, never in this chat.
+- Your name, email, and phone are used only for this booking.`;
+
+const TERMS_BN = `BOOKING TERMS — draft-er age ei shortogulo otithike porun (answer in Bengali), tarpor tader sposhto sommoti ("ami raji" ba somoman) nin. Sommoti chara kokhono draft korben na, ebong vinno protishruti baniye bolben na:
+- Ei hold binamulle ebong resort confirm na korle 24 ghontay emnitei batil hoye jabe.
+- Shudhu resort-er nijossho website-e payment korben, ei chat-e noy.
+- Apnar nam, email o phone shudhu ei booking-er jonnoi bebohar hobe.`;
 
 const RULES_EN = `You are the Vivereply Concierge, the AI front-of-house for this resort's demo website. You help guests check availability, get quotes, hold a booking draft, or reach staff. You are honest above all: never invent a room, a price, availability, or a booking.
 
@@ -116,5 +136,6 @@ export function systemPrompt(
       : "";
   const paymentBlock =
     opts?.resortPay === true ? `\n\n${language === "bn" ? PAYMENT_BN : PAYMENT_EN}` : "";
-  return `${rules}\n\nAvailable rooms:\n${catalogueText(rooms)}${groundingBlock}${voice}${paymentBlock}`;
+  const termsBlock = `\n\n${language === "bn" ? TERMS_BN : TERMS_EN}`;
+  return `${rules}\n\nAvailable rooms:\n${catalogueText(rooms)}${groundingBlock}${voice}${paymentBlock}${termsBlock}`;
 }

@@ -56,6 +56,20 @@ describe("systemPrompt greeting + group rules", () => {
   });
 });
 
+describe("systemPrompt booking-terms summary", () => {
+  it("ships a fixed terms text the model reads verbatim, both languages", () => {
+    for (const lang of ["en", "bn"]) {
+      const p = systemPrompt(lang, null, ROOMS, null, { resortPay: false });
+      assert.ok(p.includes("BOOKING TERMS"), lang);
+      assert.ok(p.includes(lang === "bn" ? "24 ghontay" : "24 hours"), lang);
+      assert.ok(
+        p.includes(lang === "bn" ? "Sommoti chara kokhono draft korben na" : "Never draft without it"),
+        lang
+      );
+    }
+  });
+});
+
 describe("systemPrompt own-draft rule", () => {
   it("uses this conversation's draft instead of re-asking, both languages", () => {
     for (const lang of ["en", "bn"]) {

@@ -30,10 +30,14 @@ front-of-house you are about to see."
    Fallback (sold out on camera): "That window just filled — that is live data, not
    a recording. Let me try the backup window." → use alt window.
 2. Type: "Yes, hold it. [name], [email], [phone]."
+   Expect: bot reads the 3-line booking terms, asks acceptance.
+   AD: "Before holding, it reads the terms — free 24-hour hold, pay on
+   the resort site."
+3. Type: "I accept the terms — please hold it."
    Expect: draft card with NEW booking code, suiteTotal = quotedTotal.
    AD: "The quote card shows Terracotta Villa, November 10 to 12, total
    ৳29,000 — then the draft card shows the booking code."
-3. Cut to demo1 /admin: show the code, Terracotta, dates, PENDING.
+4. Cut to demo1 /admin: show the code, Terracotta, dates, PENDING.
    AD: "In the resort's own admin: the same code, Terracotta Villa, PENDING."
    Fallback (admin slow): narrate "the draft lands in the resort's own admin" over
    the draft card; show /admin in a pickup shot, same code, no edits to the chat take.

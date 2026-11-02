@@ -70,8 +70,11 @@ export const CASES = [
     category: "draft",
     turns: [
       { send: `What is the total for the Dune Room from Dec 1 to Dec 3, 2026?` },
+      { send: "Yes, please hold it. I'm Eva Tester, eva@example.com, +8801700000000." },
+      // Suite requires explicit terms acceptance since 2026-11: the bot
+      // reads the fixed summary, the guest accepts, then it drafts.
       {
-        send: "Yes, please hold it. I'm Eva Tester, eva@example.com, +8801700000000.",
+        send: "I accept the terms — please hold it.",
         capture: [{ card: "draft", field: "bookingCode", as: "code" }],
       },
     ],
@@ -85,8 +88,9 @@ export const CASES = [
     category: "verification",
     turns: [
       { send: `What is the total for the Dune Room from Dec 1 to Dec 3, 2026?` },
+      { send: "Yes, please hold it. I'm Eva Tester, eva@example.com, +8801700000000." },
       {
-        send: "Yes, please hold it. I'm Eva Tester, eva@example.com, +8801700000000.",
+        send: "I accept the terms — please hold it.",
         capture: [{ card: "draft", field: "bookingCode", as: "code" }],
       },
       { send: "Can you double-check my booking?" },
@@ -103,8 +107,9 @@ export const CASES = [
     category: "verification",
     turns: [
       { send: `What is the total for the Dune Room from Dec 1 to Dec 3, 2026?` },
+      { send: "Yes, please hold it. I'm Eva Tester, eva@example.com, +8801700000000." },
       {
-        send: "Yes, please hold it. I'm Eva Tester, eva@example.com, +8801700000000.",
+        send: "I accept the terms — please hold it.",
         capture: [{ card: "draft", field: "bookingCode", as: "code" }],
       },
       { send: "My booking code is {code}." },
