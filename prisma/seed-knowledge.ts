@@ -1,5 +1,14 @@
-// Seed step-3 property knowledge (run by the founder, never in CI):
-//   pnpm exec tsx prisma/seed-knowledge.ts
+// Seed curated property knowledge (run by the founder, never in CI):
+//   pnpm exec tsx prisma/seed-knowledge.ts -- --property=<live-property-id>
+//
+// The demo corpus (demo-config/knowledge.ts: check-in, halal dining,
+// Family Gathering Week canary, about, help). Use when the onboarding
+// crawl cannot reach the site (e.g. the resort's robots.txt blocks
+// crawlers — the worker respects it) or for a deterministic corpus
+// behind eval/probes. Retrieval is property-scoped, so the property ID
+// is REQUIRED: `--property=` or DEMO_PROPERTY_ID env. Seeding the wrong
+// property makes the docs invisible to the right chat (fail-loud by
+// design — there is no silent default).
 //
 // Requires, in order: pgvector enabled in the Concierge Supabase project
 // (Dashboard → SQL Editor: CREATE EXTENSION IF NOT EXISTS vector; —
@@ -8,9 +17,10 @@
 // KnowledgeDocument / KnowledgeChunk tables, and GEMINI_API_KEY in
 // .env.local (embeddings only — never commit it).
 //
-// Idempotent: deletes existing demo-seed documents first (chunks cascade),
-// then re-embeds every document in demo-config/knowledge.ts. One chunk
-// per document — every document is short enough to embed whole.
+// Idempotent per property: deletes that property's existing demo-seed
+// documents first (chunks cascade), then re-embeds every document in
+// demo-config/knowledge.ts. One chunk per document — every document is
+// short enough to embed whole.
 // The embedding column is Prisma Unsupported("vector(768)"), so chunks
 // are inserted with raw SQL; Prisma cannot write that column directly.
 
@@ -31,12 +41,29 @@ async function main(): Promise<void> {
     );
   }
 
-  const deleted = await prisma.knowledgeDocument.deleteMany({ where: { source: "demo-seed" } });
-  console.log(`Removed ${deleted.count} existing demo-seed document(s).`);
+  const propertyArg = process.argv.find((a) => a.startsWith("--property="));
+  const propertyId = (propertyArg ? propertyArg.slice("--property=".length) : process.env.DEMO_PROPERTY_ID ?? "").trim();
+  if (!propertyId) {
+    console.error(
+      "Refusing: pass the live property ID (--property=<id> or DEMO_PROPERTY_ID). " +
+        "Retrieval is property-scoped — a default would seed docs no chat can see."
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const property = await prisma.property.findUnique({ where: { id: propertyId } });
+  if (!property) {
+    console.error(`Refusing: no Property row "${propertyId}" — check the ID (signup-created IDs carry a suffix).`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const deleted = await prisma.knowledgeDocument.deleteMany({ where: { source: "demo-seed", propertyId } });
+  console.log(`Removed ${deleted.count} existing demo-seed document(s) for ${propertyId}.`);
 
   for (const doc of KNOWLEDGE_DOCS) {
     const created = await prisma.knowledgeDocument.create({
-      data: { title: doc.title, source: "demo-seed", content: doc.content },
+      data: { title: doc.title, source: "demo-seed", content: doc.content, propertyId },
     });
     const embedding = await embedText(doc.content, "RETRIEVAL_DOCUMENT");
     await prisma.$executeRaw`INSERT INTO "KnowledgeChunk" ("id", "documentId", "content", "embedding", "createdAt") VALUES (${randomUUID()}, ${created.id}, ${doc.content}, ${toVectorLiteral(embedding)}::vector, NOW())`;
