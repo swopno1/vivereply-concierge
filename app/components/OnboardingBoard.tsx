@@ -89,6 +89,10 @@ export default function OnboardingBoard({
       }
       setLoadedFor(target);
       setRun(data.run ?? null);
+      // Silent background refreshes (polling, post-invoke) must never
+      // touch the form: the 5s poll would wipe unsaved profile edits
+      // every cycle. Only an explicit Load resets the form.
+      if (silent) return;
       setFiles([]);
       if (data.profile) {
         setProfile({
