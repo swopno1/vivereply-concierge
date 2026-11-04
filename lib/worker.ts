@@ -36,6 +36,15 @@ export async function invokeIngestionWorker(input: {
   if (!res.ok) {
     throw new Error(`Worker invoke responded ${res.status}.`);
   }
+  // The worker answers 200 even when it refuses the run (bad auth /
+  // version mismatch return { accepted: false } in milliseconds and
+  // never call back). Trusting the status alone wedges the run at
+  // RUNNING forever — read the verdict and fail loudly instead.
+  const verdict = await res.json().catch(() => null);
+  if (verdict && verdict.accepted === false) {
+    const why = typeof verdict.error === "string" && verdict.error ? verdict.error : "unknown";
+    throw new Error(`Worker refused the run (${why}).`);
+  }
   return { invoked: true, note: "Worker accepted the run." };
 }
 
