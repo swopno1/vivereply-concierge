@@ -1,8 +1,8 @@
 // Demo catalogue for the hackathon showcase — FLIPPED to Krishnachura
-// Retreat on 2026-10-28 (post step 5). These are the 5 theme rooms in
-// demo1's LIVE database (new demo1 Supabase DB, Krishnachura seed),
-// with their suiteRoomId UUIDs copied from demo1's Supabase Room
-// table by the founder on 2026-10-28, in this order:
+// Retreat on 2026-10-28 (post step 5), RE-FLIPPED on 2026-11-04 after
+// demo1's reseed (new UUIDs, same 5 rooms, same prices — verified from
+// demo1's Supabase Room table by the founder on 2026-11-04).
+// These are the 5 theme rooms in demo1's LIVE database in this order:
 //   Terracotta Villa, Bamboo Cottage, Clay House Suite, Palm Loft,
 //   Earth Lodge.
 // suiteRoomId is the Suite database UUID for the room. Room IDs are
@@ -29,11 +29,11 @@ export type DemoRoom = {
 };
 
 export const DEMO_ROOMS: DemoRoom[] = [
-  { slug: "terracotta-villa", name: "Terracotta Villa", basePricePoisha: 1450000, suiteRoomId: "8accd111-64a4-4407-b2c6-2885057e5919", highlights: ["Sea-view terrace", "Private plunge pool"] },
-  { slug: "bamboo-cottage", name: "Bamboo Cottage", basePricePoisha: 850000, suiteRoomId: "de4ed2c6-34c7-44a2-b36f-c1b7f0647781", highlights: ["Outdoor soaking tub", "Private garden"] },
-  { slug: "clay-house-suite", name: "Clay House Suite", basePricePoisha: 980000, suiteRoomId: "75a8db71-56d9-442a-b5b9-8efd1151868d", highlights: ["Courtyard access", "Fire pit evenings"] },
-  { slug: "palm-loft", name: "Palm Loft", basePricePoisha: 720000, suiteRoomId: "9cb75e2a-a22f-4538-b4ef-120d30690bec", highlights: ["Hammock balcony", "Treetop views"] },
-  { slug: "earth-lodge", name: "Earth Lodge", basePricePoisha: 1680000, suiteRoomId: "e43671ca-6b81-4eef-be53-c3d64dcec0e1", highlights: ["Private kitchen garden", "Shaded veranda"] },
+  { slug: "terracotta-villa", name: "Terracotta Villa", basePricePoisha: 1450000, suiteRoomId: "b3423051-9bd1-4bb2-a055-3547b050554d", highlights: ["Sea-view terrace", "Private plunge pool"] },
+  { slug: "bamboo-cottage", name: "Bamboo Cottage", basePricePoisha: 850000, suiteRoomId: "74b556d0-2ec8-4df5-a302-f2cbf9283cfd", highlights: ["Outdoor soaking tub", "Private garden"] },
+  { slug: "clay-house-suite", name: "Clay House Suite", basePricePoisha: 980000, suiteRoomId: "2b2a2964-2459-410f-8d7b-12f371f8873b", highlights: ["Courtyard access", "Fire pit evenings"] },
+  { slug: "palm-loft", name: "Palm Loft", basePricePoisha: 720000, suiteRoomId: "a55a1e63-00bb-4636-bf10-d1b497ef4261", highlights: ["Hammock balcony", "Treetop views"] },
+  { slug: "earth-lodge", name: "Earth Lodge", basePricePoisha: 1680000, suiteRoomId: "09647178-0d21-408c-b5fd-e5624fef49cf", highlights: ["Private kitchen garden", "Shaded veranda"] },
 ];
 
 export function findRoomBySlug(slug: string): DemoRoom | undefined {
