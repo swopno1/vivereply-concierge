@@ -69,37 +69,45 @@ export default function OnboardingBoard({
   const [notice, setNotice] = useState("");
   const [sending, setSending] = useState(false);
   const [invoking, setInvoking] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [approver, setApprover] = useState("");
 
-  async function load(prop?: string) {
+  async function load(prop?: string, silent = false) {
     const target = (prop ?? propertyId).trim();
     if (!target) return;
-    setMessage("");
-    setNotice("");
-    const res = await fetch(`/api/admin/onboarding?propertyId=${encodeURIComponent(target)}`);
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      setMessage(data?.error || "Could not load onboarding state.");
-      return;
+    if (!silent) {
+      setMessage("");
+      setNotice("");
+      setLoading(true);
     }
-    setLoadedFor(target);
-    setRun(data.run ?? null);
-    setFiles([]);
-    if (data.profile) {
-      setProfile({
-        businessName: data.profile.businessName ?? "",
-        address: data.profile.address ?? "",
-        phone: data.profile.phone ?? "",
-        email: data.profile.email ?? "",
-        website: data.profile.website ?? "",
-        assistantName: data.profile.assistantName ?? "",
-        tone: data.profile.tone ?? "",
-        languages: Array.isArray(data.profile.languages) ? data.profile.languages.join(", ") : "",
-        greeting: data.profile.greeting ?? "",
-        suggestionSegments: cleanSegmentIds(data.profile.suggestionSegments),
-      });
-    } else {
-      setProfile(EMPTY_PROFILE);
+    try {
+      const res = await fetch(`/api/admin/onboarding?propertyId=${encodeURIComponent(target)}`);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || "Could not load onboarding state.");
+        return;
+      }
+      setLoadedFor(target);
+      setRun(data.run ?? null);
+      setFiles([]);
+      if (data.profile) {
+        setProfile({
+          businessName: data.profile.businessName ?? "",
+          address: data.profile.address ?? "",
+          phone: data.profile.phone ?? "",
+          email: data.profile.email ?? "",
+          website: data.profile.website ?? "",
+          assistantName: data.profile.assistantName ?? "",
+          tone: data.profile.tone ?? "",
+          languages: Array.isArray(data.profile.languages) ? data.profile.languages.join(", ") : "",
+          greeting: data.profile.greeting ?? "",
+          suggestionSegments: cleanSegmentIds(data.profile.suggestionSegments),
+        });
+      } else {
+        setProfile(EMPTY_PROFILE);
+      }
+    } finally {
+      if (!silent) setLoading(false);
     }
   }
 
@@ -199,7 +207,7 @@ export default function OnboardingBoard({
         return;
       }
       setNotice(data.note ?? "Invoked.");
-      await load(loadedFor);
+      await load(loadedFor, true);
     } finally {
       setInvoking(false);
     }
@@ -208,7 +216,7 @@ export default function OnboardingBoard({
   // Poll while the run is alive; terminal states stop the loop.
   useEffect(() => {
     if (!loadedFor || !run || (run.status !== "PENDING" && run.status !== "RUNNING")) return;
-    const timer = setInterval(() => void load(loadedFor), 5000);
+    const timer = setInterval(() => void load(loadedFor, true), 5000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadedFor, run?.status, run?.updatedAt]);
@@ -236,10 +244,10 @@ export default function OnboardingBoard({
         />
         <button
           onClick={() => load()}
-          disabled={!propertyId.trim()}
+          disabled={!propertyId.trim() || loading}
           className="rounded-full bg-black px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
-          Load
+          {loading ? "Loading…" : "Load"}
         </button>
       </div>
       {message && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{message}</p>}
