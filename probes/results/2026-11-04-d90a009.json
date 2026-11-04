@@ -1,0 +1,104 @@
+{
+  "date": "2026-11-04T19:18:05.267Z",
+  "commit": "d90a009",
+  "baseUrl": "https://app.vivereply.com",
+  "aProperty": "seabreeze-test",
+  "bProperty": "krishnachura-resort-2e1399",
+  "results": [
+    {
+      "id": "cross-conversation",
+      "pass": false,
+      "skipped": false,
+      "notes": [
+        "FAIL: B login: login failed (401)."
+      ],
+      "ms": 1983
+    },
+    {
+      "id": "forged-property",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "forged field ignored; no B quote produced"
+      ],
+      "ms": 21905
+    },
+    {
+      "id": "owner-cross-read",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "/api/admin/domains: 0 row(s), all seabreeze-test",
+        "/api/admin/suite-bindings: 0 row(s), all seabreeze-test",
+        "/api/admin/bridge-tokens: 0 row(s), all seabreeze-test",
+        "override ?property=B ignored on /staff"
+      ],
+      "ms": 10780
+    },
+    {
+      "id": "rag-silence",
+      "pass": false,
+      "skipped": false,
+      "notes": [
+        "FAIL: B login: login failed (401)."
+      ],
+      "ms": 1814
+    },
+    {
+      "id": "domain-toggle",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "deny-on-next-message + handshake gate + recovery verified"
+      ],
+      "ms": 22395
+    },
+    {
+      "id": "suspend-killswitch",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "suspended",
+        "issuance + both chat scopes + login + live session all refused",
+        "resume restores every surface"
+      ],
+      "ms": 31897
+    },
+    {
+      "id": "owner-deactivate",
+      "pass": false,
+      "skipped": false,
+      "notes": [
+        "FAIL: CRITICAL: could not reactivate A owner — reactivate by hand NOW"
+      ],
+      "ms": 6510
+    },
+    {
+      "id": "cross-catalogue",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "B-only room unquotable from A"
+      ],
+      "ms": 16245
+    },
+    {
+      "id": "shared-domain",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "per-key resolution holds; no merge"
+      ],
+      "ms": 7499
+    },
+    {
+      "id": "bootstrap-closed",
+      "pass": true,
+      "skipped": false,
+      "notes": [
+        "wrong password refused, generic message; env-unset half is code-verified (auth.ts)"
+      ],
+      "ms": 1324
+    }
+  ]
+}
