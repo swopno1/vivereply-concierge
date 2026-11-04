@@ -22,7 +22,10 @@ import { catalogueText, DEMO_ROOMS, type DemoRoom } from "@/demo-config/rooms";
 //   v9 (2026-11-02): + fixed booking-terms summary (Suite requires
 //     terms acceptance since 2026-11; the model reads THIS text, never
 //     improvises terms).
-export const PROMPT_VERSION = 9;
+//   v10 (2026-11-04): + pay-page phone-verification line (demo1
+//     /booking/pay pre-fills the code but unlocks on the booking
+//     phone — the bot must say so).
+export const PROMPT_VERSION = 10;
 
 // Fixed booking-terms summary. The Suite 400s drafts without explicit
 // guest acceptance, so the tool requires termsAccepted — and the model
@@ -90,13 +93,15 @@ Rules:
 const PAYMENT_EN = `PAYMENT — this resort configured its own payment page. Point at it for every held draft; you never take payment yourself and never invent a payment URL.
 - The moment create_booking_draft returns a booking code, present the booking details AND call get_resort_payment_link in the same reply: the hold auto-releases after 24 hours unless the resort confirms it, and paying now on their page secures the room.
 - Repeat the returned payment URL EXACTLY as shown — never invent, shorten, or rephrase any payment link.
-- Tell the guest the link opens the resort's own payment page in a new tab, and say plainly: pay only on the resort's official site, check the page address matches, and know that staff will never ask for card details or codes.
+- Tell the guest the link opens the resort's own payment page in a new tab, where they enter the phone number on their booking to continue — the code alone opens nothing.
+- Say plainly: pay only on the resort's official site, check the page address matches, and know that staff will never ask for card details or codes.
 - When the guest asks whether payment is done, say you can't see resort-site payments — suggest checking their confirmation email or receipt — and offer a handoff. NEVER confirm, deny, or guess a payment happened.`;
 
 const PAYMENT_BN = `PAYMENT — this resort configured its own payment page. Point at it for every held draft; you never take payment yourself and never invent a payment URL.
 - create_booking_draft booking code deoa matroi booking-er biboron din ebong ekoi jobabe get_resort_payment_link kol korun: resort confirm na korle 24 ghontar moddhe hold batil hoye jabe, tader page-e ekhon payment korlei room nischit.
 - Ferot asha payment URL hubohu din — kono payment link banaben na, chhoto korben na, bodlaben na.
-- Otithike bolun link-ti resort-er nijossho payment page notun tab-e khulbe, ebong sposhto kore bolun: shudhu resort-er official site-ei payment korun, page-er thikana miliye nin, ar jene rakhun karmira kokhono card-er tothyo ba code chaiben na.
+- Otithike bolun link-ti resort-er nijossho payment page notun tab-e khulbe, jekhane tader booking-er phone number diye egiye jete hobe — shudhu code-e page khulbe na.
+- Sposhto kore bolun: shudhu resort-er official site-ei payment korun, page-er thikana miliye nin, ar jene rakhun karmira kokhono card-er tothyo ba code chaiben na.
 - Otithi payment hoyeche kina jiggesh korle bolun resort-er site-er payment apni dekhte pan na — confirmation email ba receipt dekhte bolun — ebong handoff-er prostab din. Payment hoyeche kina kokhono nischit korben na, oshikar korben na, andaz korben na.`;
 
 export type PropertyPersona = {

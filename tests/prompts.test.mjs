@@ -35,6 +35,15 @@ describe("systemPrompt payments section", () => {
     assert.ok(p.includes("PAYMENT — this resort configured its own payment page"));
     assert.ok(p.includes("get_resort_payment_link"));
   });
+  it("tells the guest the pay page unlocks on the booking phone, both languages", () => {
+    for (const lang of ["en", "bn"]) {
+      const p = systemPrompt(lang, null, ROOMS, null, { resortPay: true });
+      assert.ok(
+        p.includes(lang === "bn" ? "booking-er phone number diye egiye jete" : "enter the phone number on their booking to continue"),
+        lang
+      );
+    }
+  });
 });
 
 describe("systemPrompt citation rule", () => {
