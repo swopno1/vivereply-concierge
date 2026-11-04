@@ -433,3 +433,19 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
 - Rooftop-pool turn live: honest unknown + handoff offer, no cards.
 - WARNING for filming: Terracotta Nov 10–12 shows available:1 —
   rehearse drafts on ALT windows only (demo-test-plan §Rules).
+
+## 2026-11-04 (submission eve)
+
+- Robots.txt root cause: demo1 serves `Disallow: /` — the worker's
+  polite crawl yields zero pages, so onboarding COMPLETEs empty by
+  design. RAG filled via property-scoped `seed-knowledge.ts` (5 docs,
+  Family Gathering Week canary live) instead. Owner-consent crawl
+  fix (submitted URL = permission) is post-submit.
+- Availability moved mid-day: Terracotta Nov 10–12 flipped 1→0
+  (held externally). Filming window moved to Nov 12–14 (verified
+  available:1, same 2×14500=৳29,000). Bamboo backups: Nov 11–13,
+  Nov 18–20, Nov 21–23. Re-probe morning-of, always.
+- Evidence green on live state: eval 19/19 (prompt v10, one
+  lookup-code infra flake passed on retry), probes 10/10 zero
+  skips (live RAG canary), 98/98 unit. Seed is fixture-only now;
+  probes take B + canary from env (docs/seed-users.md).

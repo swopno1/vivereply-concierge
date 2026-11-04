@@ -1,0 +1,16 @@
+{
+  "startedAt": "2026-11-04T21:27:53.102Z",
+  "baseUrl": "https://app.vivereply.com",
+  "commit": "5251919",
+  "property": "seabreeze-test",
+  "promptVersion": 10,
+  "results": [
+    {
+      "id": "lookup-code",
+      "category": "verification",
+      "pass": true,
+      "failures": [],
+      "softWarnings": []
+    }
+  ]
+}

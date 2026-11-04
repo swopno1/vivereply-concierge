@@ -12,7 +12,7 @@ Base URL: `https://app.vivereply.com` (Concierge production).
    `pnpm exec prisma db push` (needs `DIRECT_URL`; run outside any sandbox
    without database access), then deploy.
 2. In Concierge `/settings`, mint a bridge token for the property
-   (e.g. name `demo1 dashboard`, property `krishnachura-retreat`).
+   (e.g. name `demo1 dashboard`, property `krishnachura-resort-2e1399`).
 3. Copy the token into the CLIENT SERVER's secrets immediately — it is
    shown once and never again. Format: `cb.<prefix>.<secret>`.
 
@@ -47,7 +47,7 @@ GET /api/bridge/handoffs?status=OPEN        # or IN_PROGRESS, CLOSED
 {
   "id": "cm…",
   "conversationId": "cm…",
-  "propertyId": "krishnachura-retreat",
+  "propertyId": "krishnachura-resort-2e1399",
   "reason": "Group booking request",
   "summary": "25 colleagues…",
   "status": "OPEN",

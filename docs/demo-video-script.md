@@ -25,7 +25,7 @@ Script: "This is Vivereply Concierge — the AI front-of-house that never
 sleeps, and never invents an answer."
 
 [0:10-0:28] DEMO — LIVE QUOTE + HOLD (the money beat)
-Visual: type "Sea-facing room, Nov 10–12" → Checking phases stream →
+Visual: type "Sea-facing room, Nov 12–14" → Checking phases stream →
 quote card ৳29,000 → confirm + details → bot reads 3-line terms →
 "I accept" → draft card WITH booking code.
 Zoom each card as it lands (0.5s holds).

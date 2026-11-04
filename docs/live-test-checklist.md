@@ -25,10 +25,10 @@ in your environment, mark SKIP + reason; never fake a PASS.
 
 ## Standing DO-NOTs (every run, no exceptions)
 
-- NO booking drafts on Terracotta Nov 10–12 or Bamboo Oct 30–Nov 1
+- NO booking drafts on Terracotta Nov 12–14 or Bamboo Nov 11–13
   (filming windows — quote only; drafts consume units).
 - NO suspend / domain-toggle / owner-deactivate on the DEMO
-  property (krishnachura-retreat) within 24h of filming —
+  property (krishnachura-resort-2e1399) within 24h of filming —
   seabreeze-test only, and it must end ACTIVE/resumed.
 - NO new signups in prod (junk tenants); NO seed password rotation
   without explicit founder approval; NO live-mode payments, ever.
@@ -45,7 +45,7 @@ in your environment, mark SKIP + reason; never fake a PASS.
 
 ## §2 Auth + owner surfaces
 
-- [ ] Owner login (krishnachura seed) → ok:true, role OWNER
+- [ ] Owner login (live owner) → ok:true, role OWNER
 - [ ] GET /staff /settings /onboarding with session → 200 ×3
 - [ ] Bad password → 401 JSON (not 500, not HTML)
 - [ ] Throttle sanity: ≥6 rapid bad logins → a 429 appears (use a
@@ -53,10 +53,10 @@ in your environment, mark SKIP + reason; never fake a PASS.
 
 ## §3 Guest chat — scripted turns (fresh token per run, quote-only)
 
-Handshake: POST /api/widget-token {key: demo-krishnachura} with
+Handshake: POST /api/widget-token {key: key-krishnachura-resort-2e1399} with
 `Origin: https://demo1.vivereply.com` → token length ~188.
 
-- [ ] T1 English quote: "Is the Terracotta Villa available Nov 10–12?
+- [ ] T1 English quote: "Is the Terracotta Villa available Nov 12–14?
   Total for 2 nights?" → 200, ৳29,000, quote card (note `available:`)
 - [ ] T2 Bengali: wrong room name on purpose ("Bamboo Bungalow…?") →
   Bengali reply, corrected to Bamboo Cottage, NO invented quote
@@ -73,7 +73,7 @@ Handshake: POST /api/widget-token {key: demo-krishnachura} with
 ## §4 Staff + settings behavior (owner session)
 
 - [ ] /staff renders triage (filters + counts, no 500 on empty)
-- [ ] Handoff drill [MUTATES: creates handoff on krishnachura]:
+- [ ] Handoff drill [MUTATES: creates handoff on the demo property]:
   guest turn "we are 25 colleagues…" → handoff card → visible in
   /staff with transcript → add note → resolve → resolved state.
   (Safe anytime: handoffs consume nothing.)

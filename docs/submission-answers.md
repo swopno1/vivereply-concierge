@@ -16,7 +16,7 @@ than the repo proves.
 Lead: the booking loop (live availability → exact quote → held draft
 → resort pay pointer), all on real data. Problem: after-hours inquiry
 loss at independent resorts. Proof points: eval 19/19
-(`eval/results/`), probes 9/10, 81/81 unit tests. Positioning line:
+(`eval/results/`), probes 10/10, 98/98 unit tests. Positioning line:
 "a front-desk agent that acts on live data, not a chatbot that
 answers."
 
@@ -24,7 +24,7 @@ answers."
 
 - Muse Spark via Meta Model API: the agent — tool-use loop (up to 6
   rounds/turn), per-property schemas, EN+BN voice. `lib/meta.ts`,
-  `lib/agent.ts`, prompt v8.
+  `lib/agent.ts`, prompt v10.
 - Muse Code: built with it (daily driver; say so — asked twice).
 - Why Meta's models matter: reasoning quality → tool reliability;
   eval 19/19 + refusal discipline (never invents, hands off) is the
