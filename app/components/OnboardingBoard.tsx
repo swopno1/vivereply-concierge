@@ -68,6 +68,7 @@ export default function OnboardingBoard({
   const [message, setMessage] = useState("");
   const [notice, setNotice] = useState("");
   const [sending, setSending] = useState(false);
+  const [invoking, setInvoking] = useState(false);
   const [approver, setApprover] = useState("");
 
   async function load(prop?: string) {
@@ -182,21 +183,26 @@ export default function OnboardingBoard({
   }
 
   async function invoke() {
-    if (!loadedFor) return;
+    if (!loadedFor || invoking) return;
     setMessage("");
     setNotice("");
-    const res = await fetch("/api/admin/onboarding/invoke", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ propertyId: loadedFor }),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      setMessage(data?.error || "Invoke failed.");
-      return;
+    setInvoking(true);
+    try {
+      const res = await fetch("/api/admin/onboarding/invoke", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ propertyId: loadedFor }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || "Invoke failed.");
+        return;
+      }
+      setNotice(data.note ?? "Invoked.");
+      await load(loadedFor);
+    } finally {
+      setInvoking(false);
     }
-    setNotice(data.note ?? "Invoked.");
-    await load(loadedFor);
   }
 
   // Poll while the run is alive; terminal states stop the loop.
@@ -260,8 +266,12 @@ export default function OnboardingBoard({
           )}
           {run.error && <p className="text-sm text-red-700">{run.error}</p>}
           {run.status === "PENDING" && (
-            <button onClick={invoke} className="self-start rounded-full border px-4 py-1 text-sm">
-              Send to worker
+            <button
+              onClick={invoke}
+              disabled={invoking}
+              className="self-start rounded-full border px-4 py-1 text-sm disabled:opacity-50"
+            >
+              {invoking ? "Sending…" : "Send to worker"}
             </button>
           )}
         </div>
