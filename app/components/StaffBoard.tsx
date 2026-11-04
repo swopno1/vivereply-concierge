@@ -79,6 +79,10 @@ export default function StaffBoard({
   const [editingAssignee, setEditingAssignee] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // One in-flight mutation at a time: keys are "note" | "assign" | status
+  // value. Buttons disable + relabel while set, so a double-click can
+  // neither double-post a note nor race two status moves.
+  const [busy, setBusy] = useState<string | null>(null);
 
   async function loadList(nextFilter: string) {
     setMessage(null);
@@ -146,56 +150,72 @@ export default function StaffBoard({
       setMessage("Your name and the note text are both required.");
       return;
     }
+    if (busy) return;
     setMessage(null);
-    const res = await fetch(`/api/admin/handoffs/${detail.id}/notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ propertyId, author: author.trim(), body: noteBody.trim() }),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      setMessage(data?.error ?? "Could not save the note.");
-      return;
+    setBusy("note");
+    try {
+      const res = await fetch(`/api/admin/handoffs/${detail.id}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ propertyId, author: author.trim(), body: noteBody.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error ?? "Could not save the note.");
+        return;
+      }
+      setNoteBody("");
+      await refreshDetail(detail.id);
+    } finally {
+      setBusy(null);
     }
-    setNoteBody("");
-    await refreshDetail(detail.id);
   }
 
   async function saveAssignment() {
-    if (!detail) return;
+    if (!detail || busy) return;
     setMessage(null);
-    const res = await fetch(`/api/admin/handoffs/${detail.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        propertyId,
-        assignee: assignee.trim() ? assignee.trim() : null,
-      }),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      setMessage(data?.error ?? "Could not save the assignee.");
-      return;
+    setBusy("assign");
+    try {
+      const res = await fetch(`/api/admin/handoffs/${detail.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          propertyId,
+          assignee: assignee.trim() ? assignee.trim() : null,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error ?? "Could not save the assignee.");
+        return;
+      }
+      setEditingAssignee(false);
+      await refreshDetail(detail.id);
+    } finally {
+      setBusy(null);
     }
-    setEditingAssignee(false);
-    await refreshDetail(detail.id);
   }
 
   async function setStatus(status: string) {
-    if (!detail) return;
+    if (!detail || busy) return;
     setMessage(null);
-    const res = await fetch(`/api/admin/handoffs/${detail.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ propertyId, status }),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      setMessage(data?.error ?? "Could not update the status.");
-      return;
+    setBusy(status);
+    try {
+      const res = await fetch(`/api/admin/handoffs/${detail.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ propertyId, status }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error ?? "Could not update the status.");
+        return;
+      }
+      // A status move usually leaves the current filter: follow the record.
+      setFilter(status);
+    } finally {
+      setBusy(null);
     }
-    // A status move usually leaves the current filter: follow the record.
-    setFilter(status);
   }
 
   return (
@@ -242,6 +262,7 @@ export default function StaffBoard({
             <button
               key={h.id}
               onClick={() => void loadDetail(h.id)}
+              disabled={detailLoading}
               aria-current={selectedId === h.id}
               className={`rounded-xl border px-4 py-3 text-left ${
                 selectedId === h.id
@@ -315,27 +336,30 @@ export default function StaffBoard({
                   <button
                     type="button"
                     onClick={() => void setStatus("IN_PROGRESS")}
-                    className="min-h-[44px] rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white"
+                    disabled={busy !== null}
+                    className="min-h-[44px] rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
                   >
-                    Start progress
+                    {busy === "IN_PROGRESS" ? "Starting…" : "Start progress"}
                   </button>
                 )}
                 {detail.status !== "CLOSED" && (
                   <button
                     type="button"
                     onClick={() => void setStatus("CLOSED")}
-                    className="min-h-[44px] rounded-full border border-gray-300 px-4 py-1.5 text-sm font-medium hover:bg-gray-100"
+                    disabled={busy !== null}
+                    className="min-h-[44px] rounded-full border border-gray-300 px-4 py-1.5 text-sm font-medium hover:bg-gray-100 disabled:opacity-50"
                   >
-                    Resolve
+                    {busy === "CLOSED" ? "Resolving…" : "Resolve"}
                   </button>
                 )}
                 {detail.status === "CLOSED" && (
                   <button
                     type="button"
                     onClick={() => void setStatus("OPEN")}
-                    className="min-h-[44px] rounded-full border border-gray-300 px-4 py-1.5 text-sm font-medium hover:bg-gray-100"
+                    disabled={busy !== null}
+                    className="min-h-[44px] rounded-full border border-gray-300 px-4 py-1.5 text-sm font-medium hover:bg-gray-100 disabled:opacity-50"
                   >
-                    Reopen
+                    {busy === "OPEN" ? "Reopening…" : "Reopen"}
                   </button>
                 )}
               </div>
@@ -354,9 +378,10 @@ export default function StaffBoard({
                     <button
                       type="button"
                       onClick={() => void saveAssignment()}
-                      className="shrink-0 rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white"
+                      disabled={busy !== null}
+                      className="shrink-0 rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
                     >
-                      Save
+                      {busy === "assign" ? "Saving…" : "Save"}
                     </button>
                     <button
                       type="button"
@@ -442,9 +467,10 @@ export default function StaffBoard({
                   <button
                     type="button"
                     onClick={() => void addNote()}
-                    className="shrink-0 rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white"
+                    disabled={busy !== null}
+                    className="shrink-0 rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
                   >
-                    Add note
+                    {busy === "note" ? "Adding…" : "Add note"}
                   </button>
                 </div>
               </div>

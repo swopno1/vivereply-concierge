@@ -135,7 +135,7 @@ export default function SignupPage() {
           disabled={sending}
           className="rounded-full bg-black px-5 py-2 text-sm font-medium text-white disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
         >
-          Create account
+          {sending ? "Creating account…" : "Create account"}
         </button>
       </div>
       {error && (

@@ -129,6 +129,7 @@ export default function AppShell({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const pathname = usePathname();
   const visibleGroups = NAV_GROUPS.filter((group) => group.items.length > 0);
   const whoLabel = !session ? "" : session.role === "SUPER_ADMIN" ? "Super admin" : (session.email ?? "Owner");
@@ -140,6 +141,8 @@ export default function AppShell({
   }
 
   async function signOut() {
+    if (signingOut) return;
+    setSigningOut(true);
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
     window.location.href = "/";
   }
@@ -226,9 +229,10 @@ export default function AppShell({
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">{whoLabel}</span>
               <button
                 onClick={signOut}
-                className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+                disabled={signingOut}
+                className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 hover:text-gray-900 disabled:opacity-50"
               >
-                Sign out
+                {signingOut ? "Signing out…" : "Sign out"}
               </button>
             </div>
           ) : (

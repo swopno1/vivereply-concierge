@@ -43,6 +43,8 @@ export default function SuiteBindings({
   const [editing, setEditing] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   const mine = rows.find((r) => r.propertyId === initialPropertyId) ?? null;
 
@@ -73,7 +75,9 @@ export default function SuiteBindings({
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (saving) return;
     setMsg(null);
+    setSaving(true);
     // NOTE: PATCH treats secret "" as CLEAR, so the key is sent ONLY when
     // the box is non-empty — submitting an empty box keeps the stored key.
     const secretPart = secret ? { secret } : {};
@@ -91,6 +95,7 @@ export default function SuiteBindings({
       ),
     });
     const j = await r.json().catch(() => ({}));
+    setSaving(false);
     if (!r.ok) {
       setMsg(j.error ?? "Save failed.");
       return;
@@ -108,7 +113,7 @@ export default function SuiteBindings({
   }
 
   async function remove() {
-    if (!mine) return;
+    if (!mine || removing) return;
     if (
       !confirm(
         "Remove this connection? The property falls back to the demo default until you add one again."
@@ -116,11 +121,13 @@ export default function SuiteBindings({
     ) {
       return;
     }
+    setRemoving(true);
     const r = await fetch("/api/admin/suite-bindings", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: mine.id }),
     });
+    setRemoving(false);
     if (r.ok) {
       setEditing(false);
       setBaseUrl("");
@@ -242,9 +249,10 @@ export default function SuiteBindings({
             <button
               type="button"
               onClick={() => void remove()}
-              className="rounded-full border border-red-300 bg-white px-3 py-1 text-sm text-red-600"
+              disabled={removing}
+              className="rounded-full border border-red-300 bg-white px-3 py-1 text-sm text-red-600 disabled:opacity-50"
             >
-              Remove
+              {removing ? "Removing…" : "Remove"}
             </button>
           </div>
         </div>
@@ -301,8 +309,12 @@ export default function SuiteBindings({
             </span>
           </label>
           <div className="flex gap-2">
-            <button type="submit" className="rounded-full bg-black px-4 py-2 text-sm text-white">
-              {editing ? "Save changes" : "Save connection"}
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-full bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
+            >
+              {saving ? "Saving…" : editing ? "Save changes" : "Save connection"}
             </button>
             {editing && (
               <button

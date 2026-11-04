@@ -38,6 +38,11 @@ export default function StaffEmbed({ token, propertyId }: { token: string; prope
   const [message, setMessage] = useState("");
   const [expired, setExpired] = useState(false);
   const [loading, setLoading] = useState(true);
+  // One in-flight detail load / mutation at a time ("note" | "assign" |
+  // status value): buttons disable + relabel while set, so a
+  // double-click can neither double-post nor race two moves.
+  const [busy, setBusy] = useState<string | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   function authHeaders(): Record<string, string> {
     return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
@@ -61,20 +66,26 @@ export default function StaffEmbed({ token, propertyId }: { token: string; prope
   }
 
   async function loadDetail(id: string) {
+    if (detailLoading) return;
     setMessage("");
-    const res = await fetch(`/api/bridge/handoffs/${id}`, { headers: authHeaders() });
-    if (res.status === 401) {
-      setExpired(true);
-      return;
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`/api/bridge/handoffs/${id}`, { headers: authHeaders() });
+      if (res.status === 401) {
+        setExpired(true);
+        return;
+      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.id) {
+        setMessage(data?.error || "Could not load this handoff.");
+        return;
+      }
+      setSelectedId(id);
+      setDetail(data);
+      setAssignee(data.assignee ?? "");
+    } finally {
+      setDetailLoading(false);
     }
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data?.id) {
-      setMessage(data?.error || "Could not load this handoff.");
-      return;
-    }
-    setSelectedId(id);
-    setDetail(data);
-    setAssignee(data.assignee ?? "");
   }
 
   useEffect(() => {
@@ -90,66 +101,82 @@ export default function StaffEmbed({ token, propertyId }: { token: string; prope
       setMessage("Author and note text are required.");
       return;
     }
+    if (busy) return;
     setMessage("");
-    const res = await fetch(`/api/bridge/handoffs/${detail.id}/notes`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({ author: author.trim(), body: noteBody.trim() }),
-    });
-    if (res.status === 401) {
-      setExpired(true);
-      return;
+    setBusy("note");
+    try {
+      const res = await fetch(`/api/bridge/handoffs/${detail.id}/notes`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ author: author.trim(), body: noteBody.trim() }),
+      });
+      if (res.status === 401) {
+        setExpired(true);
+        return;
+      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || "Could not save the note.");
+        return;
+      }
+      setNoteBody("");
+      await loadDetail(detail.id);
+      await loadList(filter);
+    } finally {
+      setBusy(null);
     }
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      setMessage(data?.error || "Could not save the note.");
-      return;
-    }
-    setNoteBody("");
-    await loadDetail(detail.id);
-    await loadList(filter);
   }
 
   async function saveAssignment() {
-    if (!detail) return;
+    if (!detail || busy) return;
     setMessage("");
-    const res = await fetch(`/api/bridge/handoffs/${detail.id}`, {
-      method: "PATCH",
-      headers: authHeaders(),
-      body: JSON.stringify({ assignee: assignee.trim() ? assignee.trim() : null }),
-    });
-    if (res.status === 401) {
-      setExpired(true);
-      return;
+    setBusy("assign");
+    try {
+      const res = await fetch(`/api/bridge/handoffs/${detail.id}`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ assignee: assignee.trim() ? assignee.trim() : null }),
+      });
+      if (res.status === 401) {
+        setExpired(true);
+        return;
+      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || "Could not save the assignee.");
+        return;
+      }
+      setDetail(data);
+      await loadList(filter);
+    } finally {
+      setBusy(null);
     }
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      setMessage(data?.error || "Could not save the assignee.");
-      return;
-    }
-    setDetail(data);
-    await loadList(filter);
   }
 
   async function setStatus(status: string) {
-    if (!detail) return;
+    if (!detail || busy) return;
     setMessage("");
-    const res = await fetch(`/api/bridge/handoffs/${detail.id}`, {
-      method: "PATCH",
-      headers: authHeaders(),
-      body: JSON.stringify({ status }),
-    });
-    if (res.status === 401) {
-      setExpired(true);
-      return;
+    setBusy(status);
+    try {
+      const res = await fetch(`/api/bridge/handoffs/${detail.id}`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ status }),
+      });
+      if (res.status === 401) {
+        setExpired(true);
+        return;
+      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || "Could not update the status.");
+        return;
+      }
+      setDetail(data);
+      await loadList(filter);
+    } finally {
+      setBusy(null);
     }
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      setMessage(data?.error || "Could not update the status.");
-      return;
-    }
-    setDetail(data);
-    await loadList(filter);
   }
 
   if (expired) {
@@ -201,6 +228,7 @@ export default function StaffEmbed({ token, propertyId }: { token: string; prope
           <button
             key={h.id}
             onClick={() => loadDetail(h.id)}
+            disabled={detailLoading}
             className={`rounded-xl border px-4 py-3 text-left ${
               selectedId === h.id ? "border-black" : "border-gray-200 hover:border-gray-400"
             }`}
@@ -224,9 +252,10 @@ export default function StaffEmbed({ token, propertyId }: { token: string; prope
                 <button
                   key={f}
                   onClick={() => setStatus(f)}
-                  className="min-h-[44px] rounded-full bg-gray-100 px-4 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200"
+                  disabled={busy !== null}
+                  className="min-h-[44px] rounded-full bg-gray-100 px-4 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
                 >
-                  → {f.replace("_", " ")}
+                  {busy ? "…" : `→ ${f.replace("_", " ")}`}
                 </button>
               ))}
             </span>
@@ -274,9 +303,10 @@ export default function StaffEmbed({ token, propertyId }: { token: string; prope
               />
               <button
                 onClick={addNote}
-                className="shrink-0 rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white"
+                disabled={busy !== null}
+                className="shrink-0 rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
               >
-                Add
+                {busy === "note" ? "Adding…" : "Add"}
               </button>
             </div>
             <div className="flex gap-2">
@@ -289,9 +319,10 @@ export default function StaffEmbed({ token, propertyId }: { token: string; prope
               />
               <button
                 onClick={saveAssignment}
-                className="shrink-0 rounded-full border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-100"
+                disabled={busy !== null}
+                className="shrink-0 rounded-full border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-100 disabled:opacity-50"
               >
-                Assign
+                {busy === "assign" ? "Assigning…" : "Assign"}
               </button>
             </div>
           </div>

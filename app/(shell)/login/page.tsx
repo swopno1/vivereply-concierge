@@ -101,7 +101,7 @@ function LoginInner() {
           disabled={sending || !email.trim() || !password}
           className="rounded-full bg-black px-5 py-2 text-sm font-medium text-white disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
         >
-          Log in
+          {sending ? "Logging in…" : "Log in"}
         </button>
       </div>
       {error && (

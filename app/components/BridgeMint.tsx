@@ -10,22 +10,31 @@ export default function BridgeMint({ propertyId }: { propertyId: string }) {
   const [name, setName] = useState("");
   const [minted, setMinted] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // Double-click guard with teeth: a second mint would orphan a live key
+  // (the first token is shown once, then unrecoverable).
+  const [minting, setMinting] = useState(false);
 
   async function mint() {
+    if (minting) return;
     setMsg(null);
     setMinted(null);
-    const r = await fetch("/api/admin/bridge-tokens", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name || "staff dashboard", propertyId }),
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok || typeof j.token !== "string") {
-      setMsg(typeof j.error === "string" ? j.error : "Could not mint a key.");
-      return;
+    setMinting(true);
+    try {
+      const r = await fetch("/api/admin/bridge-tokens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name || "staff dashboard", propertyId }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || typeof j.token !== "string") {
+        setMsg(typeof j.error === "string" ? j.error : "Could not mint a key.");
+        return;
+      }
+      setMinted(j.token as string);
+      setName("");
+    } finally {
+      setMinting(false);
     }
-    setMinted(j.token as string);
-    setName("");
   }
 
   return (
@@ -40,9 +49,10 @@ export default function BridgeMint({ propertyId }: { propertyId: string }) {
         <button
           type="button"
           onClick={() => void mint()}
-          className="rounded-full bg-black px-4 py-1.5 text-sm text-white"
+          disabled={minting}
+          className="rounded-full bg-black px-4 py-1.5 text-sm text-white disabled:opacity-50"
         >
-          Mint key
+          {minting ? "Minting…" : "Mint key"}
         </button>
       </div>
       {msg && <p className="text-sm text-red-700">{msg}</p>}
