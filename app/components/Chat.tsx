@@ -485,9 +485,9 @@ export default function Chat({
     void runTurn(text);
   }
 
-  // One-tap helpful vote, stored per conversation (upsert — the guest
-  // may change their mind). Fire-and-forget: a failed save must never
-  // interrupt the chat, so the UI updates optimistically and stays.
+  // One-tap helpful vote, stored per conversation. One-shot: the
+  // ballot dismisses on vote. Fire-and-forget: a failed save must
+  // never interrupt the chat, so the UI dismisses optimistically.
   async function castVote(helpful: boolean) {
     if (!conversationId || !token) return;
     setVote(helpful);
@@ -503,10 +503,18 @@ export default function Chat({
   // The ballot anchors to the latest finished reply only: voting on a
   // stale message while a new turn runs would misattribute the vote.
   const lastMessage = messages[messages.length - 1];
+  // The ballot waits for a real conversation (3+ finished assistant
+  // replies — one question is not enough to judge) and dismisses
+  // permanently once the guest votes.
+  const assistantReplies = messages.filter(
+    (m) => m.role === "assistant" && m.id !== "greeting" && !m.typing
+  ).length;
   const showBallot =
     phase === "idle" &&
     !error &&
     conversationId !== null &&
+    vote === null &&
+    assistantReplies >= 3 &&
     lastMessage !== undefined &&
     lastMessage.role === "assistant" &&
     !lastMessage.typing &&
@@ -622,28 +630,20 @@ export default function Chat({
       {showBallot && (
         <div className={`px-4 ${columnWidth}`}>
           <div className="mb-2 flex items-center gap-2 rounded-xl bg-gray-50 px-4 py-2">
-            <p className="flex-1 text-sm text-gray-600">
-              {vote === null ? "Was this helpful?" : "Thanks — this helps the resort improve."}
-            </p>
+            <p className="flex-1 text-sm text-gray-600">Was this helpful?</p>
             <button
               type="button"
               onClick={() => void castVote(true)}
-              aria-pressed={vote === true}
               aria-label="Yes, this was helpful"
-              className={`min-h-[44px] rounded-full px-4 py-1 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2 ${
-                vote === true ? "bg-black text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-              }`}
+              className="min-h-[44px] rounded-full bg-gray-200 px-4 py-1 text-sm font-medium text-gray-700 hover:bg-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
             >
               Yes
             </button>
             <button
               type="button"
               onClick={() => void castVote(false)}
-              aria-pressed={vote === false}
               aria-label="No, this was not helpful"
-              className={`min-h-[44px] rounded-full px-4 py-1 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2 ${
-                vote === false ? "bg-black text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-              }`}
+              className="min-h-[44px] rounded-full bg-gray-200 px-4 py-1 text-sm font-medium text-gray-700 hover:bg-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2"
             >
               No
             </button>

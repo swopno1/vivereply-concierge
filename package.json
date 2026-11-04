@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "author": "ViveScript Solutions",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "next dev",

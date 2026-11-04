@@ -14,10 +14,9 @@
 ## In the portal
 
 - [ ] Accept the rules; confirm eligibility (new work: first commit
-      Oct 27, 2026, inside Oct 26 – Nov 4). While reading: confirm NO
-      open-source-license requirement (our LICENSE is proprietary with
-      a hackathon-evaluation exception — if the rules demand OSS,
-      STOP and decide before pasting anything).
+      Oct 27, 2026, inside Oct 26 – Nov 4). Open-source requirement:
+      SATISFIED — LICENSE is MIT (organizers confirmed OSS is
+      mandatory; converted Nov 4).
 - [ ] Confirm track/theme spelling, judging weights (expected
       30/25/25/20 — VERIFY, do not assume), video caps.
 - [ ] Paste docs/submission-text.md fields; replace every [VERIFY].

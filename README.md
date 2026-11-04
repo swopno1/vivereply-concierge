@@ -3,7 +3,7 @@
 [![CI](https://github.com/swopno1/vivereply-concierge/actions/workflows/ci.yml/badge.svg)](https://github.com/swopno1/vivereply-concierge/actions)
 [![Stack](https://img.shields.io/badge/stack-Next.js%20·%20Muse%20Spark%20·%20Prisma-black)](https://github.com/swopno1/vivereply-concierge)
 [![Eval](https://img.shields.io/badge/eval-19%2F19-brightgreen)](docs/live-test-checklist.md)
-[![License](https://img.shields.io/badge/license-proprietary-red)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ![Vivereply Concierge — AI front-of-house for resorts](public/og-concierge.png)
 
@@ -291,6 +291,4 @@ journey
 
 ## License
 
-Copyright (c) 2026 ViveScript Solutions. All rights reserved — see
-`LICENSE`. Source is visible for hackathon evaluation; reuse requires
-written permission.
+MIT licensed — see `LICENSE`. Copyright (c) 2026 ViveScript Solutions LLC.
