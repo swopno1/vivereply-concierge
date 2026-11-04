@@ -1,10 +1,13 @@
-// Onboarding admin API: status + submit (RAG engine, session only; owners
-// act only for their own property).
+// Onboarding admin API: status + submit + profile-only save (RAG engine,
+// session only; owners act only for their own property).
 //   GET  ?propertyId= -> { profile, run } (either may be null)
 //   POST -> { propertyId, profile, website?, filePaths[] } validates,
 //     enforces the once-only gate, upserts the profile, (re)starts the run,
 //     and invokes the cloud worker (best-effort: without worker config the
 //     run waits as PENDING and /invoke retries later).
+//   PATCH -> { propertyId, profile } validates and upserts ONLY the
+//     profile (tone/name/etc.) — no gate, no run touched. Without this,
+//     owners could never edit the profile after the once-only POST.
 // Static budget caps are enforced here; dynamic ones (chars, tokens) are
 // enforced by the worker + callback, which abort to PARTIAL.
 
@@ -13,35 +16,9 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
 import { ONBOARDING_BUDGET, sanitizeFilename } from "@/lib/onboarding";
-import { cleanSegmentIds } from "@/lib/segments";
+import { parseProfileInput, str } from "@/lib/onboarding-profile";
 import { signDownloadUrl, signUploadUrl } from "@/lib/storage";
 import { invokeIngestionWorker } from "@/lib/worker";
-
-function str(value: unknown, max: number): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > max) return null;
-  return trimmed;
-}
-
-function optStr(value: unknown, max: number): string | null {
-  if (value === undefined || value === null || value === "") return null;
-  return str(value, max);
-}
-
-function cleanWebsite(value: unknown): string | null | "invalid" {
-  if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string") return "invalid";
-  const trimmed = value.trim();
-  if (trimmed.length > 500) return "invalid";
-  try {
-    const url = new URL(trimmed);
-    if (url.protocol !== "https:" && url.protocol !== "http:") return "invalid";
-    return trimmed;
-  } catch {
-    return "invalid";
-  }
-}
 
 function shapeRun(run: {
   id: string;
@@ -106,20 +83,17 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const propertyId = str(body?.propertyId, 100);
   const profile = (body?.profile ?? {}) as Record<string, unknown>;
-  const businessName = str(profile.businessName, 150);
   if (!propertyId) {
     return NextResponse.json({ error: "Property ID is required (max 100 characters)." }, { status: 400 });
   }
   if (!sessionCan(session, propertyId)) {
     return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
   }
-  if (!businessName) {
-    return NextResponse.json({ error: "Business name is required (max 150 characters)." }, { status: 400 });
+  const parsed = parseProfileInput(profile, body?.website);
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
-  const website = cleanWebsite(body?.website ?? profile.website);
-  if (website === "invalid") {
-    return NextResponse.json({ error: "Website must be an http(s) URL." }, { status: 400 });
-  }
+  const { website } = parsed.data;
   const filePaths = Array.isArray(body?.filePaths) ? body.filePaths : [];
   if (filePaths.length > ONBOARDING_BUDGET.maxFiles) {
     return NextResponse.json(
@@ -143,21 +117,7 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  const languages = Array.isArray(profile.languages)
-    ? profile.languages.filter((l): l is string => typeof l === "string").map((l) => l.trim().slice(0, 30)).filter(Boolean).slice(0, 5)
-    : [];
-  const profileData = {
-    businessName,
-    address: optStr(profile.address, 300),
-    phone: optStr(profile.phone, 50),
-    email: optStr(profile.email, 150),
-    website,
-    assistantName: optStr(profile.assistantName, 100),
-    tone: optStr(profile.tone, 500),
-    languages,
-    greeting: optStr(profile.greeting, 500),
-    suggestionSegments: cleanSegmentIds(profile.suggestionSegments),
-  };
+  const profileData = parsed.data;
 
   const existing = await prisma.onboardingRun.findUnique({ where: { propertyId } });
   if (existing && !existing.approvedRerun) {
@@ -228,4 +188,33 @@ export async function POST(req: NextRequest) {
   }
   const fresh = await prisma.onboardingRun.findUnique({ where: { propertyId } });
   return NextResponse.json({ run: fresh ? shapeRun(fresh) : shapeRun(run), worker });
+}
+
+export async function PATCH(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  if (!(await sessionOwnerVerified(session))) {
+    return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
+  }
+  const body = await req.json().catch(() => null);
+  const propertyId = str(body?.propertyId, 100);
+  if (!propertyId) {
+    return NextResponse.json({ error: "Property ID is required (max 100 characters)." }, { status: 400 });
+  }
+  if (!sessionCan(session, propertyId)) {
+    return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
+  }
+  const profile = (body?.profile ?? {}) as Record<string, unknown>;
+  const parsed = parseProfileInput(profile, body?.website);
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
+  }
+  const saved = await prisma.propertyProfile.upsert({
+    where: { propertyId },
+    create: { propertyId, ...parsed.data },
+    update: parsed.data,
+  });
+  return NextResponse.json({ profile: saved });
 }

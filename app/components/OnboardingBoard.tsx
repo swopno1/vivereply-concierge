@@ -70,6 +70,7 @@ export default function OnboardingBoard({
   const [sending, setSending] = useState(false);
   const [invoking, setInvoking] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [approver, setApprover] = useState("");
 
   async function load(prop?: string, silent = false) {
@@ -174,6 +175,45 @@ export default function OnboardingBoard({
       setMessage(e instanceof Error ? e.message : "Could not submit onboarding.");
     } finally {
       setSending(false);
+    }
+  }
+
+  // Profile-only save (PATCH): persists tone/name/etc. without touching
+  // the run — the escape hatch POST's once-only gate closed.
+  async function saveProfile() {
+    if (!loadedFor || savingProfile) return;
+    setMessage("");
+    setNotice("");
+    setSavingProfile(true);
+    try {
+      const res = await fetch("/api/admin/onboarding", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          propertyId: loadedFor,
+          profile: {
+            businessName: profile.businessName,
+            address: profile.address,
+            phone: profile.phone,
+            email: profile.email,
+            website: profile.website || undefined,
+            assistantName: profile.assistantName,
+            tone: profile.tone,
+            languages: profile.languages.split(",").map((l) => l.trim()).filter(Boolean),
+            greeting: profile.greeting,
+            suggestionSegments: profile.suggestionSegments,
+          },
+          website: profile.website || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Could not save profile.");
+      setNotice("Profile saved. The chatbot uses it from the next message.");
+      await load(loadedFor, true);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Could not save profile.");
+    } finally {
+      setSavingProfile(false);
     }
   }
 
@@ -365,6 +405,17 @@ export default function OnboardingBoard({
           {run && run.filePaths.length > 0 && files.length === 0 && (
             <p className="text-sm text-gray-500">{run.filePaths.length} file(s) attached to this run.</p>
           )}
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={saveProfile}
+              disabled={savingProfile || !profile.businessName.trim()}
+              title="Save business details and reply tone without starting a run"
+              className="self-start rounded-full border border-gray-300 bg-white px-5 py-2 text-sm font-medium text-gray-900 hover:bg-gray-100 disabled:opacity-40"
+            >
+              {savingProfile ? "Saving…" : "Save profile"}
+            </button>
+          </div>
 
           {blocked ? (
             <div className="flex flex-col gap-2 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-3">
