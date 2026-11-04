@@ -1,30 +1,38 @@
-# Seed users (test tenants)
+# Seed users (fixture tenant)
 
 Source of truth for the seed values is `prisma/seed-tenants.mjs`
 (`ownerPassword` per entry) — this doc explains them. Seeds run via
 `pnpm seed:tenants` from a machine that reaches the database.
 
+Since the signup era (2026-11-04) the seed holds ONLY the fixture
+tenant. Real properties — including the live demo resort — come from
+public `/signup` with owner-chosen IDs and are never seeded (seeding a
+second "demo" property would duplicate live domain approvals).
+
 ## The logins
 
 | Property | Owner email | Initial password | Widget key | Domains |
 |---|---|---|---|---|
-| krishnachura-retreat (demo) | krishnachura@test.com | `krishnachura-demo-login-01` | demo-krishnachura | demo1.vivereply.com |
 | seabreeze-test (fixture) | sabreeze@test.com | `seabreeze-demo-login-01` | test-seabreeze | (none — direct token until approved) |
+
+The live demo property (signup-created, e.g. `krishnachura-resort-*`)
+is NOT in this table — its owner, key, and password live in the product
+and the founder's vault, never in git.
 
 No super-admin User row is seeded — the founder logs in via the
 `ADMIN_EMAIL` + `ADMIN_PASSWORD` bootstrap (env).
 
 ## Security contract (read this)
 
-- These passwords are COMMITTED to git. Treat them as public to
+- The fixture password is COMMITTED to git. Treat it as public to
   every repo reader — that is the price of inline seed data, paid
-  deliberately for demo convenience.
-- Test tenants ONLY. Real tenants MUST come from public `/signup`
+  deliberately for evidence-run convenience.
+- Fixture ONLY. Real tenants MUST come from public `/signup`
   (email verification + Turnstile, no temp passwords). Never seed a
   real resort's login here.
-- After seeding production: log in as each owner promptly and rotate
-  via Settings (first human login is forced to). Until rotated,
-  anyone with repo access can use these logins.
+- After seeding production: the eval/probes need sabreeze's CURRENT
+  password in env (`EVAL_PASSWORD`, `PROBE_A_PASSWORD`). If the owner
+  rotates in Settings, update the env, not the seed.
 - Re-running the seed NEVER resets an existing user's password
   (by design — the committed value must not silently restore over
   a rotation). Rotation happens in Settings.
@@ -34,8 +42,19 @@ No super-admin User row is seeded — the founder logs in via the
 
 ## Automation linkage
 
-- `EVAL_PASSWORD` = sabreeze's CURRENT password (seed value until
-  first rotation, rotated value after).
-- `PROBE_A_PASSWORD` / `PROBE_B_PASSWORD` = current sabreeze /
-  krishnachura passwords respectively. Probes fail on stale
-  passwords — update the env, not the seed, after rotating.
+- Eval referee: `EVAL_PASSWORD` = sabreeze's CURRENT password;
+  `EVAL_PROPERTY_ID` defaults to `seabreeze-test` (override only for
+  another fixture-backend tenant — never a live property, whose
+  drafts would be REAL bookings).
+- Probes: A = seabreeze fixture (`PROBE_A_PASSWORD` = sabreeze's
+  current password, `PROBE_A_OWNER_ID` from
+  `SELECT id FROM "User" WHERE email='sabreeze@test.com';`).
+  B = the LIVE property via `PROBE_B_PROPERTY/EMAIL/PASSWORD/KEY`
+  (read-only turns only — B is never mutated). `PROBE_ADMIN_*` =
+  the bootstrap admin (env).
+- `rag-silence` needs a canary from B's LIVE corpus:
+  `PROBE_B_CANARY_Q` (question), `PROBE_B_CANARY_A` (answer regex),
+  optional `PROBE_B_CANARY_LEAK` (leak regex, defaults to A).
+  Pick Q/A from B's `KnowledgeDocument` titles. Unset = honest SKIP.
+- After ANY database reset: `pnpm seed:tenants` first, or eval
+  refuses (fixture property missing) and probes fail closed.

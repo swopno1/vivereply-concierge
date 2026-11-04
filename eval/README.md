@@ -12,8 +12,11 @@ EVAL_PASSWORD='<sabreeze current password — see docs/seed-users.md>' pnpm eval
 ```
 
 - Logs in as the **fixture** property's owner, mints a direct token, and
-  refuses unless the token's property is `seabreeze-test`. Eval drafts are
+  refuses unless the token's property matches (`seabreeze-test` by
+  default, `EVAL_PROPERTY_ID` to point at another fixture-backend
+  tenant — never a live property). Eval drafts are
   in-memory `FIX-` codes — no real Suite writes are possible on this path.
+  Fixture missing after a DB reset? `pnpm seed:tenants` first.
 - `-- --case=<id>` runs one case; `-- --list` prints the set (no network);
   `-- --base-url=` targets local dev (`pnpm dev`) instead of production.
 - Full run: 19 cases, ~28 turns, ~40–60 model calls. Results save to

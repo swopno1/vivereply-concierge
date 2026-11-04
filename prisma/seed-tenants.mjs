@@ -1,14 +1,16 @@
-// Tenant seed (multi-tenant core). THE manual-registration file: the founder
-// registers a property by editing TENANTS below (including ownerPassword)
-// and running:
+// Tenant seed (multi-tenant core). Since the signup era (2026-11-04) this
+// seeds ONLY fixture/test tenants — real properties (including the demo
+// resort) come from public /signup with owner-chosen IDs, never from here.
+// Seeding a second "demo" property would duplicate live domain approvals.
 //
-//   pnpm seed:tenants
+//   pnpm seed:tenants                        # all fixture tenants
+//   pnpm seed:tenants -- --tenant=seabreeze-test   # one tenant only
 //
 // What it does (all idempotent upserts, safe to re-run):
 //   Property row + ApprovedDomain rows + RoomMapping rows + OWNER User row
-//   per entry. Krishnachura carries NO rooms here — its demo file stays the
-//   fallback until the catalogue is seeded from Settings (row-by-row UUID
-//   verification stays a deliberate act, not a blind copy).
+//   per entry. The eval referee + isolation probes REQUIRE seabreeze-test
+//   (the deterministic fixture backend) — reseed it whenever the database
+//   is reset, or every evidence run refuses to start.
 //
 // SECURITY CONTRACT — read before editing:
 // - Owner passwords are INLINE below, hence COMMITTED to git. Treat them
@@ -49,14 +51,11 @@ export function hashPassword(password) {
 // ownerPassword values are COMMITTED (see contract above): test logins
 // only, obviously demo-scoped, rotated in Settings after first use.
 const TENANTS = [
-  {
-    id: "krishnachura-retreat",
-    name: "Krishnachura Retreat",
-    widgetKey: "demo-krishnachura",
-    domains: ["demo1.vivereply.com"],
-    ownerEmail: "krishnachura@test.com",
-    ownerPassword: "krishnachura-demo-login-01",
-  },
+  // NOTE (2026-11-04): the krishnachura-retreat entry was REMOVED. The live
+  // demo property is signup-created (owner-chosen ID) with its own widget
+  // key and domain approvals — reseeding the old fixed ID here would mint a
+  // confusing duplicate property and a second demo1.vivereply.com approval.
+  // Fixture tenant(s) only below.
   {
     id: "seabreeze-test",
     name: "Seabreeze Test Inn",
@@ -95,7 +94,13 @@ async function main() {
   const prisma = new PrismaClient({ adapter: new PrismaPg(new Pool({ connectionString })) });
 
   try {
-    for (const t of TENANTS) {
+    const onlyArg = process.argv.find((a) => a.startsWith("--tenant="));
+    const only = onlyArg ? onlyArg.slice("--tenant=".length).trim() : "";
+    const selected = only ? TENANTS.filter((t) => t.id === only) : TENANTS;
+    if (only && selected.length === 0) {
+      throw new Error(`Unknown tenant "${only}" (seed knows: ${TENANTS.map((t) => t.id).join(", ") || "none"}).`);
+    }
+    for (const t of selected) {
       if (!t.id || t.id.length > 100) throw new Error(`Bad tenant id: ${JSON.stringify(t.id)}`);
       const property = await prisma.property.upsert({
         where: { id: t.id },

@@ -14,14 +14,17 @@ PROBE_A_PASSWORD='...' PROBE_B_PASSWORD='...' \
 ## Tenants
 
 - **A (mutating test tenant, default `seabreeze-test`):** probes suspend
-  it, deactivate its owner, and toggle its domains. Override with
+  it, deactivate its owner, and toggle its domains. Reseed after any
+  DB reset (`pnpm seed:tenants`). Override with
   `PROBE_A_PROPERTY`, `PROBE_A_EMAIL`, `PROBE_A_PASSWORD`
   (required), `PROBE_A_KEY`, `PROBE_A_OWNER_ID` (user id from SQL:
   `SELECT id FROM "User" WHERE email='sabreeze@test.com';`).
-- **B (read-only reference, default `krishnachura-retreat`):** only
+- **B (read-only reference — the LIVE signup-created property):** only
   chatted with — read-only turns, never drafted, never suspended.
-  Override with `PROBE_B_*` (`PROBE_B_PASSWORD` required for the
-  cross-tenant chat probes).
+  No live default exists (signup IDs are owner-chosen): set
+  `PROBE_B_PROPERTY`, `PROBE_B_EMAIL`, `PROBE_B_PASSWORD`
+  (required for the cross-tenant chat probes), `PROBE_B_KEY`,
+  `PROBE_B_DOMAIN` (default `demo1.vivereply.com`).
 - **Admin:** `PROBE_ADMIN_EMAIL` + `PROBE_ADMIN_PASSWORD` (bootstrap).
 
 Target: `PROBE_BASE_URL` or `--base-url=` (default
@@ -49,9 +52,12 @@ Probe-created conversations are the founder's own test threads.
 
 ## Known limits
 
-- `rag-silence` exploits today's asymmetric corpora (B has the 5 seeded
-  docs; A has none). If A ever gains docs, replace the Family
-  Gathering Week question with dedicated canary seeding per tenant.
+- `rag-silence` exploits asymmetric corpora (B has onboarded RAG docs;
+  A has none). The canary is corpus-specific: set `PROBE_B_CANARY_Q`
+  (question from B's live docs), `PROBE_B_CANARY_A` (answer regex),
+  optional `PROBE_B_CANARY_LEAK` (defaults to the answer pattern).
+  Unset = honest SKIP, never a guessed fail. If A ever gains docs,
+  this probe needs dedicated per-tenant canary seeding instead.
 - `bootstrap-closed` covers the wrong-password half at runtime; the
   env-unset half (no `ADMIN_EMAIL` → impossible) is code-verified in
   `lib/auth.ts` and cannot be probed without env control.

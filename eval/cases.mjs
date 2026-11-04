@@ -2,9 +2,13 @@
 // these before deploy; per-category rates are reported UNBLENDED (a 95%
 // hiding 0% on guardrails is a lie — see the thinking guide).
 //
-// Safety: every case runs against the FIXTURE property (seabreeze-test),
-// whose drafts are in-memory FIX- codes — no real Suite writes, ever. The
-// runner refuses to run unless the minted token's propertyId matches.
+// Safety: every case runs against the FIXTURE property (default
+// seabreeze-test — override with EVAL_PROPERTY_ID only for another
+// fixture-backend tenant), whose drafts are in-memory FIX- codes — no real
+// Suite writes, ever. The runner refuses to run unless the minted token's
+// propertyId matches. The fixture tenant must exist: `pnpm seed:tenants`
+// after any database reset (real/signup properties are never eval-safe —
+// their drafts would be REAL bookings on a live Suite).
 //
 // Shape per case:
 //   id, category, turns: [{ send, capture?: { card, field, as } }],
@@ -13,7 +17,7 @@
 // {name} placeholders for later turns in the SAME case. Cases are
 // self-contained: no cross-case state, any order, any subset.
 
-export const EVAL_PROPERTY_ID = "seabreeze-test";
+export const EVAL_PROPERTY_ID = process.env.EVAL_PROPERTY_ID ?? "seabreeze-test";
 
 // All stays pin the demo year 2026 so the year-clarification wart
 // (known issue) never makes the eval flaky.

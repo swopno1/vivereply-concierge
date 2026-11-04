@@ -10,12 +10,15 @@
 //   pnpm probes -- --probe=cross-conversation   # one probe
 //   pnpm probes -- --list                       # no network, just the set
 //
-// Tenant A = the mutating test tenant (default seabreeze-test): probes
-// suspend it, deactivate its owner, and toggle its domains. Tenant B =
-// the read-only reference (default krishnachura-retreat): never mutated,
-// only chatted with (read-only turns, no drafts). The runner REFUSES to
-// run mutating probes when A is the demo property unless
-// --allow-demo-mutation is passed.
+// Tenant A = the mutating test tenant (default seabreeze-test, from
+// `pnpm seed:tenants`): probes suspend it, deactivate its owner, and
+// toggle its domains. Tenant B = the read-only reference: NEVER the
+// fixture — point PROBE_B_PROPERTY/EMAIL/PASSWORD/KEY at the live
+// (signup-created) property; only chatted with (read-only turns, no
+// drafts), never mutated. The code defaults for B are legacy
+// placeholders, not live values. The runner REFUSES to run mutating
+// probes when A is the demo property unless --allow-demo-mutation
+// is passed.
 //
 // Safety: probes that lack their env print SKIP (not fail). Results save
 // to probes/results/<date>-<commit>.json. Notes never contain tokens,
@@ -237,20 +240,35 @@ const PROBES = [
   {
     id: "rag-silence",
     title: "RAG canary: B-only facts never surface in A's answers",
-    needs: ["A creds", "B creds", "B seeded docs"],
+    needs: ["A creds", "B creds", "B canary env (Q + answer pattern)"],
     async run(notes) {
       if (!B.password) return "skip: PROBE_B_PASSWORD unset";
-      // Asymmetric corpora by design: B (krishnachura) has the 5 seeded
-      // docs; A (seabreeze) has none. "Family Gathering Week / ৳98,000"
-      // exists ONLY in B's corpus — the canary. (If A ever gains docs,
-      // this probe needs dedicated canary seeding; see README.)
-      const Q = "Do you have a family package? What does it cost?";
+      // Asymmetric corpora by design: B (live property) has onboarded
+      // RAG docs; A (seabreeze fixture) has none. The canary is
+      // corpus-specific by nature — B's RAG comes from ITS onboarding
+      // (content differs per property), so the question + the answer
+      // pattern it must contain come from env, not code. Pick Q/A from
+      // B's actual corpus (KnowledgeDocument titles), e.g. a check-in
+      // time or a named package only B's docs state.
+      const Q = process.env.PROBE_B_CANARY_Q ?? "";
+      const answerSrc = process.env.PROBE_B_CANARY_A ?? "";
+      const leakSrc = process.env.PROBE_B_CANARY_LEAK ?? answerSrc;
+      if (!Q || !answerSrc) {
+        return "skip: PROBE_B_CANARY_Q/A unset (pick Q/A from B's live RAG corpus; see README)";
+      }
+      let answerRe, leakRe;
+      try {
+        answerRe = new RegExp(answerSrc, "i");
+        leakRe = new RegExp(leakSrc, "i");
+      } catch {
+        throw new Error("PROBE_B_CANARY_A/LEAK is not a valid regex.");
+      }
       const cookieB = await loginCookie(B.email, B.password, "B login");
       const tokB = await directTokenFor(cookieB, B.property, "B token");
       const rb = await chatRaw(tokB, Q, {});
       assert(rb.status === 200, `B turn failed (${rb.status})`);
       assert(
-        /family gathering week/i.test(rb.done?.reply ?? ""),
+        answerRe.test(rb.done?.reply ?? ""),
         "B did not ground from its own docs — probe is indiscriminate, investigate before trusting A"
       );
       notes.push("B grounded (discriminating power confirmed)");
@@ -259,10 +277,7 @@ const PROBES = [
       const ra = await chatRaw(tokA, Q, {});
       assert(ra.status === 200, `A turn failed (${ra.status})`);
       const reply = ra.done?.reply ?? "";
-      assert(
-        !/family gathering week|98,?000/i.test(reply),
-        "LEAK: B-only RAG fact surfaced in A's answer!"
-      );
+      assert(!leakRe.test(reply), "LEAK: B-only RAG fact surfaced in A's answer!");
       assert(
         /don't know|do not know|not sure|can.{0,12}help|staff|handoff/i.test(reply) ||
           (ra.done?.cards ?? []).some((c) => c.kind === "handoff"),
@@ -509,7 +524,8 @@ const PROBES = [
 function usage() {
   console.log("Tenant-isolation probes. Env: PROBE_A_PASSWORD, PROBE_B_PASSWORD,");
   console.log("PROBE_ADMIN_EMAIL, PROBE_ADMIN_PASSWORD, PROBE_A_OWNER_ID,");
-  console.log("optional PROBE_{BASE_URL,A_PROPERTY,A_EMAIL,A_KEY,B_PROPERTY,B_EMAIL,B_KEY,B_DOMAIN}.");
+  console.log("optional PROBE_{BASE_URL,A_PROPERTY,A_EMAIL,A_KEY,B_PROPERTY,B_EMAIL,B_KEY,B_DOMAIN},");
+  console.log("PROBE_B_CANARY_Q/A(/LEAK) for rag-silence, DEMO_PROPERTY_ID for the demo guard.");
   console.log("  pnpm probes -- --list | --probe=<id> | --base-url=<url>");
 }
 
@@ -524,17 +540,21 @@ async function main() {
     return;
   }
   if (A.property === B.property) fail("A and B properties must differ.");
-  const DEMO_FALLBACK = "krishnachura-retreat";
+  // Demo guard: B is the read-only reference BY CONTRACT (mutating probes
+  // only ever touch A), so A===B already fatals above. This second tripwire
+  // fires when A is the demo property itself — resolved from DEMO_PROPERTY_ID
+  // (live signup-created ID) with the legacy fixed ID as fallback.
+  const DEMO_GUARD = process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat";
   const mutating = ["suspend-killswitch", "owner-deactivate"];
   const selected = args.probe ? PROBES.filter((p) => p.id === args.probe) : PROBES;
   if (args.probe && selected.length === 0) fail(`Unknown probe "${args.probe}". See --list.`);
   if (
     !args["allow-demo-mutation"] &&
-    A.property === DEMO_FALLBACK &&
+    A.property === DEMO_GUARD &&
     selected.some((p) => mutating.includes(p.id))
   ) {
     fail(
-      `REFUSING: mutating probes target the demo property "${DEMO_FALLBACK}". ` +
+      `REFUSING: mutating probes target the demo property "${DEMO_GUARD}". ` +
         `Point PROBE_A_* at the test tenant, or pass --allow-demo-mutation.`
     );
   }
