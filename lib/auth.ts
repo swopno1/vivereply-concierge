@@ -14,8 +14,9 @@
 //     user-row recovery is the reset link or the admin revoke. That
 //     is the honest bar, stated in the README.
 //   - Chat token: proves a chat request is allowed. Issued either
-//     server-side for a direct visit to / (scope "direct"), or by the
-//     widget handshake for an approved domain (scope "widget").
+//     server-side for a direct visit to / (scope "direct"), by the
+//     widget handshake for an approved domain (scope "widget"), or
+//     for the owner brand assistant (scope "brand", no property).
 //     /api/chat trusts ONLY the token's propertyId — never a
 //     propertyId the browser sends. A widget token also carries its
 //     domain, and /api/chat re-checks that domain against the
@@ -236,7 +237,7 @@ export function isValidEmail(value: unknown, maxLen = 150): value is string {
 
 // --- Chat token -----------------------------------------------------
 
-export type ChatTokenScope = "direct" | "widget";
+export type ChatTokenScope = "direct" | "widget" | "brand";
 
 export type ChatToken = {
   v: number;
@@ -264,7 +265,13 @@ export function verifyChatToken(token: string | null | undefined): ChatToken | n
   if (!token) return null;
   const payload = decodeToken<ChatToken>(token);
   if (!payload || payload.v !== 1) return null;
-  if (!payload.propertyId || (payload.scope !== "direct" && payload.scope !== "widget")) {
+  if (payload.scope !== "direct" && payload.scope !== "widget" && payload.scope !== "brand") {
+    return null;
+  }
+  // Brand tokens carry NO property by construction (brand knowledge is
+  // global). A brand token WITH a propertyId is malformed — reject it,
+  // so a tenant can never ride the brand path into unscoped answers.
+  if (payload.scope === "brand" ? payload.propertyId !== "" : !payload.propertyId) {
     return null;
   }
   if (payload.scope === "widget" && !payload.domain) return null;

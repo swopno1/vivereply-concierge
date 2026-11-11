@@ -71,6 +71,16 @@ describe("chat tokens", () => {
     assert.equal(back?.domain, "demo1.test");
     assert.equal(verifyChatToken("garbage"), null);
   });
+  it("brand scope verifies only with an empty property (no tenant rides the brand path)", () => {
+    process.env.SESSION_SECRET = "test-secret-32-chars-minimum-ok!";
+    const token = createChatToken({ propertyId: "", scope: "brand" });
+    assert.ok(token);
+    const back = verifyChatToken(token);
+    assert.equal(back?.scope, "brand");
+    assert.equal(back?.propertyId, "");
+    const smuggled = createChatToken({ propertyId: "p1", scope: "brand" });
+    assert.equal(verifyChatToken(smuggled), null);
+  });
 });
 
 describe("helpers", () => {

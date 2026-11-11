@@ -200,12 +200,14 @@ export default function Chat({
   compact = false,
   title,
   greeting,
+  suggestions,
   token,
   source,
 }: {
   compact?: boolean;
   title?: string;
   greeting?: string;
+  suggestions?: string[];
   token: string;
   source: "direct" | "widget";
 }) {
@@ -613,7 +615,7 @@ export default function Chat({
           )}
           {showSuggestions && (
             <div className="flex flex-wrap gap-2">
-              {SUGGESTIONS.map((s) => (
+              {(suggestions ?? SUGGESTIONS).map((s) => (
                 <button
                   key={s}
                   onClick={() => submit(s)}
