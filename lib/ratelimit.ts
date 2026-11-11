@@ -58,6 +58,38 @@ export async function checkChatRate(propertyId: string, now = new Date()): Promi
   return { allowed: false, retryAfterSec };
 }
 
+// Forgot-password IP throttle (anti-spray, Phase 0). Same bucket table
+// as the chat IP check, but a disjoint keyspace ("forgotpw:<ip>") and
+// its own limit — reset traffic never consumes chat budget or vice
+// versa. 5 requests/min/IP: legitimate use is ~1, spray is cut fast.
+// Fail open with an alarm, like every throttle here: the per-email
+// send cap in the route still bounds victim harm when this is blind.
+const FORGOT_IP_MAX_PER_MIN = 5;
+
+export async function checkForgotPasswordRateByIp(ip: string, now = new Date()): Promise<RateDecision> {
+  if (!ip) return { allowed: true };
+  const windowStart = windowStartOf(now);
+  const key = `forgotpw:${ip.slice(0, 71)}`;
+  let row: { count: number };
+  try {
+    row = await prisma.ipRateBucket.upsert({
+      where: { ip_windowStart: { ip: key, windowStart } },
+      create: { ip: key, windowStart, count: 1 },
+      update: { count: { increment: 1 } },
+      select: { count: true },
+    });
+  } catch (e) {
+    console.error("forgot-password IP throttle blind (allowing request):", e instanceof Error ? e.message : e);
+    return { allowed: true };
+  }
+  prisma.ipRateBucket
+    .deleteMany({ where: { windowStart: { lt: new Date(now.getTime() - 2 * 3600_000) } } })
+    .catch(() => null);
+  if (row.count <= FORGOT_IP_MAX_PER_MIN) return { allowed: true };
+  const retryAfterSec = Math.max(1, Math.ceil((windowStart.getTime() + RATE_WINDOW_MS - now.getTime()) / 1000));
+  return { allowed: false, retryAfterSec };
+}
+
 // Same shape, keyed by client IP. A single scraper behind one address
 // gets cut off long before it can spend the property's whole budget.
 export async function checkChatRateByIp(ip: string, now = new Date()): Promise<RateDecision> {

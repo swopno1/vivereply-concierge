@@ -112,13 +112,14 @@ export async function POST(req: NextRequest) {
     ip,
   });
   // Opportunistic pruning (best-effort): yesterday's attempts, dead
-  // sessions, and spent verification tokens never accumulate into
-  // large tables. Full retention table: docs/key-rotation.md.
+  // sessions, and spent verification/reset tokens never accumulate
+  // into large tables. Full retention table: docs/key-rotation.md.
   await prisma.loginAttempt.deleteMany({ where: { createdAt: { lt: since } } }).catch(() => null);
   await prisma.session
     .deleteMany({ where: { OR: [{ expiresAt: { lt: new Date() } }, { revokedAt: { lt: since } }] } })
     .catch(() => null);
   await prisma.emailVerificationToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(() => null);
+  await prisma.passwordResetToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(() => null);
 
   const row = await prisma.session
     .create({ data: { userId, role: session.role, expiresAt: sessionExpiresAt() } })

@@ -50,6 +50,7 @@ model User {
   createdAt    DateTime  @default(now())
   sessions     Session[]
   verificationTokens EmailVerificationToken[]
+  resetTokens PasswordResetToken[]
 
   @@index([propertyId, active])
 }
@@ -94,6 +95,23 @@ model LoginAttempt {
 // expiry, single use (usedAt). Resending invalidates older unused tokens
 // for the user so only the newest link works.
 model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// Password-reset tokens (public reset, Phase 0). Same shape as
+// EmailVerificationToken: random 32-byte token, SHA-256 hash at rest
+// (raw value travels only inside the emailed link), 1h expiry,
+// single use (usedAt). A new request invalidates older unused tokens
+// for the user so only the newest link works.
+model PasswordResetToken {
   id        String    @id @default(cuid())
   tokenHash String    @unique
   userId    String

@@ -2,14 +2,15 @@
 // per-category rates, unblended. The referee for every prompt / model /
 // catalogue change — re-run before deploy, record with date + commit.
 //
-//   EVAL_PASSWORD='...' pnpm eval                 # full set, saves results
-//   EVAL_PASSWORD='...' pnpm eval -- --case=draft-flow
+//   EVAL_ADMIN_EMAIL='...' EVAL_ADMIN_PASSWORD='...' pnpm eval   # full set, saves results
+//   EVAL_ADMIN_EMAIL='...' EVAL_ADMIN_PASSWORD='...' pnpm eval -- --case=draft-flow
 //   pnpm eval -- --list                           # no network, just the set
 //
-// Safety: logs in as the fixture property's OWNER (env password only,
-// never committed), mints a direct token from /, and REFUSES unless the
-// token's propertyId is the fixture property. Eval drafts are in-memory
-// FIX- codes — no real Suite writes are possible on this path.
+// Safety: logs in as SUPER_ADMIN (env password only, never committed),
+// mints a direct token from /?property=<fixture> (the preview path —
+// Phase 0 redirects OWNER sessions from / to /settings), and REFUSES
+// unless the token's propertyId is the fixture property. Eval drafts
+// are in-memory FIX- codes — no real Suite writes are possible here.
 //
 // Cost: ~18 cases, ~27 turns, ~40-55 model calls per full run.
 
@@ -40,8 +41,8 @@ const args = Object.fromEntries(
   })
 );
 const BASE_URL = (args["base-url"] ?? process.env.EVAL_BASE_URL ?? "https://app.vivereply.com").replace(/\/$/, "");
-const EVAL_EMAIL = process.env.EVAL_EMAIL ?? "sabreeze@test.com";
-const EVAL_PASSWORD = process.env.EVAL_PASSWORD ?? "";
+const EVAL_ADMIN_EMAIL = process.env.EVAL_ADMIN_EMAIL ?? "";
+const EVAL_ADMIN_PASSWORD = process.env.EVAL_ADMIN_PASSWORD ?? "";
 
 function commitHash() {
   try {
@@ -51,16 +52,19 @@ function commitHash() {
   }
 }
 
-// --- auth: owner login -> session cookie -> direct token from / ----------
+// --- auth: admin login -> session cookie -> direct token from /?property= ---
 
 async function loginCookie() {
+  if (!EVAL_ADMIN_EMAIL || !EVAL_ADMIN_PASSWORD) {
+    throw new Error("EVAL_ADMIN_EMAIL / EVAL_ADMIN_PASSWORD are required (super-admin preview mints the token).");
+  }
   const res = await fetch(`${BASE_URL}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: EVAL_EMAIL, password: EVAL_PASSWORD }),
+    body: JSON.stringify({ email: EVAL_ADMIN_EMAIL, password: EVAL_ADMIN_PASSWORD }),
   });
   if (res.status === 429) throw new Error("Login throttled (429). Wait out the window and re-run.");
-  if (!res.ok) throw new Error(`Login failed (${res.status}). Check EVAL_EMAIL / EVAL_PASSWORD.`);
+  if (!res.ok) throw new Error(`Login failed (${res.status}). Check EVAL_ADMIN_EMAIL / EVAL_ADMIN_PASSWORD.`);
   const setCookie = res.headers.get("set-cookie") ?? "";
   const session = setCookie.split(/,(?=[^;]+=)/).find((c) => c.trim().startsWith("concierge_session="));
   if (!session) throw new Error("Login answered 200 but set no session cookie.");
@@ -86,7 +90,9 @@ export function extractDirectToken(html) {
 }
 
 async function directToken(cookie) {
-  const res = await fetch(`${BASE_URL}/`, { headers: { Cookie: cookie } });
+  const res = await fetch(`${BASE_URL}/?property=${encodeURIComponent(EVAL_PROPERTY_ID)}`, {
+    headers: { Cookie: cookie },
+  });
   if (!res.ok) throw new Error(`GET / failed (${res.status}).`);
   const found = extractDirectToken(await res.text());
   if (!found) throw new Error("No direct chat token found on /. Login may not have stuck.");

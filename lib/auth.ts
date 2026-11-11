@@ -8,9 +8,11 @@
 //     /onboarding, and /api/admin/*. Two roles: SUPER_ADMIN (the
 //     founder — ADMIN_EMAIL + ADMIN_PASSWORD env, checked first, or a
 //     User row) and OWNER (one property, email + scrypt password from
-//     registration). There is no password reset-by-email, no
-//     2FA — recovery is changing the env vars (bootstrap) or the
-//     revoke (user rows). That is the honest bar, stated in the README.
+//     registration). Password reset-by-email exists (Phase 0: 1h
+//     single-use token, response identical for unknown emails); there
+//     is no 2FA — bootstrap recovery is changing the env vars, and
+//     user-row recovery is the reset link or the admin revoke. That
+//     is the honest bar, stated in the README.
 //   - Chat token: proves a chat request is allowed. Issued either
 //     server-side for a direct visit to / (scope "direct"), or by the
 //     widget handshake for an approved domain (scope "widget").

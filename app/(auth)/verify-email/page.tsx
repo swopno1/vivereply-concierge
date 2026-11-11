@@ -35,8 +35,10 @@ export default async function VerifyEmailPage({
     }
   }
 
+  // Mark header, Back-to-homepage, Docs, and footer live in the
+  // (auth) layout — this page owns the verdict plus its links.
   return (
-    <div className="mx-auto flex min-h-[60vh] w-full max-w-md flex-col justify-center px-6">
+    <div className="flex flex-col">
       {ok ? (
         <>
           <h1 className="text-2xl font-semibold text-gray-900">Email verified</h1>

@@ -1,11 +1,12 @@
 // Transactional email via the Resend HTTPS API (no SDK).
-// Only verification mail exists today. Sending needs RESEND_API_KEY;
+// Verification + password-reset mail. Sending needs RESEND_API_KEY;
 // the sender identity is RESEND_FROM, which must be an address on a
 // VERIFIED domain in production — Resend's onboarding sender only
-// reaches the account's own inbox, so verification is unusable for
+// reaches the account's own inbox, so auth mail is unusable for
 // real users until the domain is verified (founder task, DNS).
 // Failures throw a short message; callers decide whether a failed
-// send fails the request (signup: no — the owner can resend).
+// send fails the request (signup: no — the owner can resend;
+// forgot-password: no — the response stays identical either way).
 
 export async function sendVerificationEmail(to: string, link: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY ?? "";
@@ -23,6 +24,28 @@ export async function sendVerificationEmail(to: string, link: string): Promise<v
     }),
   }).catch(() => null);
   if (!res || !res.ok) throw new Error("The verification email could not be sent.");
+}
+
+// Password-reset mail (public reset, Phase 0). Same Resend HTTPS shape
+// as verification mail. The link carries the raw 32-byte token and
+// expires in 1 hour (single use); the hash at rest is looked up by
+// POST /api/auth/reset-password. Copy states the expiry honestly.
+export async function sendPasswordResetEmail(to: string, link: string): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY ?? "";
+  const from = process.env.RESEND_FROM ?? "";
+  if (!apiKey || !from) throw new Error("Email is not configured.");
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: "Reset your Vivereply Concierge password",
+      html: `<p>Someone requested a password reset for this email's Vivereply Concierge account.</p><p><a href="${link}">Set a new password</a> — the link expires in 1 hour and works once.</p><p>If that was not you, ignore this email; your password stays as it is.</p>`,
+      text: `Someone requested a password reset for this email's Vivereply Concierge account.\n\nSet a new password (expires in 1 hour, single use):\n${link}\n\nIf that was not you, ignore this email; your password stays as it is.`,
+    }),
+  }).catch(() => null);
+  if (!res || !res.ok) throw new Error("The reset email could not be sent.");
 }
 
 // Guest payment receipt (booking payments). Sent once, right after the

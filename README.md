@@ -251,8 +251,9 @@ panel, never a guessed property.
   never in the browser. Staff widget tokens live 15 minutes and are
   origin-bound (strict Referer check at iframe load).
 
-Honest limits: no 2FA, no password reset-by-email, no per-tenant
-spend quotas yet. Chat is throttled per property (60 turns/min) and
+Honest limits: no 2FA, no per-tenant spend quotas yet. Password
+reset-by-email exists (1h single-use link, identical response for
+unknown emails). Chat is throttled per property (60 turns/min) and
 per IP (30/min) → 429 + Retry-After. Clickjacking: middleware sets
 `frame-ancestors 'self'` everywhere except `/widget` and
 `/staff/embed`, which rely on token + origin binding instead (they

@@ -63,14 +63,10 @@ export default function SignupPage() {
     }
   }
 
+  // Mark header, Back-to-homepage, Docs, and footer live in the
+  // (auth) layout — this page owns the form plus its cross-link.
   return (
-    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center p-4">
-      <div className="mb-4 flex items-center gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0C1222]">
-          <img src="/brand/vivereply-mark.svg" alt="Vivereply logo" className="h-9 w-9" />
-        </span>
-        <span className="text-lg font-bold">Vivereply Concierge</span>
-      </div>
+    <>
       <h1 className="text-xl font-bold">Register your resort</h1>
       <p className="mt-1 text-sm text-gray-500">
         One account per resort. You&apos;ll verify your email before
@@ -147,9 +143,6 @@ export default function SignupPage() {
           Log in
         </Link>
       </p>
-      <p className="mt-6 text-center text-xs text-gray-500">
-        Vivereply Concierge · ViveScript Solutions LLC
-      </p>
-    </main>
+    </>
   );
 }

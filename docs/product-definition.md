@@ -173,7 +173,8 @@ check runs. Nothing is faked with timers.
   per-property and per-IP (429 + Retry-After, fail-open with alarm);
   framing locked to same-origin except the two embed surfaces; every
   admin mutation lands in the audit log. Honest limits: no 2FA, no
-  password reset-by-email, no per-tenant spend quotas yet.
+  per-tenant spend quotas yet. Password reset-by-email exists (1h
+  single-use link, identical response for unknown emails).
 - Knowledge answers (supporting only). Check-in 2 PM / check-out 11 AM,
   halal food, packages — answered from seeded notes via vector search, and
   only when the match is strong. Prices and availability NEVER come from
@@ -231,8 +232,9 @@ The video is scripted, unfilmed. See docs/hackathon-final.md.
 - No video filmed; no portal submission yet; no uptime monitor armed.
 - No second demo, no revenue, no reviews, no seasonal rates (flat nightly
   prices). None are claimed anywhere.
-- No 2FA, no password reset-by-email, no per-tenant spend quotas, no
-  staff reply-into-chat, no notifications. Stated, not hidden.
+- No 2FA, no per-tenant spend quotas, no staff reply-into-chat, no
+  notifications. Stated, not hidden. (Password reset-by-email
+  shipped in Phase 0 — 1h single-use link.)
 
 ## What's next
 

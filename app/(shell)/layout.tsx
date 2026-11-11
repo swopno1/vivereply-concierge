@@ -1,11 +1,13 @@
-// Shared app shell (sidebar + content) for every web-app page in this
-// route group: /, /staff, /login, /settings, /onboarding. The
-// widget (/widget) sits outside the group, so the narrow embed panel
-// stays a bare chat. Server component: it reads the session cookie once
-// and hands the session (who + role + property) to the client shell,
-// which owns the mobile slide-over, role-filtered nav, and the
-// sign-in/sign-out footer. The session shape is passed structurally — the
-// client shell must never import server modules.
+// Shared app shell (sidebar + content) for the shell route group: /,
+// /staff, /settings, /setup, /onboarding. Auth pages (/login, /signup,
+// /forgot-password, /reset-password, /verify-email) live in the (auth)
+// group with a minimal layout instead — no sidebar there, signed in or
+// not. The widget (/widget) sits outside both groups, so the narrow
+// embed panel stays a bare chat. Server component: it reads the session
+// cookie once and hands the session (who + role + property) to the
+// client shell, which owns the mobile slide-over, role-filtered nav,
+// and the sign-in/sign-out footer. The session shape is passed
+// structurally — the client shell must never import server modules.
 
 import { getSession } from "@/lib/tenant";
 import AppShell from "../components/AppShell";

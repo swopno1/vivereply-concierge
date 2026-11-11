@@ -26,6 +26,13 @@
 //
 // Cost: ~10 model calls per full run (mostly fixture greetings; two
 // turns touch the live demo property, reads only, no drafts).
+//
+// Phase 0: OWNER sessions redirect from / to /settings, so page
+// tokens are minted through the super-admin preview path instead —
+// directTokenFor logs in once as admin and fetches /?property=<id>.
+// The token is byte-identical in shape (same createChatToken call),
+// so every isolation assertion below is unchanged. Probes that mint
+// tokens now need admin creds in addition to their tenant creds.
 
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -101,8 +108,24 @@ async function loginCookie(email, password, label) {
   return session.split(";")[0];
 }
 
-async function directTokenFor(cookie, expectProperty, label) {
-  const res = await fetch(`${BASE_URL}/`, { headers: { Cookie: cookie } });
+// Admin cookie, logged in once per run and reused for token minting.
+// Owner cookies cannot mint page tokens since Phase 0 (owner /
+// redirects to /settings); the super-admin preview path replaces them.
+let adminCookieCache = null;
+async function adminCookie() {
+  if (adminCookieCache) return adminCookieCache;
+  if (!ADMIN.email || !ADMIN.password) {
+    fail("admin creds missing (PROBE_ADMIN_EMAIL/PROBE_ADMIN_PASSWORD) — required since Phase 0 redirects owners off /.");
+  }
+  adminCookieCache = await loginCookie(ADMIN.email, ADMIN.password, "admin login");
+  return adminCookieCache;
+}
+
+async function directTokenFor(expectProperty, label) {
+  const cookie = await adminCookie();
+  const res = await fetch(`${BASE_URL}/?property=${encodeURIComponent(expectProperty)}`, {
+    headers: { Cookie: cookie },
+  });
   if (!res.ok) fail(`${label}: GET / failed (${res.status}).`);
   const found = extractDirectToken(await res.text());
   if (!found) fail(`${label}: no direct chat token found on /.`);
@@ -159,16 +182,16 @@ const PROBES = [
   {
     id: "cross-conversation",
     title: "A's token + B's conversationId is ignored (fresh thread, no read/append)",
-    needs: ["A creds", "B creds"],
+    needs: ["A creds", "B creds", "admin creds"],
     async run(notes) {
       if (!B.password) return "skip: PROBE_B_PASSWORD unset";
       const cookieB = await loginCookie(B.email, B.password, "B login");
-      const tokB = await directTokenFor(cookieB, B.property, "B token");
+      const tokB = await directTokenFor(B.property, "B token");
       const rb = await chatRaw(tokB, "Hello", {});
       assert(rb.status === 200 && rb.done?.conversationId, "B baseline turn failed");
       const convB = rb.done.conversationId;
       const cookieA = await loginCookie(A.email, A.password, "A login");
-      const tokA = await directTokenFor(cookieA, A.property, "A token");
+      const tokA = await directTokenFor(A.property, "A token");
       const ra = await chatRaw(tokA, "What did I just ask about?", { conversationId: convB });
       assert(ra.status === 200, `A turn failed (${ra.status})`);
       assert(
@@ -182,10 +205,10 @@ const PROBES = [
   {
     id: "forged-property",
     title: "Forged propertyId in chat body is ignored (token governs)",
-    needs: ["A creds"],
+    needs: ["A creds", "admin creds"],
     async run(notes) {
       const cookieA = await loginCookie(A.email, A.password, "A login");
-      const tokA = await directTokenFor(cookieA, A.property, "A token");
+      const tokA = await directTokenFor(A.property, "A token");
       // Terracotta Villa exists ONLY in B's catalogue: if the forged
       // propertyId took effect, this would quote. It must not.
       const r = await chatRaw(tokA, "How much is the Terracotta Villa for Nov 10–12?", {
@@ -240,7 +263,7 @@ const PROBES = [
   {
     id: "rag-silence",
     title: "RAG canary: B-only facts never surface in A's answers",
-    needs: ["A creds", "B creds", "B canary env (Q + answer pattern)"],
+    needs: ["A creds", "B creds", "admin creds", "B canary env (Q + answer pattern)"],
     async run(notes) {
       if (!B.password) return "skip: PROBE_B_PASSWORD unset";
       // Asymmetric corpora by design: B (live property) has onboarded
@@ -264,7 +287,7 @@ const PROBES = [
         throw new Error("PROBE_B_CANARY_A/LEAK is not a valid regex.");
       }
       const cookieB = await loginCookie(B.email, B.password, "B login");
-      const tokB = await directTokenFor(cookieB, B.property, "B token");
+      const tokB = await directTokenFor(B.property, "B token");
       const rb = await chatRaw(tokB, Q, {});
       assert(rb.status === 200, `B turn failed (${rb.status})`);
       assert(
@@ -273,7 +296,7 @@ const PROBES = [
       );
       notes.push("B grounded (discriminating power confirmed)");
       const cookieA = await loginCookie(A.email, A.password, "A login");
-      const tokA = await directTokenFor(cookieA, A.property, "A token");
+      const tokA = await directTokenFor(A.property, "A token");
       const ra = await chatRaw(tokA, Q, {});
       assert(ra.status === 200, `A turn failed (${ra.status})`);
       const reply = ra.done?.reply ?? "";
@@ -363,7 +386,7 @@ const PROBES = [
       try {
         const h0 = await handshake(A.key, origin);
         assert(h0.status === 200 && h0.token, `baseline handshake failed (${h0.status})`);
-        const tokA = await directTokenFor(cookieA, A.property, "A token");
+        const tokA = await directTokenFor(A.property, "A token");
         const c0 = await chatRaw(tokA, "Hello", {});
         assert(c0.status === 200, `baseline chat failed (${c0.status})`);
         await setStatus("INACTIVE");
@@ -388,7 +411,7 @@ const PROBES = [
       const h2 = await handshake(A.key, origin);
       assert(h2.status === 200, `recovery handshake failed (${h2.status})`);
       const cookieA2 = await loginCookie(A.email, A.password, "A re-login");
-      const tokA2 = await directTokenFor(cookieA2, A.property, "A token 2");
+      const tokA2 = await directTokenFor(A.property, "A token 2");
       const c3 = await chatRaw(tokA2, "Hello", {});
       assert(c3.status === 200, `recovery chat failed (${c3.status})`);
       await api("/api/admin/domains", { method: "PATCH", cookie: cookieA2, body: { id: domainId, active: false } });
@@ -436,10 +459,10 @@ const PROBES = [
   {
     id: "cross-catalogue",
     title: "A's chat cannot quote B-only rooms (schema + executor both refuse)",
-    needs: ["A creds"],
+    needs: ["A creds", "admin creds"],
     async run(notes) {
       const cookieA = await loginCookie(A.email, A.password, "A login");
-      const tokA = await directTokenFor(cookieA, A.property, "A token");
+      const tokA = await directTokenFor(A.property, "A token");
       const r = await chatRaw(tokA, "How much is the Terracotta Villa for Nov 10–12?", {});
       assert(r.status === 200, `turn failed (${r.status})`);
       assert(noQuoteCard(r.done), "quoted a room outside A's catalogue!");
