@@ -49,7 +49,9 @@ core. The demo properties are fictional, not real resorts.
 
 - **Chat** (`/`) — bilingual English/Bengali. Language follows the
   guest's latest real language; the taka sign (৳) alone never flips it.
-  Signed-in owners chat with their own resort; visitors get the demo.
+  Signed-in owners chat with their own resort; signed-out visitors go to
+  login (no public demo). Super-admins with no property selected get the
+  brand assistant (ViveReply product answers, no resort data).
 - **Agent tools, via Muse Spark on the Meta Model API** — the model
   acts, it doesn't just answer:
   - `check_availability` — live units from the property's backend

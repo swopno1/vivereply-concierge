@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { withTenant } from "@/lib/tenant-db";
+import { answerBrand } from "@/lib/brand-knowledge";
 import { runAgent } from "@/lib/agent";
 import { createToolExecutor, toolDefinitionsFor, type ToolDb } from "@/lib/tools";
 import { adapterForProperty, FixtureSuiteAdapter } from "@/lib/suite";
@@ -114,6 +115,38 @@ export async function POST(req: NextRequest) {
       { error: "Chat token expired or invalid. Please reload the page." },
       { status: 403 }
     );
+  }
+  // Brand mode: owner brand assistant (scope minted only for
+  // super-admin with no property selected). Answered from the static
+  // brand corpus — no property checks (there is no property), no
+  // tools, no writes, no model calls. IP-throttled like everything
+  // else; per-tenant throttle cannot apply without a tenant.
+  if (chatToken.scope === "brand") {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
+    const byIp = await checkChatRateByIp(ip);
+    if (!byIp.allowed) {
+      return NextResponse.json(
+        { error: "Too many messages right now. Please wait a moment and try again." },
+        { status: 429, headers: { "Retry-After": String(byIp.retryAfterSec) } }
+      );
+    }
+    const { reply } = answerBrand(message);
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ type: "done", reply, cards: [], conversationId: null })}\n\n`)
+        );
+        controller.close();
+      },
+    });
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
   }
   // Tenant kill-switch: a suspended (or deleted) property gets no chat
   // on any scope, before any row is written. Generic wording — guests

@@ -105,7 +105,9 @@ check runs. Nothing is faked with timers.
   single column, guest messages in bubbles, answers as plain text, quote /
   draft / handoff cards, suggestion chips for first-timers, follow-up
   messages queue visibly instead of interrupting. Signed-in owners chat with
-  their own resort here; signed-out visitors get the demo resort.
+  their own resort here; signed-out visitors go to login (no public demo).
+  Super-admins with no property selected get the brand assistant instead —
+  ViveReply product answers from official sources, no resort data.
 - Tenants (the multi-tenant core). Each resort is a Property row with its own
   owner login, widget key, domains, rooms, booking backend, knowledge, and
   staff scope. Sessions carry role + property; owners touch only their own
