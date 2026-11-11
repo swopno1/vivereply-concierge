@@ -21,6 +21,44 @@ mechanics, that page is the gate.
    - `curl https://demo1.vivereply.com/` → 200.
    - One chat turn on the widget + Settings loads as owner.
 
+## 1b. Billing scheduler (Phase 3, one-time setup)
+
+Trial reminders (day 7/21/27/30), trial expiry, and 80% usage alerts
+all fire from `GET /api/cron/billing-reminders`. The app lives on
+the VM, not Vercel — so the timer lives on the VM too (there is no
+Vercel cron; nothing in the app depends on Vercel).
+
+**Where:** host crontab on the Vultr VM (65.20.89.231), under the
+same user that runs the app. Add with `crontab -e` on the machine:
+
+`0 9 * * * curl -sf -H "Authorization: Bearer $CRON_SECRET" https://app.vivereply.com/api/cron/billing-reminders >> ~/billing-cron.log 2>&1`
+
+`CRON_SECRET` (random 32+ chars, Vault-held) must be in the app's
+env AND available to cron — export it at the top of the crontab
+(`CRON_SECRET=vault-value-here`, pasted on the machine, never in
+chat or the repo). A systemd timer is an equivalent alternative;
+pick one, not both.
+
+**How to check it ran:** (1) `tail ~/billing-cron.log` shows one
+`{"ok":true,"checked":N,"reminded":…}` line per day; (2) last-run
+proof in the database (latest notice sent):
+
+`SELECT kind, "periodKey", "sentAt" FROM "BillingNotice" ORDER BY "sentAt" DESC LIMIT 5;`
+
+Without a trigger, reminders/expiry mails never fire — but the chat
+gate still enforces trial end + quotas on every turn by date, so
+billing enforcement never depends on the cron. Verify once after
+wiring with a manual curl (same header) → `{"ok":true,…}`.
+
+**Webhook replay (rare):** the webhook claims each Stripe event id
+FIRST, so if an apply crashes after its claim (500 in the Stripe
+dashboard + `billing webhook: apply failed` in the server log), a
+plain redelivery answers 200-duplicate without re-applying. To
+replay: `DELETE FROM "StripeEvent" WHERE id = 'evt_…';` in Supabase
+SQL Editor, then replay the event from the Stripe dashboard
+(Developers → Webhooks → the endpoint → the event → Resend). Only
+for events whose 500 you have diagnosed — never bulk-delete claims.
+
 ## 2. Rollback (bad deploy)
 
 1. Vercel → Deployments → previous production deployment →

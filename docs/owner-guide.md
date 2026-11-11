@@ -98,6 +98,40 @@ If you lose your phone AND your recovery codes together, email us
 from your account address — getting back in then needs our manual
 help and identity checks, so keep those codes safe.
 
+## Trial, billing & usage (read once)
+
+**Free trial.** Every resort starts with a 30-day free trial — no
+card needed, full features. We'll email you reminders on days 7,
+21, 27, and 30, and a banner counts down inside the app from day
+21. If the trial ends without a subscription, guest chat pauses
+with a polite "temporarily unavailable" message (your phone/email
+show so guests can still reach you). Your settings and data stay
+put for 90 days, and subscribing resumes everything immediately —
+nothing is ever deleted for non-payment.
+
+**Subscribe.** Open **Billing** in the sidebar, pick a plan (Starter,
+Growth, or Scale — each allows a monthly number of guest
+conversations, shown on the page) and monthly or annual billing,
+then press **Subscribe**. Payment runs on Stripe's own secure page
+— your card details never touch our servers. Scale covers up to 3
+properties under one owner — ask us and we'll provision the 2nd and
+3rd for you.
+
+**Usage.** The billing page shows conversations handled this month
+against your plan's limit (one conversation = one guest chat
+thread). At 80% we email you; past 120% guest chat pauses until
+next month. (Overage past the limit is coming later — for now the
+pause always applies.)
+
+**Change or cancel.** Change plans any time from the billing page
+(the difference is prorated automatically). Cancel keeps everything
+running to the end of the paid period, then guest chat pauses like
+an ended trial — resubscribe any time to resume.
+
+**Failed payments.** If a payment fails, guest chat keeps running
+while Stripe retries — we'll email you so we can sort it out
+together before anything pauses.
+
 ## When something looks wrong
 
 - Chat answers "I don't know" on documented facts → your knowledge

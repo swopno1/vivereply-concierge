@@ -29,6 +29,7 @@ import { checkChatRate, checkChatRateByIp } from "@/lib/ratelimit";
 import { isPropertyActive } from "@/lib/tenant";
 import { resortPaymentUrl } from "@/lib/resort-pay";
 import { formatTaka } from "@/demo-config/rates";
+import { gateDecision, monthStartUtc, pauseMessage } from "@/lib/billing";
 
 /**
  * Human one-liners for the streamed "Checking…" status. Built ONLY from
@@ -156,6 +157,77 @@ export async function POST(req: NextRequest) {
       { error: "Chat is unavailable right now. Please try again in a moment." },
       { status: 403 }
     );
+  }
+  // Billing gate (Phase 3): trial-expiry, ended subscriptions, and
+  // the 120% quota stop land HERE — before any row is written, before
+  // the model spends a cent, on every scope (owners see the same
+  // pause guests do; the banner + billing page explain why). No
+  // Subscription row = grandfathered (demo, seeds, pre-Phase-3):
+  // served, no clock. A pause answers as a NORMAL in-thread reply —
+  // honest message + the resort's human contact — never an error
+  // toast, never a 500, never a hallucinated quote. Paused turns
+  // write nothing, so they consume no quota. A billing-READ failure
+  // serves (fail open, logged): billing must never be the thing that
+  // breaks guest chat — quota evasion during a DB outage is bounded
+  // by the outage and audit-visible in the server log.
+  {
+    const now = new Date();
+    const billing = await withTenant(chatToken.propertyId, (tx) =>
+      tx.subscription.findUnique({ where: { propertyId: chatToken.propertyId } })
+    ).catch((e) => {
+      console.error("billing gate: subscription read failed, serving", e);
+      return null;
+    });
+    if (billing) {
+      const usage = await withTenant(chatToken.propertyId, (tx) =>
+        tx.conversation.count({
+          where: { propertyId: chatToken.propertyId, createdAt: { gte: monthStartUtc(now) } },
+        })
+      ).catch((e) => {
+        console.error("billing gate: usage count failed, serving", e);
+        return 0;
+      });
+      const verdict = gateDecision(
+        {
+          tier: billing.tier,
+          status: billing.status,
+          trialEndsAt: billing.trialEndsAt,
+          currentPeriodEnd: billing.currentPeriodEnd,
+          cancelAtPeriodEnd: billing.cancelAtPeriodEnd,
+          overageAgreed: billing.overageAgreed,
+        },
+        usage,
+        now
+      );
+      if (!verdict.allowed) {
+        // Contact is read only on the pause path (saves a query on
+        // every served turn); a failed read degrades to the generic
+        // message rather than failing the pause.
+        const profile = await withTenant(chatToken.propertyId, (tx) =>
+          tx.propertyProfile.findUnique({
+            where: { propertyId: chatToken.propertyId },
+            select: { phone: true, email: true },
+          })
+        ).catch(() => null);
+        const encoder = new TextEncoder();
+        const reply = pauseMessage(verdict.reason, profile);
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: "done", reply, cards: [], conversationId: null })}\n\n`)
+            );
+            controller.close();
+          },
+        });
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          },
+        });
+      }
+    }
   }
   if (chatToken.scope === "widget") {
     if (!chatToken.domain || !(await isDomainApproved(chatToken.propertyId, chatToken.domain))) {
