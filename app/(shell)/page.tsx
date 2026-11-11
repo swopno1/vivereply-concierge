@@ -2,8 +2,10 @@
 // it). Server component: it mints a direct chat token for this visit so
 // /api/chat can verify every message, the same way the widget token
 // is verified. The token's property is the viewer's resolved property —
-// an owner chats with their own resort here; the super-admin may pass
-// ?property=<id> to preview another; signed-out visitors get the demo
+// an owner chats with their own resort here (OWNER is pinned to its
+// own property; a ?property= override is ignored, never another
+// resort's and never the demo); the super-admin may pass ?property=<id>
+// to preview another property's chat; signed-out visitors get the demo
 // property. Direct visits need no approved domain; embedding this
 // page elsewhere is a separate concern (see README security section).
 
@@ -22,27 +24,28 @@ export default async function Home({
   const propertyId = await resolvePropertyId(session, params.property);
   const token = createChatToken({ propertyId, scope: "direct" });
   // Orientation strip: a cold visitor must learn in 3 seconds whose
-  // chat this is and what to try. Owners get a setup shortcut instead
-  // of the demo badge.
+  // chat this is and what to try. Signed-in viewers (an owner on
+  // their own chat, or staff previewing) get a setup shortcut
+  // instead of the demo badge.
   const [property, profile] = await Promise.all([
     prisma.property.findUnique({ where: { id: propertyId } }).catch(() => null),
     prisma.propertyProfile.findUnique({ where: { propertyId } }).catch(() => null),
   ]);
   const name = profile?.assistantName?.trim() || property?.name || "Vivereply Concierge";
-  const isOwner = !!session && (session.role === "OWNER" || session.role === "SUPER_ADMIN");
+  const isPreview = !!session;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-b border-gray-200 bg-white px-4 py-3">
         <div className="mx-auto flex w-full max-w-3xl flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="text-lg font-bold text-gray-900">{name}</h1>
-          {!isOwner && (
+          {!isPreview && (
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
               Live demo
             </span>
           )}
         </div>
         <p className="mx-auto w-full max-w-3xl text-sm text-gray-600">
-          {isOwner ? (
+          {isPreview ? (
             <>
               Chatting as your guests see it.{" "}
               <a href="/setup" className="underline">

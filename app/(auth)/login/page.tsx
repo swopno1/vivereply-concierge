@@ -61,14 +61,10 @@ function LoginInner() {
     }
   }
 
+  // Mark header, Back-to-homepage, Docs, and footer live in the
+  // (auth) layout — this page owns the form plus its cross-links.
   return (
-    <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center p-4">
-      <div className="mb-4 flex items-center gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0C1222]">
-          <img src="/brand/vivereply-mark.svg" alt="Vivereply logo" className="h-9 w-9" />
-        </span>
-        <span className="text-lg font-bold">Vivereply Concierge</span>
-      </div>
+    <>
       <h1 className="text-xl font-bold">Log in</h1>
       <p className="mt-1 text-sm text-gray-500">
         Owners sign in with their email and password. New here?{" "}
@@ -107,10 +103,12 @@ function LoginInner() {
       {error && (
         <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
-      <p className="mt-6 text-center text-xs text-gray-500">
-        Vivereply Concierge · ViveScript Solutions LLC
+      <p className="mt-3 text-center text-sm text-gray-500">
+        <Link href="/forgot-password" className="font-medium text-gray-900 underline">
+          Forgot password?
+        </Link>
       </p>
-    </main>
+    </>
   );
 }
 

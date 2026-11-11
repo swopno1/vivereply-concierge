@@ -1,10 +1,12 @@
 // App shell: left nav sidebar + content area + mobile top bar (client).
-// Rendered by app/(shell)/layout.tsx around every web-app page. The New
-// chat button talks to the Chat component through a window event, because
-// the layout sits above the page and cannot call its state directly —
-// Chat ignores the event while a reply is in flight, so the button needs
-// no busy state of its own. The footer shows Sign in (with a ?next= back
-// to the current page) or the signed-in row with Sign out. There is no
+// Rendered by app/(shell)/layout.tsx around every shell page (auth pages
+// use the minimal (auth) layout instead). The New chat button talks to
+// the Chat component through a window event, because the layout sits
+// above the page and cannot call its state directly — Chat ignores the
+// event while a reply is in flight, so the button needs no busy state
+// of its own. The footer shows Sign in (with a ?next= back to the
+// current page) or the signed-in row with Sign out, plus a Docs link
+// (above both states, so docs stay one click away). There is no
 // separate admin area: super-admin oversight (tenants, re-run approvals)
 // lives as extra sections inside /settings, rendered server-side.
 
@@ -218,6 +220,28 @@ export default function AppShell({
           ))}
         </nav>
         <div className="mt-auto px-1 py-1">
+          <a
+            href="https://vivereply.com/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mb-2 flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm text-gray-600 hover:bg-gray-200/50 hover:text-gray-900"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+              <path
+                d="M3 2.5h7.5L13.5 5.5v8H3v-11Z"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M10.5 2.5v3h3M5.5 8h5M5.5 10.5h5"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+            Docs
+          </a>
           {session ? (
             <div className="flex items-center gap-2 rounded-xl bg-gray-200/50 px-3 py-2">
               <span
