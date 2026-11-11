@@ -146,8 +146,8 @@ export async function sendUsageAlertEmail(args: {
   await sendBillingEmail(
     to,
     `${resortName} has used 80% of its monthly conversations`,
-    `<p>Hi,</p><p>Your resort ${resortName} has handled ${used} of ${quota} conversations this month (80%). Past 120%, guest chat pauses until the next month unless you allow overage — see the <a href="${link}">billing page</a> for live usage.</p>`,
-    `Hi,\n\nYour resort ${resortName} has handled ${used} of ${quota} conversations this month (80%). Past 120%, guest chat pauses until the next month unless you allow overage — see the billing page for live usage:\n${link}`
+    `<p>Hi,</p><p>Your resort ${resortName} has handled ${used} of ${quota} conversations this month (80%). Past 120%, guest chat pauses until the next month — see the <a href="${link}">billing page</a> for live usage.</p>`,
+    `Hi,\n\nYour resort ${resortName} has handled ${used} of ${quota} conversations this month (80%). Past 120%, guest chat pauses until the next month — see the billing page for live usage:\n${link}`
   );
 }
 

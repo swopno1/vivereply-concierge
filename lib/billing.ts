@@ -151,6 +151,82 @@ export function gateDecision(
   }
 }
 
+// ---- Scale 3-property limit (Phase 3 fix) ----
+
+// Properties one owner may hold, by the tier of their subscription:
+// Scale 3, everything else 1. Missing/unknown tiers fail closed at 1
+// (a grandfathered owner who wants multi-property subscribes to
+// Scale like everyone else — the limit gates NEW creation, while
+// grandfathering covers existing access).
+export const TIER_PROPERTY_LIMIT: Record<string, number> = {
+  STARTER: 1,
+  GROWTH: 1,
+  SCALE: 3,
+};
+
+export function propertyLimitForTier(tier: string | null): number {
+  if (!tier) return 1;
+  return TIER_PROPERTY_LIMIT[tier] ?? 1;
+}
+
+// Pure creation gate (unit-tested exhaustively): ownedCount is what
+// countPropertiesForOwner returned inside the creation transaction.
+export function creationAllowed(ownerTier: string | null, ownedCount: number): boolean {
+  return ownedCount < propertyLimitForTier(ownerTier);
+}
+
+// 403 copy for a refused creation (tier-aware so the owner knows the
+// way out — no figures, just the path).
+export function limitExceededMessage(ownerTier: string | null): string {
+  if (ownerTier === "SCALE") {
+    return "Scale allows up to 3 properties — this owner already has 3.";
+  }
+  return "This owner's plan allows 1 property — upgrade to Scale for up to 3.";
+}
+
+// Thrown inside the creation transaction when the gate refuses (no
+// partial creates — the throw rolls everything back). Routes catch
+// by instanceof and answer 403; any other tx error keeps its shape.
+export class PropertyLimitError extends Error {
+  constructor(ownerTier: string | null) {
+    super(limitExceededMessage(ownerTier));
+    this.name = "PropertyLimitError";
+  }
+}
+
+type CounterClient = {
+  property: {
+    count(args: unknown): Promise<number>;
+    findUnique(args: unknown): Promise<{ ownerEmail: string | null } | null>;
+  };
+  user: {
+    findUnique(args: unknown): Promise<{ propertyId: string | null } | null>;
+  };
+};
+
+// Counting rule (BY OWNER EMAIL, founder-stated): properties carrying
+// ownerEmail = email, PLUS the owner User row's property when it
+// isn't linked that way (pre-fix rows with NULL ownerEmail — the
+// limit is not retroactive, but those properties still count as
+// owned). Runs on any client: creation paths pass their transaction
+// (check-inside-tx, no partial creates), others the service client.
+export async function countPropertiesForOwner(
+  client: CounterClient,
+  email: string
+): Promise<number> {
+  const linked = await client.property.count({ where: { ownerEmail: email } });
+  const user = await client.user.findUnique({
+    where: { email },
+    select: { propertyId: true },
+  });
+  if (!user?.propertyId) return linked;
+  const own = await client.property.findUnique({
+    where: { id: user.propertyId },
+    select: { ownerEmail: true },
+  });
+  return linked + (own && own.ownerEmail !== email ? 1 : 0);
+}
+
 // ---- service layer (marked paths only; callers scope by session) ----
 
 // Conversations opened since the UTC month started. Runs on any
@@ -277,9 +353,10 @@ export async function recordNotice(
   await prismaService().billingNotice.create({ data: { propertyId, kind, periodKey } });
 }
 
-// Webhook idempotency: the Stripe event id is the primary key. True
-// = first sighting, apply the event; false = redelivery, answer 200
-// without re-applying. Only P2002 means "seen" — any other error
+// Webhook idempotency: the Stripe event id is the primary key, and
+// the engine claims it FIRST (before applying). True = first
+// sighting, apply the event; false = redelivery, answer 200 without
+// touching anything. Only P2002 means "seen" — any other error
 // rethrows so Stripe retries a sick database (never a silent drop).
 export async function claimStripeEvent(id: string, type: string): Promise<boolean> {
   try {

@@ -28,7 +28,7 @@ import {
 import { sendVerificationEmail } from "@/lib/email";
 import { sessionExpiresAt } from "@/lib/tenant";
 import { verifyTurnstileToken } from "@/lib/turnstile";
-import { startTrial } from "@/lib/billing";
+import { PropertyLimitError, countPropertiesForOwner, creationAllowed, startTrial } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 
 function clientIp(req: NextRequest): string {
@@ -114,31 +114,44 @@ export async function POST(req: NextRequest) {
   }
   const rawToken = randomBytes(32).toString("base64url");
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
-  const user = await prismaService().$transaction(async (tx) => {
-    await tx.property.create({ data: { id: ids.id, name: resortName, widgetKey: ids.widgetKey, status: "ACTIVE" } });
-    // Trial starts WITH the property (created-at based): 30 days, no
-    // card, Growth features. Same row the billing page and quota gate
-    // read — no backfill step exists because every property is born
-    // with one (pre-Phase-3 rows are grandfathered, see schema).
-    await startTrial(tx, ids.id, new Date());
-    const created = await tx.user.create({
-      data: {
-        email,
-        passwordHash: await hashPassword(password),
-        role: "OWNER",
-        propertyId: ids.id,
-        active: true,
-        mustChangePassword: false,
-        emailVerifiedAt: null,
-      },
+  let user;
+  try {
+    user = await prismaService().$transaction(async (tx) => {
+      // Property-limit gate INSIDE the tx (no partial creates). Signup
+      // emails are always new (409 above), so the count is 0 and a
+      // fresh owner always passes — the gate stands here for the
+      // invariant, and for the day signup allows existing emails.
+      const owned = await countPropertiesForOwner(tx, email);
+      if (!creationAllowed(null, owned)) throw new PropertyLimitError(null);
+      await tx.property.create({
+        data: { id: ids.id, name: resortName, widgetKey: ids.widgetKey, status: "ACTIVE", ownerEmail: email },
+      });
+      // Trial starts WITH the property (created-at based): 30 days, no
+      // card, Growth features. Same row the billing page and quota gate
+      // read — no backfill step exists because every property is born
+      // with one (pre-Phase-3 rows are grandfathered, see schema).
+      await startTrial(tx, ids.id, new Date());
+      const created = await tx.user.create({
+        data: {
+          email,
+          passwordHash: await hashPassword(password),
+          role: "OWNER",
+          propertyId: ids.id,
+          active: true,
+          mustChangePassword: false,
+          emailVerifiedAt: null,
+        },
+      });
+      await tx.emailVerificationToken.create({
+        data: { tokenHash, userId: created.id, expiresAt: new Date(Date.now() + 24 * 3600 * 1000) },
+      });
+      return created;
     });
-    await tx.emailVerificationToken.create({
-      data: { tokenHash, userId: created.id, expiresAt: new Date(Date.now() + 24 * 3600 * 1000) },
-    });
-    return created;
-  }).catch(() => null);
-  if (!user) {
+  } catch (e) {
     await logAttempt(false);
+    if (e instanceof PropertyLimitError) {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
     return NextResponse.json({ error: "Registration is unavailable right now." }, { status: 500 });
   }
 

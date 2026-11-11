@@ -5,7 +5,12 @@
 // OWNER user with a temporary password. The temp password returns ONCE in
 // this response — it is never stored or shown again, and the owner must
 // replace it (banner + Settings form) before it counts as theirs.
-// Refuses duplicates (property id, widget key, owner email) with 409s.
+// Refuses duplicates (property id, widget key) with 409s. An EXISTING
+// owner email grows that owner's portfolio instead of 409ing — but only
+// on Scale and under the 3-property limit (403 otherwise): the new
+// property links via ownerEmail, gets its own trial row, and reuses the
+// existing login (tempPassword null). Until owner multi-property
+// management ships, linked properties 2–3 are founder-managed.
 //   PATCH /api/admin/properties { id, status } — suspend (INACTIVE) or
 // resume (ACTIVE) a tenant. Suspension is the kill-switch: widget
 // issuance, chat, bridge keys, and owner sessions all refuse a
@@ -24,7 +29,13 @@ import {
 import { getSession } from "@/lib/tenant";
 import { normalizeHostname } from "@/lib/domains";
 import { clientIp, logAudit } from "@/lib/audit";
-import { TRIAL_DAYS, TRIAL_TIER } from "@/lib/billing";
+import {
+  PropertyLimitError,
+  TRIAL_DAYS,
+  TRIAL_TIER,
+  countPropertiesForOwner,
+  creationAllowed,
+} from "@/lib/billing";
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -75,7 +86,7 @@ export async function POST(req: NextRequest) {
     domains.push(host);
   }
 
-  const [dupId, dupKey, dupEmail] = await Promise.all([
+  const [dupId, dupKey, existingUser] = await Promise.all([
     prismaService().property.findUnique({ where: { id } }),
     prismaService().property.findUnique({ where: { widgetKey } }),
     prismaService().user.findUnique({ where: { email: ownerEmail } }),
@@ -86,17 +97,34 @@ export async function POST(req: NextRequest) {
   if (dupKey) {
     return NextResponse.json({ error: "That widget key is already taken." }, { status: 409 });
   }
-  if (dupEmail) {
+  // Existing email: only an ACTIVE owner login can grow a portfolio —
+  // any other holder (super-admin row, deactivated) stays a duplicate.
+  const reuseLogin = !!existingUser;
+  if (existingUser && (existingUser.role !== "OWNER" || !existingUser.active || !existingUser.propertyId)) {
     return NextResponse.json({ error: "That email already owns a login." }, { status: 409 });
   }
 
-  const tempPassword = generateTempPassword();
-  const passwordHash = await hashPassword(tempPassword);
+  const tempPassword = reuseLogin ? null : generateTempPassword();
+  const passwordHash = tempPassword ? await hashPassword(tempPassword) : null;
   try {
-    await prismaService().$transaction([
-      prismaService().property.create({ data: { id, name, widgetKey, status: "ACTIVE" } }),
-      // Trial row, same shape as signup (array-form tx, so inline).
-      prismaService().subscription.create({
+    // Callback-form tx: the limit check (count + tier read) and the
+    // creates are atomic — a refusal rolls back with zero rows. A
+    // concurrent creation racing us can still slip one extra row past
+    // the count (no row lock; accepted, see PR).
+    await prismaService().$transaction(async (tx) => {
+      const owned = await countPropertiesForOwner(tx, ownerEmail);
+      let ownerTier: string | null = null;
+      if (reuseLogin && existingUser?.propertyId) {
+        const ownerSub = await tx.subscription.findUnique({
+          where: { propertyId: existingUser.propertyId },
+        });
+        ownerTier = ownerSub?.tier ?? null;
+      }
+      if (!creationAllowed(ownerTier, owned)) throw new PropertyLimitError(ownerTier);
+      await tx.property.create({
+        data: { id, name, widgetKey, status: "ACTIVE", ownerEmail },
+      });
+      await tx.subscription.create({
         data: {
           propertyId: id,
           tier: TRIAL_TIER,
@@ -104,21 +132,31 @@ export async function POST(req: NextRequest) {
           status: "TRIAL",
           trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000),
         },
-      }),
-      ...domains.map((domain) =>
-        prismaService().approvedDomain.create({ data: { domain, propertyId: id, active: true } })
-      ),
-      prismaService().user.create({
-        // Team-registered: email attested, verified at creation (see schema).
-        data: { email: ownerEmail, passwordHash, role: "OWNER", propertyId: id, active: true, mustChangePassword: true, emailVerifiedAt: new Date() },
-      }),
-    ]);
-  } catch {
+      });
+      for (const domain of domains) {
+        await tx.approvedDomain.create({ data: { domain, propertyId: id, active: true } });
+      }
+      if (!reuseLogin && passwordHash) {
+        await tx.user.create({
+          // Team-registered: email attested, verified at creation (see schema).
+          data: { email: ownerEmail, passwordHash, role: "OWNER", propertyId: id, active: true, mustChangePassword: true, emailVerifiedAt: new Date() },
+        });
+      }
+    });
+  } catch (e) {
+    if (e instanceof PropertyLimitError) {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
     return NextResponse.json({ error: "Registration failed (likely a duplicate). Try again." }, { status: 409 });
   }
-  // The temp password travels here once, in this response body, over the
-  // super-admin's own TLS session — never logged, never stored.
-  return NextResponse.json({ propertyId: id, ownerEmail, tempPassword }, { status: 201 });
+  // New login: the temp password travels here once, in this response
+  // body, over the super-admin's own TLS session — never logged,
+  // never stored. Reused login: tempPassword is null (no new secret;
+  // the owner keeps their existing password).
+  return NextResponse.json(
+    { propertyId: id, ownerEmail, tempPassword, ...(reuseLogin ? { existingLogin: true } : {}) },
+    { status: 201 }
+  );
 }
 
 const SUSPEND_STATUSES = ["ACTIVE", "INACTIVE"] as const;

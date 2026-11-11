@@ -113,14 +113,15 @@ nothing is ever deleted for non-payment.
 Growth, or Scale — each allows a monthly number of guest
 conversations, shown on the page) and monthly or annual billing,
 then press **Subscribe**. Payment runs on Stripe's own secure page
-— your card details never touch our servers.
+— your card details never touch our servers. Scale covers up to 3
+properties under one owner — ask us and we'll provision the 2nd and
+3rd for you.
 
 **Usage.** The billing page shows conversations handled this month
 against your plan's limit (one conversation = one guest chat
 thread). At 80% we email you; past 120% guest chat pauses until
-next month unless you tick **Allow overage** (extra conversations
-counted for separate invoicing). Trial accounts always pause at
-120% — there's no card to bill.
+next month. (Overage past the limit is coming later — for now the
+pause always applies.)
 
 **Change or cancel.** Change plans any time from the billing page
 (the difference is prorated automatically). Cancel keeps everything

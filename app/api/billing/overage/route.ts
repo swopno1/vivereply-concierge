@@ -1,11 +1,10 @@
-// Billing overage toggle (Phase 3): the owner opts past the 120%
-// hard stop (or back under it). OWNER + verified email only. Audit-
-// logged both ways. Copy stays figure-free until prices publish —
-// the page names the toggle without a per-conversation rate, and
-// overage CONVERSATIONS are counted on the billing page for manual
-// invoicing until metered billing ships. Honored by the quota gate
-// only with a live subscription (a trial has no card, so trial
-// overage always stops).
+// Billing overage toggle (Phase 3, RESERVED — no UI calls it). The
+// founder hid the toggle until metered billing ships, so
+// overageAgreed stays false for everyone; the route stays live,
+// defended (OWNER + verified email, audit-logged both ways) so the
+// metered-billing PR wires UI to an already-reviewed endpoint.
+// Honored by the quota gate only with a live subscription (a trial
+// has no card, so trial overage always stops).
 // SERVICE PATH (marked): subscription writes by verified session.
 import { NextRequest, NextResponse } from "next/server";
 import { prismaService } from "@/lib/prisma";

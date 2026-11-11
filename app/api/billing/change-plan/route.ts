@@ -1,10 +1,19 @@
 // Billing change-plan (Phase 3): moves an ACTIVE subscription to a
-// different tier/interval via the Stripe API (Stripe prorates the
-// difference by default). OWNER + verified email only. The row
-// updates optimistically after Stripe accepts; the webhook re-sets
-// the same values seconds later (convergent). Downgrading below
-// current usage is allowed — the quota gate simply enforces the new
-// limit from then on (the page says so before confirming).
+// different tier/interval, effective IMMEDIATELY on both sides
+// (founder decision — never next-invoice-only):
+//   - MONEY side: Stripe time-based proration (create_prorations).
+//     Stripe cannot prorate by usage for licensed per-tier prices,
+//     so no usage-based money math exists here — Stripe's proration
+//     is the whole money story.
+//   - QUOTA side (ours, usage-based): the month's used conversations
+//     count against the NEW tier's limit from this moment — the usage
+//     counter is NEVER reset mid-month. The gate already compares
+//     usedThisMonth against the new quota, so a downgrade below
+//     current usage pauses at 120% of the new limit; the billing page
+//     warns before confirming (downgradeBelowUsage).
+// OWNER + verified email only. The row updates optimistically after
+// Stripe accepts; the webhook re-sets the same values seconds later
+// (convergent).
 // SERVICE PATH (marked): subscription writes by verified session.
 import { NextRequest, NextResponse } from "next/server";
 import { prismaService } from "@/lib/prisma";

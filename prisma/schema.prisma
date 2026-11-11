@@ -19,6 +19,14 @@ model Property {
   id                 String              @id
   name               String
   widgetKey          String              @unique
+  // Owner linkage for the Scale 3-property limit (Phase 3 fix): the
+  // owner email this property was created for (signup email / admin
+  // ownerEmail), set on EVERY creation. Pre-fix rows carry NULL and
+  // link through their owner User row instead (see
+  // countPropertiesForOwner). Never used for login — identity stays
+  // on the User row; this field only answers "how many properties
+  // does this owner have?".
+  ownerEmail         String?
   status             String              @default("ACTIVE")
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
@@ -39,6 +47,8 @@ model Property {
   auditLogs          AuditLog[]
   subscription       Subscription?
   billingNotices     BillingNotice[]
+
+  @@index([ownerEmail])
 }
 
 // Credentialed logins (multi-tenant core). Roles: SUPER_ADMIN (the founder,
@@ -496,8 +506,8 @@ model AuditLog {
 // still served while Stripe retries) → CANCELED (ended or ending —
 // cancelAtPeriodEnd serves to currentPeriodEnd) / EXPIRED (trial ran
 // out unpaid, or subscription deleted). tier/interval mirror the
-// Stripe subscription (webhook-synced); overageAgreed is the owner's
-// opt-in past 120% (billing page toggle, audit-logged).
+// Stripe subscription (webhook-synced); overageAgreed is the future
+// opt-in past 120% (no UI until metered billing ships — stays false).
 model Subscription {
   id                   String    @id @default(cuid())
   propertyId           String    @unique

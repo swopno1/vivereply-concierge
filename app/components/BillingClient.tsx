@@ -1,10 +1,12 @@
 // Billing client (Phase 3, OWNER only). Plan + usage + subscribe /
-// change / cancel + overage toggle. This file must NEVER render a
-// dollar figure until the founder says publish — plan names,
-// conversation limits, days, and counts only (grep for "$" before
-// every commit touching it). The tier picker lists limits alone:
-// feature-level gates are deferred, so every tier runs the same
-// features today and the picker claims nothing else.
+// change / cancel. This file must NEVER render a dollar figure
+// until the founder says publish — plan names, conversation limits,
+// days, and counts only (grep for "$" before every commit touching
+// it). The tier picker lists limits alone: feature-level gates are
+// deferred, so every tier runs the same features today and the
+// picker claims nothing else. NO OVERAGE UI until metered billing
+// ships (founder decision): no toggle, no promises of overage or
+// separate invoicing anywhere in this file.
 
 "use client";
 
@@ -111,20 +113,6 @@ export default function BillingClient({
     }
   }
 
-  async function toggleOverage(allow: boolean) {
-    if (sending) return;
-    setMessage("");
-    setSending(true);
-    try {
-      const r = await post("/api/billing/overage", { allow });
-      if (!r.ok) throw new Error(r.error || "Could not save.");
-      window.location.reload();
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Could not save.");
-      setSending(false);
-    }
-  }
-
   function statusLine(): string {
     if (!snapshot.hasSubscription) return "No billing record — full access.";
     switch (snapshot.status) {
@@ -171,7 +159,7 @@ export default function BillingClient({
         {paused && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
             {snapshot.gate.reason === "quota-exceeded"
-              ? "Guest chat is paused — the monthly limit is reached. It resumes automatically next month, on upgrade, or when you allow overage below."
+              ? "Guest chat is paused — the monthly limit is reached. It resumes automatically next month, or on upgrade."
               : "Guest chat is paused — subscribe below to resume immediately."}
           </p>
         )}
@@ -181,7 +169,7 @@ export default function BillingClient({
         <p className="text-sm font-semibold text-gray-900">Usage this month</p>
         <p className="text-sm text-gray-600">
           {snapshot.usageThisMonth.toLocaleString()} of {snapshot.quotaThisMonth.toLocaleString()} conversations
-          {overQuota > 0 && ` (${overQuota.toLocaleString()} over the plan — counted for separate invoicing)`}
+          {overQuota > 0 && ` (${overQuota.toLocaleString()} over the plan)`}
         </p>
         <div className="h-2 overflow-hidden rounded-full bg-gray-100" role="img" aria-label={`${usagePct}% of monthly conversations used`}>
           <div
@@ -191,7 +179,7 @@ export default function BillingClient({
         </div>
         <p className="text-xs text-gray-500">
           One conversation = one guest chat thread. Past 120% of the plan, guest chat pauses until
-          next month unless overage is allowed below.
+          next month.
         </p>
       </div>
 
@@ -228,8 +216,7 @@ export default function BillingClient({
         {downgradeBelowUsage && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
             Your usage ({snapshot.usageThisMonth.toLocaleString()}) already exceeds this plan
-            ({pickedQuota.toLocaleString()}) — guest chat pauses at 120% until next month unless
-            overage is allowed.
+            ({pickedQuota.toLocaleString()}) — guest chat pauses at 120% until next month.
           </p>
         )}
         <div>
@@ -294,22 +281,6 @@ export default function BillingClient({
         </div>
       )}
 
-      <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-        <p className="text-sm font-semibold text-gray-900">Overage</p>
-        <label className="flex cursor-pointer items-start gap-2 text-sm text-gray-600">
-          <input
-            type="checkbox"
-            checked={snapshot.overageAgreed}
-            onChange={(e) => toggleOverage(e.target.checked)}
-            disabled={sending}
-            className="mt-1"
-          />
-          <span>
-            Allow guest chat past 120% of my plan (extra conversations counted for separate
-            invoicing). Trial accounts pause at 120% regardless — no card on file.
-          </span>
-        </label>
-      </div>
     </div>
   );
 }
