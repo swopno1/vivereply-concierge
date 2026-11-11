@@ -10,8 +10,9 @@
 // prefix plus the secret's hash, so a database read cannot call the API.
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, prismaService } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
+import { tenantFor, withTenant } from "@/lib/tenant-db";
 import { mintBridgeToken } from "@/lib/bridge";
 import { clientIp, logAudit } from "@/lib/audit";
 
@@ -41,10 +42,21 @@ export async function GET() {
   if (!(await sessionOwnerVerified(session))) {
     return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
   }
-  const rows = await prisma.bridgeToken.findMany({
-    where: session.role === "OWNER" ? { propertyId: session.propertyId ?? "" } : {},
-    orderBy: { createdAt: "asc" },
-  });
+  // Owners list their own keys (tenant path); super-admins list across
+  // properties (SERVICE PATH, marked). Owner sessions always carry a
+  // property — a null tenant here fails closed (unreachable).
+  const tenant = tenantFor(session);
+  if (session.role === "OWNER" && !tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const rows = tenant
+    ? await withTenant(tenant, (tx) =>
+        tx.bridgeToken.findMany({
+          where: { propertyId: tenant },
+          orderBy: { createdAt: "asc" },
+        })
+      )
+    : await prismaService().bridgeToken.findMany({ orderBy: { createdAt: "asc" } });
   return NextResponse.json(rows.map(shape));
 }
 
@@ -71,10 +83,22 @@ export async function POST(req: NextRequest) {
   if (!sessionCan(session, propertyId)) {
     return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
   }
+  const tenant = tenantFor(session, propertyId);
+  if (!tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  // FK honesty: creating for a ghost property would 500 on the FK —
+  // answer 404 instead (owner properties always exist post-session).
+  const property = await prisma.property.findUnique({ where: { id: propertyId } });
+  if (!property) {
+    return NextResponse.json({ error: "Property not found." }, { status: 404 });
+  }
   const minted = mintBridgeToken();
-  const row = await prisma.bridgeToken.create({
-    data: { prefix: minted.prefix, secretHash: minted.secretHash, name, propertyId, active: true },
-  });
+  const row = await withTenant(tenant, (tx) =>
+    tx.bridgeToken.create({
+      data: { prefix: minted.prefix, secretHash: minted.secretHash, name, propertyId, active: true },
+    })
+  );
   // Prefix + name only — the secret is never logged (it is unrecoverable by design).
   await logAudit({ actorEmail: session.email, action: "bridge.mint", propertyId, detail: { prefix: row.prefix, name }, ip: clientIp(req) });
   return NextResponse.json({ ...shape(row), token: minted.token }, { status: 201 });
@@ -94,11 +118,22 @@ export async function PATCH(req: NextRequest) {
   if (!id) {
     return NextResponse.json({ error: "Token id is required." }, { status: 400 });
   }
-  const current = await prisma.bridgeToken.findUnique({ where: { id } });
+  // Owners read+update inside their own tenant (RLS confines the id
+  // lookup: another tenant's id reads as missing → same 404).
+  // Super-admins act cross-property (SERVICE PATH, marked).
+  const tenant = tenantFor(session);
+  if (session.role === "OWNER" && !tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const current = tenant
+    ? await withTenant(tenant, (tx) => tx.bridgeToken.findUnique({ where: { id } }))
+    : await prismaService().bridgeToken.findUnique({ where: { id } });
   if (!current || !sessionCan(session, current.propertyId)) {
     return NextResponse.json({ error: "Token not found." }, { status: 404 });
   }
-  const row = await prisma.bridgeToken.update({ where: { id }, data: { active } });
+  const row = tenant
+    ? await withTenant(tenant, (tx) => tx.bridgeToken.update({ where: { id }, data: { active } }))
+    : await prismaService().bridgeToken.update({ where: { id }, data: { active } });
   await logAudit({
     actorEmail: session.email,
     action: active ? "bridge.reactivate" : "bridge.revoke",

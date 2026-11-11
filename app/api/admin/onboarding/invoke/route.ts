@@ -6,8 +6,8 @@
 // PENDING is rejected: rerunning real work goes through the approval flip.
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
+import { tenantFor, withTenant } from "@/lib/tenant-db";
 import { signDownloadUrl, signUploadUrl } from "@/lib/storage";
 import { invokeIngestionWorker } from "@/lib/worker";
 
@@ -27,7 +27,11 @@ export async function POST(req: NextRequest) {
   if (!sessionCan(session, propertyId)) {
     return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
   }
-  const run = await prisma.onboardingRun.findUnique({ where: { propertyId } });
+  const tenant = tenantFor(session, propertyId);
+  if (!tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const run = await withTenant(tenant, (tx) => tx.onboardingRun.findUnique({ where: { propertyId } }));
   if (!run) {
     return NextResponse.json({ error: "No onboarding run exists for this property yet." }, { status: 404 });
   }
@@ -60,7 +64,9 @@ export async function POST(req: NextRequest) {
       rawUploadUrl,
     });
     if (worker.invoked) {
-      await prisma.onboardingRun.update({ where: { id: run.id }, data: { status: "RUNNING" } });
+      await withTenant(tenant, (tx) =>
+        tx.onboardingRun.update({ where: { id: run.id }, data: { status: "RUNNING" } })
+      );
     }
     return NextResponse.json({ invoked: worker.invoked, note: worker.note });
   } catch (e) {

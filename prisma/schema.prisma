@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
+  provider = "postgresql"
 }
 
 // Tenant registry (multi-tenant core). One row per resort. The id is the
@@ -16,13 +16,27 @@ datasource db {
 // for test tenants only, the seed file (prisma/seed-tenants.mjs).
 // widgetKey is the public embed key (see demo-config/widget-keys.ts).
 model Property {
-  id        String   @id
-  name      String
-  widgetKey String   @unique
-  status    String   @default("ACTIVE")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  users     User[]
+  id                 String              @id
+  name               String
+  widgetKey          String              @unique
+  status             String              @default("ACTIVE")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  users              User[]
+  // Tenancy hub (Phase 1): every tenant table FKs here. Deletes cascade
+  // except AuditLog (Restrict — the trail goes only by explicit delete;
+  // see the offboarding runbook, which deletes children first anyway).
+  conversations      Conversation[]
+  bridgeTokens       BridgeToken[]
+  roomMappings       RoomMapping[]
+  binding            PropertyBinding?
+  knowledgeDocuments KnowledgeDocument[]
+  profile            PropertyProfile?
+  onboardingRun      OnboardingRun?
+  approvedDomains    ApprovedDomain[]
+  rateBuckets        RateBucket[]
+  widgetOpens        WidgetOpen[]
+  auditLogs          AuditLog[]
 }
 
 // Credentialed logins (multi-tenant core). Roles: SUPER_ADMIN (the founder,
@@ -33,24 +47,24 @@ model Property {
 // lib/auth.ts). A SUPER_ADMIN row has null propertyId; an OWNER row must
 // have one, and login fails closed if the property is missing or inactive.
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  passwordHash String
-  role         String
-  propertyId   String?
-  property     Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  active       Boolean   @default(true)
+  id                 String                   @id @default(cuid())
+  email              String                   @unique
+  passwordHash       String
+  role               String
+  propertyId         String?
+  property           Property?                @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  active             Boolean                  @default(true)
   // True while a temporary (seed-issued) password is in force — the owner
   // sees a change-password banner until they set their own.
-  mustChangePassword Boolean @default(false)
+  mustChangePassword Boolean                  @default(false)
   // Null until the owner proves the email (self-signup link). Seed
   // owners are attested: verified at creation. Config surfaces
   // (Settings, onboarding, their APIs) require this.
-  emailVerifiedAt DateTime?
-  createdAt    DateTime  @default(now())
-  sessions     Session[]
+  emailVerifiedAt    DateTime?
+  createdAt          DateTime                 @default(now())
+  sessions           Session[]
   verificationTokens EmailVerificationToken[]
-  resetTokens PasswordResetToken[]
+  resetTokens        PasswordResetToken[]
 
   @@index([propertyId, active])
 }
@@ -63,14 +77,14 @@ model User {
 // sessions have a null userId. Rows are small; prune expired ones
 // opportunistically at login.
 model Session {
-  id        String    @id @default(cuid())
-  userId    String?
-  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role      String
-  createdAt DateTime  @default(now())
-  lastSeenAt DateTime @default(now())
-  expiresAt DateTime
-  revokedAt DateTime?
+  id         String    @id @default(cuid())
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       String
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
 
   @@index([userId, revokedAt])
 }
@@ -138,12 +152,13 @@ model SignupAttempt {
 }
 
 model Conversation {
-  id         String         @id @default(cuid())
+  id         String          @id @default(cuid())
   propertyId String
-  language   String         @default("en")
-  status     String         @default("OPEN")
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  property   Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  language   String          @default("en")
+  status     String          @default("OPEN")
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
   messages   Message[]
   toolCalls  ToolCallLog[]
   handoffs   HandoffRecord[]
@@ -178,14 +193,14 @@ model ToolCallLog {
 }
 
 model HandoffRecord {
-  id             String       @id @default(cuid())
+  id             String        @id @default(cuid())
   conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   reason         String
   summary        String
-  status         String       @default("OPEN")
+  status         String        @default("OPEN")
   assignee       String?
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime      @default(now())
   notes          HandoffNote[]
 }
 
@@ -213,6 +228,7 @@ model BridgeToken {
   secretHash String
   name       String
   propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   active     Boolean  @default(true)
   createdAt  DateTime @default(now())
 
@@ -230,6 +246,7 @@ model BridgeToken {
 model RoomMapping {
   id              String   @id @default(cuid())
   propertyId      String
+  property        Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   slug            String
   name            String
   basePricePoisha Int
@@ -242,25 +259,28 @@ model RoomMapping {
 }
 
 model PropertyBinding {
-  id            String    @id @default(cuid())
-  workspaceId   String?   @unique
-  propertyId    String    @unique
-  suiteBaseUrl  String
-  secretEnc     String?
+  id             String    @id @default(cuid())
+  workspaceId    String?   @unique
+  propertyId     String    @unique
+  property       Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  suiteBaseUrl   String
+  secretEnc      String?
   // The resort's OWN payment page (owner-configured, https). The bot
   // deep-links here with ?booking=CODE after a draft — "showing the
   // cash counter". Concierge never takes resort money itself; unset =
   // the bot says to pay on the resort site / offers a handoff.
   paymentPageUrl String?
-  version       Int       @default(1)
-  lastTestedAt  DateTime?
-  lastTestOk    Boolean?
-  createdAt     DateTime  @default(now())
+  version        Int       @default(1)
+  lastTestedAt   DateTime?
+  lastTestOk     Boolean?
+  createdAt      DateTime  @default(now())
 }
 
 model KnowledgeDocument {
   id         String           @id @default(cuid())
-  propertyId String           @default("krishnachura-retreat")
+  // No default: a missing propertyId must fail, not silently join the demo.
+  propertyId String
+  property   Property         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   title      String
   source     String           @default("demo-seed")
   content    String
@@ -273,23 +293,24 @@ model KnowledgeDocument {
 // Business profile captured at onboarding: facts + the reply identity
 // (assistant name, tone, languages, greeting) the property wants.
 model PropertyProfile {
-  id            String   @id @default(cuid())
-  propertyId    String   @unique
-  businessName  String
-  address       String?
-  phone         String?
-  email         String?
-  website       String?
-  assistantName String?
-  tone          String?
-  languages     String[]
-  greeting      String?
+  id                 String   @id @default(cuid())
+  propertyId         String   @unique
+  property           Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  businessName       String
+  address            String?
+  phone              String?
+  email              String?
+  website            String?
+  assistantName      String?
+  tone               String?
+  languages          String[]
+  greeting           String?
   // Suggestion segments the owner enabled at onboarding (ids from
   // lib/segments.ts). The agent may advise ONLY on these, and only
   // from verified property information — never general knowledge.
   suggestionSegments String[] @default([])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 // One ingestion run per property (RAG onboarding). Status: PENDING (queued,
@@ -299,6 +320,7 @@ model PropertyProfile {
 model OnboardingRun {
   id            String    @id @default(cuid())
   propertyId    String    @unique
+  property      Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   status        String    @default("PENDING")
   filePaths     String[]
   website       String?
@@ -312,17 +334,17 @@ model OnboardingRun {
 }
 
 model KnowledgeChunk {
-  id         String            @id @default(cuid())
+  id         String                     @id @default(cuid())
   documentId String
-  document   KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document   KnowledgeDocument          @relation(fields: [documentId], references: [id], onDelete: Cascade)
   content    String
   // Visibility switch (worker rework): the worker stages chunks unindexed
   // and flips its job's chunks on clean completion, so guests never see a
   // half-ingested run. Default true so existing rows and seed scripts stay
   // live with no backfill — the worker always sets false explicitly.
-  indexed    Boolean           @default(true)
+  indexed    Boolean                    @default(true)
   embedding  Unsupported("vector(768)")
-  createdAt  DateTime          @default(now())
+  createdAt  DateTime                   @default(now())
 
   @@index([documentId])
 }
@@ -336,6 +358,7 @@ model ApprovedDomain {
   id         String   @id @default(cuid())
   domain     String
   propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   active     Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -356,12 +379,12 @@ model ApprovedDomain {
 // its own: the conversation link carries the context, and the chat
 // token gates the write exactly like a chat message.
 model ChatRating {
-  id             String   @id @default(cuid())
-  conversationId String   @unique
+  id             String       @id @default(cuid())
+  conversationId String       @unique
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   helpful        Boolean
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 }
 
 // Per-tenant chat throttle (noisy-neighbour guard): fixed one-minute
@@ -370,6 +393,7 @@ model ChatRating {
 // globally. Best-effort prune of old windows rides on the check.
 model RateBucket {
   propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   windowStart DateTime
   count       Int      @default(1)
 
@@ -410,6 +434,7 @@ model DraftClaim {
 model WidgetOpen {
   id         String   @id @default(cuid())
   propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
 
   @@index([propertyId, createdAt])
@@ -420,13 +445,18 @@ model WidgetOpen {
 // the attempted email on login failure); detail carries names/ids/
 // outcomes only — never secrets, hashes, or keys.
 model AuditLog {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   actorEmail String?
   action     String
   propertyId String?
+  // Restrict, not Cascade: the trail goes only by explicit delete (the
+  // offboarding runbook deletes audit rows before the property, so the
+  // runbook order proves this end to end). A Property delete that skips
+  // the runbook fails loudly instead of vaporizing history.
+  property   Property? @relation(fields: [propertyId], references: [id], onDelete: Restrict)
   detail     Json?
   ip         String?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   @@index([createdAt])
   @@index([propertyId, createdAt])

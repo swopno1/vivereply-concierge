@@ -6,10 +6,10 @@
 // can't vote. Upsert: one row per conversation, freely changeable.
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { verifyChatToken } from "@/lib/auth";
 import { isDomainApproved } from "@/lib/domains";
 import { isPropertyActive } from "@/lib/tenant";
+import { withTenant } from "@/lib/tenant-db";
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -30,14 +30,18 @@ export async function POST(req: NextRequest) {
   if (!conversationId || typeof helpful !== "boolean") {
     return NextResponse.json({ error: "conversationId and helpful are required." }, { status: 400 });
   }
-  const conversation = await prisma.conversation.findUnique({ where: { id: conversationId } });
+  const conversation = await withTenant(chatToken.propertyId, (tx) =>
+    tx.conversation.findUnique({ where: { id: conversationId } })
+  );
   if (!conversation || conversation.propertyId !== chatToken.propertyId) {
     return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
   }
-  await prisma.chatRating.upsert({
-    where: { conversationId },
-    create: { conversationId, helpful },
-    update: { helpful },
-  });
+  await withTenant(chatToken.propertyId, (tx) =>
+    tx.chatRating.upsert({
+      where: { conversationId },
+      create: { conversationId, helpful },
+      update: { helpful },
+    })
+  );
   return NextResponse.json({ saved: true });
 }

@@ -5,7 +5,10 @@
 
 import Link from "next/link";
 import { createHash } from "node:crypto";
-import { prisma } from "@/lib/prisma";
+// SERVICE PATH (marked): token-keyed bootstrap — the tenant is unknown
+// until the token resolves, so this cannot go through withTenant. The
+// unguessable token hash is the authorization, not RLS.
+import { prismaService } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -19,16 +22,16 @@ export default async function VerifyEmailPage({
   let ok = false;
   if (raw) {
     const tokenHash = createHash("sha256").update(raw).digest("hex");
-    const row = await prisma.emailVerificationToken
+    const row = await prismaService().emailVerificationToken
       .findUnique({ where: { tokenHash }, include: { user: true } })
       .catch(() => null);
     const live = row && !row.usedAt && row.expiresAt > new Date() && row.user.active;
     if (live && row) {
-      await prisma.$transaction([
-        prisma.emailVerificationToken.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
-        prisma.user.update({ where: { id: row.userId }, data: { emailVerifiedAt: new Date() } }),
+      await prismaService().$transaction([
+        prismaService().emailVerificationToken.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
+        prismaService().user.update({ where: { id: row.userId }, data: { emailVerifiedAt: new Date() } }),
       ]).catch(() => null);
-      const check = await prisma.user
+      const check = await prismaService().user
         .findUnique({ where: { id: row.userId }, select: { emailVerifiedAt: true } })
         .catch(() => null);
       ok = check?.emailVerifiedAt != null;

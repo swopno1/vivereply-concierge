@@ -9,7 +9,7 @@
 // without a database.
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { prisma } from "@/lib/prisma";
+import { prismaService } from "@/lib/prisma";
 import { verifyEmbedToken } from "./auth";
 
 export type MintedToken = {
@@ -61,7 +61,11 @@ export async function verifyBridgeKey(header: string | null): Promise<BridgeAuth
   if (!token) return null;
   const parsed = parseBridgeToken(token);
   if (!parsed) return null;
-  const row = await prisma.bridgeToken.findUnique({ where: { prefix: parsed.prefix } });
+  // SERVICE PATH (marked): key resolution by prefix happens before any
+  // tenant is known (the row IS what establishes it), so it cannot go
+  // through withTenant. The timing-safe secret check below is the
+  // authorization, not RLS.
+  const row = await prismaService().bridgeToken.findUnique({ where: { prefix: parsed.prefix } });
   if (!row || !row.active) return null;
   const presented = Buffer.from(hashBridgeSecret(parsed.secret));
   const expected = Buffer.from(row.secretHash);

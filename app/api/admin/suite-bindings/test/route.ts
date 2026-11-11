@@ -9,8 +9,9 @@
 // Either way nothing is written to the backend — both probes are reads.
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prismaService } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
+import { tenantFor, withTenant } from "@/lib/tenant-db";
 import { decryptSecret } from "@/lib/secrets";
 import { HttpSuiteAdapter, SUITE_API_VERSION } from "@/lib/suite";
 
@@ -27,10 +28,28 @@ export async function POST(req: NextRequest) {
   if (!id) {
     return NextResponse.json({ error: "Binding id is required." }, { status: 400 });
   }
-  const row = await prisma.propertyBinding.findUnique({ where: { id } });
+  // Owners read inside their own tenant (RLS confines the id lookup:
+  // another tenant's id reads as missing → same 404). Super-admins act
+  // cross-property (SERVICE PATH, marked).
+  const tenant = tenantFor(session);
+  if (session.role === "OWNER" && !tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const row = tenant
+    ? await withTenant(tenant, (tx) => tx.propertyBinding.findUnique({ where: { id } }))
+    : await prismaService().propertyBinding.findUnique({ where: { id } });
   if (!row || !sessionCan(session, row.propertyId)) {
     return NextResponse.json({ error: "Binding not found." }, { status: 404 });
   }
+  const stamp = (lastTestOk: boolean) =>
+    tenant
+      ? withTenant(tenant, (tx) =>
+          tx.propertyBinding.update({ where: { id }, data: { lastTestedAt: new Date(), lastTestOk } })
+        )
+      : prismaService().propertyBinding.update({
+          where: { id },
+          data: { lastTestedAt: new Date(), lastTestOk },
+        });
   let secret: string | null = null;
   if (row.secretEnc) {
     try {
@@ -50,10 +69,7 @@ export async function POST(req: NextRequest) {
   const started = Date.now();
   try {
     const ping = await adapter.ping();
-    await prisma.propertyBinding.update({
-      where: { id },
-      data: { lastTestedAt: new Date(), lastTestOk: true },
-    });
+    await stamp(true);
     return NextResponse.json({
       ok: true,
       ping: true,
@@ -66,10 +82,7 @@ export async function POST(req: NextRequest) {
     // only, nothing written, nothing found.
     try {
       await adapter.lookupBookingByCode("CONCIERGE-PROBE-000000");
-      await prisma.propertyBinding.update({
-        where: { id },
-        data: { lastTestedAt: new Date(), lastTestOk: true },
-      });
+      await stamp(true);
       return NextResponse.json({
         ok: true,
         ping: false,
@@ -79,10 +92,7 @@ export async function POST(req: NextRequest) {
     } catch (probeError) {
       const message = probeError instanceof Error ? probeError.message : "";
       const reachable = message === "not_found" || message === "not found";
-      await prisma.propertyBinding.update({
-        where: { id },
-        data: { lastTestedAt: new Date(), lastTestOk: reachable },
-      });
+      await stamp(reachable);
       if (reachable) {
         return NextResponse.json({
           ok: true,

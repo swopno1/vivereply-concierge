@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
+import { tenantFor, withTenant } from "@/lib/tenant-db";
 import { cleanSegmentIds } from "@/lib/segments";
 
 function optStr(value: unknown, max: number): string | null {
@@ -37,17 +38,23 @@ export async function PATCH(req: NextRequest) {
   if (!property) {
     return NextResponse.json({ error: "Property not found." }, { status: 404 });
   }
+  const tenant = tenantFor(session, propertyId);
+  if (!tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
   const data = {
     assistantName: optStr(body?.assistantName, 100),
     greeting: optStr(body?.greeting, 500),
     tone: optStr(body?.tone, 500),
     suggestionSegments: cleanSegmentIds(body?.suggestionSegments),
   };
-  const row = await prisma.propertyProfile.upsert({
-    where: { propertyId },
-    create: { propertyId, businessName: property.name, ...data },
-    update: data,
-  });
+  const row = await withTenant(tenant, (tx) =>
+    tx.propertyProfile.upsert({
+      where: { propertyId },
+      create: { propertyId, businessName: property.name, ...data },
+      update: data,
+    })
+  );
   return NextResponse.json({
     propertyId: row.propertyId,
     assistantName: row.assistantName,

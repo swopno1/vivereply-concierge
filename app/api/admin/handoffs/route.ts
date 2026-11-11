@@ -6,8 +6,8 @@
 // a time. counts powers the filter tabs without a second round-trip.
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
+import { tenantFor, withTenant } from "@/lib/tenant-db";
 import { isBridgeStatus } from "@/lib/bridge";
 
 export async function GET(req: NextRequest) {
@@ -29,23 +29,29 @@ export async function GET(req: NextRequest) {
       { status: 400 }
     );
   }
+  const tenant = tenantFor(session, propertyId);
+  if (!tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
   const where = { conversation: { propertyId } };
-  const [rows, grouped] = await Promise.all([
-    prisma.handoffRecord.findMany({
-      where: { ...where, ...(statusParam ? { status: statusParam } : {}) },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      include: {
-        _count: { select: { notes: true } },
-        conversation: { select: { language: true } },
-      },
-    }),
-    prisma.handoffRecord.groupBy({
-      by: ["status"],
-      where,
-      _count: { status: true },
-    }),
-  ]);
+  const [rows, grouped] = await withTenant(tenant, (tx) =>
+    Promise.all([
+      tx.handoffRecord.findMany({
+        where: { ...where, ...(statusParam ? { status: statusParam } : {}) },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        include: {
+          _count: { select: { notes: true } },
+          conversation: { select: { language: true } },
+        },
+      }),
+      tx.handoffRecord.groupBy({
+        by: ["status"],
+        where,
+        _count: { status: true },
+      }),
+    ])
+  );
   const counts: Record<string, number> = { OPEN: 0, IN_PROGRESS: 0, CLOSED: 0 };
   for (const g of grouped) {
     if (g.status in counts) counts[g.status] = g._count.status;
@@ -54,13 +60,15 @@ export async function GET(req: NextRequest) {
   // listed conversation lends its guest first name + stay. Staff open
   // fewer records when the row already says who and when. No draft →
   // nulls, never an error (most handoffs never drafted).
-  const draftLogs = await prisma.toolCallLog.findMany({
-    where: {
-      conversationId: { in: rows.map((h) => h.conversationId) },
-      toolName: "create_booking_draft",
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const draftLogs = await withTenant(tenant, (tx) =>
+    tx.toolCallLog.findMany({
+      where: {
+        conversationId: { in: rows.map((h) => h.conversationId) },
+        toolName: "create_booking_draft",
+      },
+      orderBy: { createdAt: "desc" },
+    })
+  );
   const draftByConversation = new Map<string, { guestFirstName: string | null; room: string | null; checkIn: string | null; checkOut: string | null }>();
   for (const l of draftLogs) {
     if (draftByConversation.has(l.conversationId)) continue;

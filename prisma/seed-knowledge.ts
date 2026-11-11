@@ -26,10 +26,19 @@
 
 import { randomUUID } from "node:crypto";
 import "../lib/env";
-import { prisma } from "../lib/prisma";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 import { embedText } from "../lib/embeddings";
 import { toVectorLiteral } from "../lib/rag";
 import { KNOWLEDGE_DOCS } from "../demo-config/knowledge";
+
+// RLS service path: seeds write unscoped rows, which the app role could
+// never insert — so this script connects via DIRECT_URL (the bypass
+// migrations connection), never the app pooler.
+const prisma = new PrismaClient({
+  adapter: new PrismaPg(new Pool({ connectionString: process.env.DIRECT_URL })),
+});
 
 async function main(): Promise<void> {
   try {

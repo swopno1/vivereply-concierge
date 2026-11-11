@@ -7,17 +7,19 @@
 // handoffs by watching status codes.
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { withTenant } from "@/lib/tenant-db";
 import { isBridgeStatus, verifyBridgeRequest } from "@/lib/bridge";
 
 async function inProperty(propertyId: string, id: string) {
-  return prisma.handoffRecord.findFirst({
-    where: { id, conversation: { propertyId } },
-    include: {
-      notes: { orderBy: { createdAt: "asc" } },
-      conversation: { include: { messages: { orderBy: { createdAt: "asc" } } } },
-    },
-  });
+  return withTenant(propertyId, (tx) =>
+    tx.handoffRecord.findFirst({
+      where: { id, conversation: { propertyId } },
+      include: {
+        notes: { orderBy: { createdAt: "asc" } },
+        conversation: { include: { messages: { orderBy: { createdAt: "asc" } } } },
+      },
+    })
+  );
 }
 
 function shape(h: NonNullable<Awaited<ReturnType<typeof inProperty>>>, propertyId: string) {
@@ -86,13 +88,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "Nothing to update. Send status and/or assignee." }, { status: 400 });
   }
-  const existing = await prisma.handoffRecord.findFirst({
-    where: { id, conversation: { propertyId: auth.propertyId } },
-  });
+  const existing = await withTenant(auth.propertyId, (tx) =>
+    tx.handoffRecord.findFirst({
+      where: { id, conversation: { propertyId: auth.propertyId } },
+    })
+  );
   if (!existing) {
     return NextResponse.json({ error: "Handoff not found." }, { status: 404 });
   }
-  await prisma.handoffRecord.update({ where: { id }, data: updates });
+  await withTenant(auth.propertyId, (tx) => tx.handoffRecord.update({ where: { id }, data: updates }));
   const handoff = await inProperty(auth.propertyId, id);
   if (!handoff) {
     return NextResponse.json({ error: "Handoff not found." }, { status: 404 });

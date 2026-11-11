@@ -3,7 +3,8 @@
 // nobody's business. Newest first, capped at 100, optional
 // ?propertyId= to scope one tenant.
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+// SERVICE PATH (marked): super-admin cross-property reads bypass tenant scoping by design.
+import { prismaService } from "@/lib/prisma";
 import { getSession } from "@/lib/tenant";
 
 export async function GET(req: NextRequest) {
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
   const propertyId = req.nextUrl.searchParams.get("propertyId")?.trim() || null;
-  const rows = await prisma.auditLog.findMany({
+  const rows = await prismaService().auditLog.findMany({
     where: propertyId ? { propertyId } : {},
     orderBy: { createdAt: "desc" },
     take: 100,

@@ -5,7 +5,7 @@
 // without its live check passing. Pure derive + server gather share
 // this module; the client wizard only ever sees the derived JSON.
 
-import { prisma } from "@/lib/prisma";
+import { withTenant } from "@/lib/tenant-db";
 
 export type SetupFacts = {
   propertyId: string;
@@ -107,36 +107,40 @@ export async function getSetupFacts(
   propertyId: string,
   emailVerified: boolean
 ): Promise<SetupFacts | null> {
-  const property = await prisma.property.findUnique({
-    where: { id: propertyId },
-    select: { id: true, name: true, widgetKey: true },
-  });
-  if (!property) return null;
-  const [domains, binding, roomCount, opensTotal, lastOpen, bridgeActiveCount] = await Promise.all([
-    prisma.approvedDomain.findMany({
-      where: { propertyId, active: true },
-      select: { domain: true },
-      orderBy: { domain: "asc" },
-    }),
-    prisma.propertyBinding.findUnique({
-      where: { propertyId },
-      select: { suiteBaseUrl: true, secretEnc: true, lastTestedAt: true, lastTestOk: true },
-    }),
-    prisma.roomMapping.count({ where: { propertyId } }),
-    prisma.widgetOpen.count({ where: { propertyId } }),
-    prisma.widgetOpen.findFirst({
-      where: { propertyId },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
-    }),
-    prisma.bridgeToken.count({ where: { propertyId, active: true } }),
-  ]);
-  return {
-    propertyId: property.id,
-    propertyName: property.name,
-    widgetKey: property.widgetKey,
-    emailVerified,
-    activeDomains: domains.map((d) => d.domain),
+  // Tenant path (single-tx snapshot): every table read below is tenant
+  // RLS'd. Call OUTSIDE tx blocks — helpers wrap internally; the
+  // nesting guard throws.
+  return withTenant(propertyId, async (tx) => {
+    const property = await tx.property.findUnique({
+      where: { id: propertyId },
+      select: { id: true, name: true, widgetKey: true },
+    });
+    if (!property) return null;
+    const [domains, binding, roomCount, opensTotal, lastOpen, bridgeActiveCount] = await Promise.all([
+      tx.approvedDomain.findMany({
+        where: { propertyId, active: true },
+        select: { domain: true },
+        orderBy: { domain: "asc" },
+      }),
+      tx.propertyBinding.findUnique({
+        where: { propertyId },
+        select: { suiteBaseUrl: true, secretEnc: true, lastTestedAt: true, lastTestOk: true },
+      }),
+      tx.roomMapping.count({ where: { propertyId } }),
+      tx.widgetOpen.count({ where: { propertyId } }),
+      tx.widgetOpen.findFirst({
+        where: { propertyId },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+      }),
+      tx.bridgeToken.count({ where: { propertyId, active: true } }),
+    ]);
+    return {
+      propertyId: property.id,
+      propertyName: property.name,
+      widgetKey: property.widgetKey,
+      emailVerified,
+      activeDomains: domains.map((d) => d.domain),
     binding: binding
       ? {
           suiteBaseUrl: binding.suiteBaseUrl,
@@ -145,9 +149,10 @@ export async function getSetupFacts(
           lastTestOk: binding.lastTestOk,
         }
       : null,
-    roomCount,
-    opensTotal,
-    lastOpenedAt: lastOpen?.createdAt.toISOString() ?? null,
-    bridgeActiveCount,
-  };
+      roomCount,
+      opensTotal,
+      lastOpenedAt: lastOpen?.createdAt.toISOString() ?? null,
+      bridgeActiveCount,
+    };
+  });
 }

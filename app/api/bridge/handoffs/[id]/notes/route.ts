@@ -5,7 +5,7 @@
 // of the bridge: another property's id looks exactly like a missing one.
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { withTenant } from "@/lib/tenant-db";
 import { verifyBridgeRequest } from "@/lib/bridge";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -29,15 +29,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       { status: 400 }
     );
   }
-  const handoff = await prisma.handoffRecord.findFirst({
-    where: { id, conversation: { propertyId: auth.propertyId } },
-  });
+  const handoff = await withTenant(auth.propertyId, (tx) =>
+    tx.handoffRecord.findFirst({
+      where: { id, conversation: { propertyId: auth.propertyId } },
+    })
+  );
   if (!handoff) {
     return NextResponse.json({ error: "Handoff not found." }, { status: 404 });
   }
-  const note = await prisma.handoffNote.create({
-    data: { handoffId: id, author, body: noteBody },
-  });
+  const note = await withTenant(auth.propertyId, (tx) =>
+    tx.handoffNote.create({
+      data: { handoffId: id, author, body: noteBody },
+    })
+  );
   return NextResponse.json(
     {
       id: note.id,

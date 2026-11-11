@@ -18,7 +18,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, randomBytes } from "node:crypto";
-import { prisma } from "@/lib/prisma";
+// SERVICE PATH (marked): auth bootstrap runs before any tenant exists — bypass client by design (see Phase 1 PR service-path list).
+import { prismaService } from "@/lib/prisma";
 import { isValidEmail } from "@/lib/auth";
 import { sendPasswordResetEmail } from "@/lib/email";
 import { checkForgotPasswordRateByIp } from "@/lib/ratelimit";
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
   // Unknown, inactive, or bootstrap (env-password, no User row): same
   // answer, nothing sent. Bootstrap recovery stays what it always was —
   // changing the deployment env vars, never email.
-  const user = await prisma.user
+  const user = await prismaService().user
     .findUnique({ where: { email }, select: { id: true, active: true, propertyId: true } })
     .catch(() => null);
   if (!user || !user.active) {
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
   const since = new Date(Date.now() - RESET_SEND_WINDOW_MS);
-  const recent = await prisma.passwordResetToken
+  const recent = await prismaService().passwordResetToken
     .count({ where: { userId: user.id, createdAt: { gt: since } } })
     .catch(() => 0);
   if (recent >= RESET_MAX_SENDS_PER_WINDOW) {
@@ -75,10 +76,10 @@ export async function POST(req: NextRequest) {
   }
   const rawToken = randomBytes(32).toString("base64url");
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
-  await prisma.passwordResetToken
+  await prismaService().passwordResetToken
     .deleteMany({ where: { userId: user.id, usedAt: null } })
     .catch(() => null);
-  await prisma.passwordResetToken
+  await prismaService().passwordResetToken
     .create({ data: { tokenHash, userId: user.id, expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS) } })
     .catch(() => null);
   const origin = process.env.APP_BASE_URL ?? new URL(req.url).origin;

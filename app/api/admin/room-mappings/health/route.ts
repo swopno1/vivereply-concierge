@@ -5,8 +5,8 @@
 // resolves (even 0 available — sold out is healthy). Fixture properties
 // have no backend ids to check and report all-ok.
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
+import { tenantFor, withTenant } from "@/lib/tenant-db";
 import { resolveSuiteBinding } from "@/lib/suite";
 import { checkRoomMappings } from "@/lib/room-mapping-health";
 
@@ -32,7 +32,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
   }
 
-  const rows = await prisma.roomMapping.findMany({ where: { propertyId } });
+  const tenant = tenantFor(session, propertyId);
+  if (!tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const rows = await withTenant(tenant, (tx) => tx.roomMapping.findMany({ where: { propertyId } }));
   const resolved = await resolveSuiteBinding(propertyId);
   if (resolved.kind === "fixture") {
     return NextResponse.json({

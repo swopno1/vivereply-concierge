@@ -6,7 +6,7 @@
 // Stores property + timestamp only — no IP, no UA, no identity.
 import { NextRequest, NextResponse } from "next/server";
 import { resolveWidgetProperty } from "@/demo-config/widget-keys";
-import { prisma } from "@/lib/prisma";
+import { withTenant } from "@/lib/tenant-db";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   if (!origin) return {};
@@ -31,7 +31,9 @@ export async function POST(req: NextRequest) {
   if (key) {
     const property = await resolveWidgetProperty(key).catch(() => null);
     if (property) {
-      await prisma.widgetOpen.create({ data: { propertyId: property.propertyId } }).catch(() => null);
+      await withTenant(property.propertyId, (tx) =>
+        tx.widgetOpen.create({ data: { propertyId: property.propertyId } })
+      ).catch(() => null);
     }
   }
   return NextResponse.json({ ok: true }, { headers });

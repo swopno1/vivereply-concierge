@@ -5,7 +5,8 @@
 // database counts globally. Limit from CHAT_RATE_LIMIT_PER_MIN
 // (default 60 turns/min/property); 0 disables (tests, local dev).
 
-import { prisma } from "@/lib/prisma";
+import { prisma, prismaService } from "@/lib/prisma";
+import { withTenant } from "@/lib/tenant-db";
 
 export const RATE_WINDOW_MS = 60_000;
 
@@ -29,7 +30,9 @@ export type RateDecision = { allowed: true } | { allowed: false; retryAfterSec: 
 // Atomic increment-or-create: concurrent turns serialize on the
 // @@id row, so the count is exact, not approximate. Best-effort
 // prune of windows older than 2h rides along (failures swallowed —
-// prune must never fail a turn).
+// prune must never fail a turn). Tenant path: RateBucket is RLS'd,
+// so the upsert runs inside withTenant (call OUTSIDE tx blocks —
+// helpers wrap internally; the nesting guard throws).
 export async function checkChatRate(propertyId: string, now = new Date()): Promise<RateDecision> {
   const limit = rateLimitPerMinute();
   if (limit === 0) return { allowed: true };
@@ -40,17 +43,21 @@ export async function checkChatRate(propertyId: string, now = new Date()): Promi
   // Abuse risk is nil (callers can't break the table through the API).
   let row: { count: number };
   try {
-    row = await prisma.rateBucket.upsert({
-      where: { propertyId_windowStart: { propertyId, windowStart } },
-      create: { propertyId, windowStart, count: 1 },
-      update: { count: { increment: 1 } },
-      select: { count: true },
-    });
+    row = await withTenant(propertyId, (tx) =>
+      tx.rateBucket.upsert({
+        where: { propertyId_windowStart: { propertyId, windowStart } },
+        create: { propertyId, windowStart, count: 1 },
+        update: { count: { increment: 1 } },
+        select: { count: true },
+      })
+    );
   } catch (e) {
     console.error("chat throttle blind (allowing turn):", e instanceof Error ? e.message : e);
     return { allowed: true };
   }
-  prisma.rateBucket
+  // Prune is cross-tenant by nature (old windows for ALL properties) —
+  // SERVICE PATH (marked): it cannot run under any single tenant.
+  prismaService().rateBucket
     .deleteMany({ where: { windowStart: { lt: new Date(now.getTime() - 2 * 3600_000) } } })
     .catch(() => null);
   if (row.count <= limit) return { allowed: true };

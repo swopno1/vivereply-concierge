@@ -3,8 +3,8 @@
 // Same validation as the bridge notes route: named author, 2000-char cap.
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
+import { tenantFor, withTenant } from "@/lib/tenant-db";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
@@ -34,15 +34,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       { status: 400 }
     );
   }
-  const handoff = await prisma.handoffRecord.findFirst({
-    where: { id, conversation: { propertyId } },
-  });
+  const tenant = tenantFor(session, propertyId);
+  if (!tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const handoff = await withTenant(tenant, (tx) =>
+    tx.handoffRecord.findFirst({
+      where: { id, conversation: { propertyId } },
+    })
+  );
   if (!handoff) {
     return NextResponse.json({ error: "Handoff not found." }, { status: 404 });
   }
-  const note = await prisma.handoffNote.create({
-    data: { handoffId: id, author, body: noteBody },
-  });
+  const note = await withTenant(tenant, (tx) =>
+    tx.handoffNote.create({
+      data: { handoffId: id, author, body: noteBody },
+    })
+  );
   return NextResponse.json(
     {
       id: note.id,

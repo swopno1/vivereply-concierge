@@ -5,11 +5,11 @@
 // handoff from another property answers 404, never 403.
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
+import { getSession, sessionCan, sessionOwnerVerified, type Session } from "@/lib/tenant";
+import { tenantFor, withTenant } from "@/lib/tenant-db";
 import { isBridgeStatus } from "@/lib/bridge";
 
-async function gate(propertyId: string) {
+async function gate(propertyId: string): Promise<Session | NextResponse> {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   if (!(await sessionOwnerVerified(session))) {
@@ -18,7 +18,13 @@ async function gate(propertyId: string) {
   if (!sessionCan(session, propertyId)) {
     return NextResponse.json({ error: "Handoff not found." }, { status: 404 });
   }
-  return null;
+  return session;
+}
+
+function tenantOr401(session: Session, propertyId: string): string | NextResponse {
+  const tenant = tenantFor(session, propertyId);
+  if (!tenant) return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  return tenant;
 }
 
 function shape(h: {
@@ -56,16 +62,20 @@ function shape(h: {
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const propertyId = req.nextUrl.searchParams.get("propertyId") ?? "";
-  const denied = await gate(propertyId);
-  if (denied) return denied;
+  const gated = await gate(propertyId);
+  if (gated instanceof NextResponse) return gated;
+  const tenant = tenantOr401(gated, propertyId);
+  if (tenant instanceof NextResponse) return tenant;
   const { id } = await params;
-  const handoff = await prisma.handoffRecord.findFirst({
-    where: { id, conversation: { propertyId } },
-    include: {
-      notes: { orderBy: { createdAt: "asc" } },
-      conversation: { select: { messages: { orderBy: { createdAt: "asc" } } } },
-    },
-  });
+  const handoff = await withTenant(tenant, (tx) =>
+    tx.handoffRecord.findFirst({
+      where: { id, conversation: { propertyId } },
+      include: {
+        notes: { orderBy: { createdAt: "asc" } },
+        conversation: { select: { messages: { orderBy: { createdAt: "asc" } } } },
+      },
+    })
+  );
   if (!handoff) {
     return NextResponse.json({ error: "Handoff not found." }, { status: 404 });
   }
@@ -75,8 +85,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const body = await req.json().catch(() => null);
   const propertyId = typeof body?.propertyId === "string" ? body.propertyId : "";
-  const denied = await gate(propertyId);
-  if (denied) return denied;
+  const gated = await gate(propertyId);
+  if (gated instanceof NextResponse) return gated;
+  const tenant = tenantOr401(gated, propertyId);
+  if (tenant instanceof NextResponse) return tenant;
   const { id } = await params;
   const updates: { status?: string; assignee?: string | null } = {};
   if (body?.status !== undefined) {
@@ -103,20 +115,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       { status: 400 }
     );
   }
-  const existing = await prisma.handoffRecord.findFirst({
-    where: { id, conversation: { propertyId } },
-  });
+  const existing = await withTenant(tenant, (tx) =>
+    tx.handoffRecord.findFirst({
+      where: { id, conversation: { propertyId } },
+    })
+  );
   if (!existing) {
     return NextResponse.json({ error: "Handoff not found." }, { status: 404 });
   }
-  await prisma.handoffRecord.update({ where: { id }, data: updates });
-  const handoff = await prisma.handoffRecord.findFirst({
-    where: { id, conversation: { propertyId } },
-    include: {
-      notes: { orderBy: { createdAt: "asc" } },
-      conversation: { select: { messages: { orderBy: { createdAt: "asc" } } } },
-    },
-  });
+  await withTenant(tenant, (tx) => tx.handoffRecord.update({ where: { id }, data: updates }));
+  const handoff = await withTenant(tenant, (tx) =>
+    tx.handoffRecord.findFirst({
+      where: { id, conversation: { propertyId } },
+      include: {
+        notes: { orderBy: { createdAt: "asc" } },
+        conversation: { select: { messages: { orderBy: { createdAt: "asc" } } } },
+      },
+    })
+  );
   if (!handoff) {
     return NextResponse.json({ error: "Handoff not found." }, { status: 404 });
   }

@@ -13,7 +13,7 @@
 // "answered unexpectedly" error (the agent surfaces it and offers a
 // handoff), never a crash on undefined fields and never an invented number.
 
-import { prisma } from "@/lib/prisma";
+import { withTenant } from "@/lib/tenant-db";
 import { decryptSecret } from "./secrets";
 import { fixtureRoomsFor } from "@/demo-config/fixture";
 import { isDateString, nightsBetween, quoteForStay } from "@/demo-config/rates";
@@ -314,7 +314,10 @@ export async function resolveSuiteBinding(propertyId: string): Promise<ResolvedS
   if (fixtureRoomsFor(propertyId)) {
     return { kind: "fixture" };
   }
-  const row = await prisma.propertyBinding.findUnique({ where: { propertyId } });
+  // Tenant path (call OUTSIDE tx blocks — helpers wrap internally).
+  const row = await withTenant(propertyId, (tx) =>
+    tx.propertyBinding.findUnique({ where: { propertyId } })
+  );
   if (!row) {
     if (propertyId === (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat")) {
       const demo = defaultBinding();
@@ -347,10 +350,13 @@ export async function describeBackendResolution(
   propertyId: string
 ): Promise<{ source: BackendSource; baseUrl: string | null }> {
   if (fixtureRoomsFor(propertyId)) return { source: "fixture", baseUrl: null };
-  const row = await prisma.propertyBinding.findUnique({
-    where: { propertyId },
-    select: { suiteBaseUrl: true },
-  });
+  // Tenant path (call OUTSIDE tx blocks — helpers wrap internally).
+  const row = await withTenant(propertyId, (tx) =>
+    tx.propertyBinding.findUnique({
+      where: { propertyId },
+      select: { suiteBaseUrl: true },
+    })
+  );
   if (row) return { source: "settings", baseUrl: row.suiteBaseUrl };
   if (propertyId === (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat")) {
     const env = process.env.SUITE_API_BASE_URL ?? "";
