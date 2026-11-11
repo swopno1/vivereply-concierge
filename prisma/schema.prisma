@@ -61,12 +61,32 @@ model User {
   // owners are attested: verified at creation. Config surfaces
   // (Settings, onboarding, their APIs) require this.
   emailVerifiedAt    DateTime?
+  // TOTP 2FA: secret encrypted with lib/secrets (BINDING_SECRET_KEY),
+  // set at setup-init, enforced only once enabledAt is set (setup
+  // completes on a correct code). Null secret = 2FA off.
+  totpSecretEnc      String?
+  totpEnabledAt      DateTime?
   createdAt          DateTime                 @default(now())
   sessions           Session[]
   verificationTokens EmailVerificationToken[]
   resetTokens        PasswordResetToken[]
+  recoveryCodes      RecoveryCode[]
 
   @@index([propertyId, active])
+}
+
+// 2FA recovery codes: one-time, scrypt-hashed (never plaintext),
+// single-use via usedAt (claimed atomically). Shown once at setup
+// confirm; a code that is used or superseded never works again.
+model RecoveryCode {
+  id        String    @id @default(cuid())
+  codeHash  String
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 // Server-side session allowlist (auth Tier 1). The cookie still carries a

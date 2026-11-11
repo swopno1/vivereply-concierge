@@ -19,6 +19,7 @@ import RoomCatalogues from "../../components/RoomCatalogues";
 import AdminDomains from "../../components/AdminDomains";
 import BridgeTokens from "../../components/BridgeTokens";
 import PasswordChange from "../../components/PasswordChange";
+import TwoFactorSettings from "../../components/TwoFactorSettings";
 import EvalRunner from "../../components/EvalRunner";
 import VerifyPrompt from "../../components/VerifyPrompt";
 import ChatbotProfile from "../../components/ChatbotProfile";
@@ -103,6 +104,25 @@ export default async function SettingsPage({
       : await prismaService().user
           .findUnique({ where: { id: session.uid }, select: { mustChangePassword: true } })
           .catch(() => null);
+  // 2FA status for the settings section. Bootstrap reads the row setup
+  // creates for ADMIN_EMAIL (absent = off); row users read their own.
+  const twoFaRow =
+    session.uid === "bootstrap" && session.email
+      ? await prismaService().user
+          .findUnique({
+            where: { email: session.email },
+            select: { totpSecretEnc: true, totpEnabledAt: true },
+          })
+          .catch(() => null)
+      : session.uid === "bootstrap"
+        ? null
+        : await prismaService().user
+            .findUnique({
+              where: { id: session.uid },
+              select: { totpSecretEnc: true, totpEnabledAt: true },
+            })
+            .catch(() => null);
+  const twoFaEnabled = !!(twoFaRow?.totpSecretEnc && twoFaRow.totpEnabledAt);
 
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "app.vivereply.com";
@@ -535,6 +555,7 @@ export default async function SettingsPage({
           <SignOutButton />
         </div>
         {me && <PasswordChange mustChange={me.mustChangePassword} />}
+        <TwoFactorSettings enabled={twoFaEnabled} />
       </Section>
 
       <Section

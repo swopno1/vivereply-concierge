@@ -25,10 +25,12 @@
 import { cookies } from "next/headers";
 import { prisma, prismaService } from "@/lib/prisma";
 import { withTenant } from "@/lib/tenant-db";
+import { logAudit } from "@/lib/audit";
 import {
   ADMIN_SESSION_COOKIE,
   SESSION_ABSOLUTE_DAYS,
   SESSION_IDLE_HOURS,
+  createSessionToken,
   verifySessionToken,
   type Session,
 } from "@/lib/auth";
@@ -87,6 +89,36 @@ export async function revokeUserSessions(userId: string): Promise<number> {
     data: { revokedAt: new Date() },
   }).catch(() => null);
   return result?.count ?? 0;
+}
+
+// Completes a login AFTER all credential checks passed. Called from
+// /api/auth/login (password-only accounts) and /api/auth/login/verify
+// (after the 2FA code) so session minting exists exactly once: fresh
+// server-side row, signed cookie value, login.success audit. SERVICE
+// PATH (marked): session lifecycle. Returns null when minting failed
+// (row rolled back) — callers answer 500, never a half-session.
+export async function mintLoginSession(args: {
+  session: Omit<Session, "sid">;
+  userId: string | null;
+  ip: string;
+}): Promise<{ token: string; role: Session["role"]; propertyId: string | null } | null> {
+  const row = await prismaService().session
+    .create({ data: { userId: args.userId, role: args.session.role, expiresAt: sessionExpiresAt() } })
+    .catch(() => null);
+  if (!row) return null;
+  const token = createSessionToken({ ...args.session, sid: row.id });
+  if (!token) {
+    await prismaService().session.delete({ where: { id: row.id } }).catch(() => null);
+    return null;
+  }
+  await logAudit({
+    actorEmail: args.session.email,
+    action: "login.success",
+    propertyId: args.session.propertyId,
+    detail: { role: args.session.role },
+    ip: args.ip,
+  });
+  return { token, role: args.session.role, propertyId: args.session.propertyId };
 }
 
 export function sessionCan(session: Session | null, propertyId: string): boolean {
