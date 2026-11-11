@@ -28,6 +28,7 @@ import {
 import { sendVerificationEmail } from "@/lib/email";
 import { sessionExpiresAt } from "@/lib/tenant";
 import { verifyTurnstileToken } from "@/lib/turnstile";
+import { startTrial } from "@/lib/billing";
 import { logAudit } from "@/lib/audit";
 
 function clientIp(req: NextRequest): string {
@@ -115,6 +116,11 @@ export async function POST(req: NextRequest) {
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
   const user = await prismaService().$transaction(async (tx) => {
     await tx.property.create({ data: { id: ids.id, name: resortName, widgetKey: ids.widgetKey, status: "ACTIVE" } });
+    // Trial starts WITH the property (created-at based): 30 days, no
+    // card, Growth features. Same row the billing page and quota gate
+    // read — no backfill step exists because every property is born
+    // with one (pre-Phase-3 rows are grandfathered, see schema).
+    await startTrial(tx, ids.id, new Date());
     const created = await tx.user.create({
       data: {
         email,

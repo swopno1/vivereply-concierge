@@ -21,6 +21,26 @@ mechanics, that page is the gate.
    - `curl https://demo1.vivereply.com/` → 200.
    - One chat turn on the widget + Settings loads as owner.
 
+## 1b. Billing scheduler (Phase 3, one-time setup)
+
+Trial reminders (day 7/21/27/30), trial expiry, and 80% usage alerts
+all fire from `GET /api/cron/billing-reminders` — pick ONE trigger:
+
+- **Vercel** (runbook §1 path): nothing to do — `vercel.json`
+  schedules it daily at 09:00 UTC, and Vercel sends
+  `Authorization: Bearer $CRON_SECRET` automatically. Just set
+  `CRON_SECRET` (random 32+ chars) in Production env.
+- **VM** (crontab): one line, secret from the vault (never in the
+  crontab in chat — paste on the machine):
+
+  `0 9 * * * curl -sf -H "Authorization: Bearer $CRON_SECRET" https://app.vivereply.com/api/cron/billing-reminders`
+
+Without a trigger, reminders/expiry never fire (the chat gate still
+enforces trial end + quotas on every turn — cron only sends mail and
+materializes statuses). Verify once after wiring:
+`curl -H "Authorization: Bearer $CRON_SECRET" …/api/cron/billing-reminders`
+→ `{"ok":true,"checked":N,…}`.
+
 ## 2. Rollback (bad deploy)
 
 1. Vercel → Deployments → previous production deployment →

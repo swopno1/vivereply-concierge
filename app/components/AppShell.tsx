@@ -93,6 +93,16 @@ const NAV_GROUPS: { heading: string; items: { href: string; label: string; icon:
         ),
       },
       {
+        href: "/billing",
+        label: "Billing",
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.6" />
+          </svg>
+        ),
+      },
+      {
         href: "/onboarding",
         label: "Onboarding",
         icon: (
@@ -123,11 +133,15 @@ export type ShellSession = {
   propertyId: string | null;
 } | null;
 
+export type BillingBanner = { text: string; tone: "warn" | "bad" } | null;
+
 export default function AppShell({
   session,
+  billingBanner,
   children,
 }: {
   session: ShellSession;
+  billingBanner?: BillingBanner;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -296,6 +310,18 @@ export default function AppShell({
           </button>
           <span className="truncate text-[15px] font-semibold">Vivereply Concierge</span>
         </div>
+        {billingBanner && pathname !== "/billing" && (
+          <a
+            href="/billing"
+            className={`block px-4 py-2 text-center text-sm font-medium ${
+              billingBanner.tone === "bad"
+                ? "bg-red-600 text-white"
+                : "bg-amber-100 text-amber-900"
+            }`}
+          >
+            {billingBanner.text} →
+          </a>
+        )}
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{children}</div>
       </div>
     </main>

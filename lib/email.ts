@@ -79,3 +79,88 @@ export async function sendPaymentConfirmationEmail(args: {
   }).catch(() => null);
   if (!res || !res.ok) throw new Error("The payment email could not be sent.");
 }
+
+// ---- subscription billing mail (Phase 3; owner-facing) ----
+// Trial reminders, expiry, usage alerts, payment failures. Same
+// Resend HTTPS shape. Copy carries NO dollar figures (prices stay
+// unpublished until the founder says publish) — plan names, days,
+// and counts only. The cron endpoint sends each notice once (see
+// BillingNotice); failures throw and the notice stays unsent, so the
+// next run retries rather than skipping.
+async function sendBillingEmail(to: string, subject: string, html: string, text: string): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY ?? "";
+  const from = process.env.RESEND_FROM ?? "";
+  if (!apiKey || !from) throw new Error("Email is not configured.");
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to: [to], subject, html, text }),
+  }).catch(() => null);
+  if (!res || !res.ok) throw new Error("The billing email could not be sent.");
+}
+
+function billingLink(): string {
+  const base = (process.env.APP_BASE_URL ?? "https://app.vivereply.com").replace(/\/$/, "");
+  return `${base}/billing`;
+}
+
+export async function sendTrialReminderEmail(args: {
+  to: string;
+  resortName: string;
+  daysLeft: number;
+}): Promise<void> {
+  const { to, resortName, daysLeft } = args;
+  const when = daysLeft <= 1 ? "tomorrow" : `in ${daysLeft} days`;
+  const subject = `Your Vivereply trial for ${resortName} ends ${when}`;
+  const link = billingLink();
+  await sendBillingEmail(
+    to,
+    subject,
+    `<p>Hi,</p><p>Your 30-day free trial of Vivereply Concierge for ${resortName} ends ${when}. Subscribe on the <a href="${link}">billing page</a> to keep your AI front desk answering guests without a pause.</p><p>If the trial lapses, guest chat pauses until you subscribe — your settings and data stay put for 90 days.</p>`,
+    `Hi,\n\nYour 30-day free trial of Vivereply Concierge for ${resortName} ends ${when}. Subscribe on the billing page to keep your AI front desk answering guests without a pause:\n${link}\n\nIf the trial lapses, guest chat pauses until you subscribe — your settings and data stay put for 90 days.`
+  );
+}
+
+export async function sendTrialExpiredEmail(args: {
+  to: string;
+  resortName: string;
+}): Promise<void> {
+  const { to, resortName } = args;
+  const link = billingLink();
+  await sendBillingEmail(
+    to,
+    `Your Vivereply trial for ${resortName} has ended`,
+    `<p>Hi,</p><p>Your 30-day free trial of Vivereply Concierge for ${resortName} has ended, so guest chat is paused for now. Nothing is deleted — subscribe on the <a href="${link}">billing page</a> and the assistant resumes immediately.</p><p>Your settings and data stay put for 90 days.</p>`,
+    `Hi,\n\nYour 30-day free trial of Vivereply Concierge for ${resortName} has ended, so guest chat is paused for now. Nothing is deleted — subscribe on the billing page and the assistant resumes immediately:\n${link}\n\nYour settings and data stay put for 90 days.`
+  );
+}
+
+export async function sendUsageAlertEmail(args: {
+  to: string;
+  resortName: string;
+  used: number;
+  quota: number;
+}): Promise<void> {
+  const { to, resortName, used, quota } = args;
+  const link = billingLink();
+  await sendBillingEmail(
+    to,
+    `${resortName} has used 80% of its monthly conversations`,
+    `<p>Hi,</p><p>Your resort ${resortName} has handled ${used} of ${quota} conversations this month (80%). Past 120%, guest chat pauses until the next month unless you allow overage — see the <a href="${link}">billing page</a> for live usage.</p>`,
+    `Hi,\n\nYour resort ${resortName} has handled ${used} of ${quota} conversations this month (80%). Past 120%, guest chat pauses until the next month unless you allow overage — see the billing page for live usage:\n${link}`
+  );
+}
+
+export async function sendPaymentFailedEmail(args: {
+  to: string;
+  resortName: string;
+}): Promise<void> {
+  const { to, resortName } = args;
+  const link = billingLink();
+  await sendBillingEmail(
+    to,
+    `Action needed: payment failed for ${resortName}`,
+    `<p>Hi,</p><p>The latest subscription payment for ${resortName} failed, so the account is past due. Guest chat keeps running while the payment is retried — please check the <a href="${link}">billing page</a> or reply to this email so we can sort out payment before access pauses.</p>`,
+    `Hi,\n\nThe latest subscription payment for ${resortName} failed, so the account is past due. Guest chat keeps running while the payment is retried — please check the billing page or reply to this email so we can sort out payment before access pauses:\n${link}`
+  );
+}

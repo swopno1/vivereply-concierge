@@ -24,6 +24,7 @@ import {
 import { getSession } from "@/lib/tenant";
 import { normalizeHostname } from "@/lib/domains";
 import { clientIp, logAudit } from "@/lib/audit";
+import { TRIAL_DAYS, TRIAL_TIER } from "@/lib/billing";
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -94,6 +95,16 @@ export async function POST(req: NextRequest) {
   try {
     await prismaService().$transaction([
       prismaService().property.create({ data: { id, name, widgetKey, status: "ACTIVE" } }),
+      // Trial row, same shape as signup (array-form tx, so inline).
+      prismaService().subscription.create({
+        data: {
+          propertyId: id,
+          tier: TRIAL_TIER,
+          interval: "MONTHLY",
+          status: "TRIAL",
+          trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000),
+        },
+      }),
       ...domains.map((domain) =>
         prismaService().approvedDomain.create({ data: { domain, propertyId: id, active: true } })
       ),
