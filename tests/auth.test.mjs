@@ -7,6 +7,7 @@ import { strict as assert } from "node:assert";
 import {
   createChatToken,
   createSessionToken,
+  createTwoFactorChallengeToken,
   generateTempPassword,
   hashPassword,
   isValidEmail,
@@ -15,6 +16,7 @@ import {
   verifyChatToken,
   verifyPassword,
   verifySessionToken,
+  verifyTwoFactorChallengeToken,
   DUMMY_PASSWORD_HASH,
 } from "@/lib/auth";
 
@@ -80,6 +82,24 @@ describe("chat tokens", () => {
     assert.equal(back?.propertyId, "");
     const smuggled = createChatToken({ propertyId: "p1", scope: "brand" });
     assert.equal(verifyChatToken(smuggled), null);
+  });
+});
+
+describe("2fa challenge tokens", () => {
+  it("roundtrips uid + bootstrap flag, rejects cross-kind use", () => {
+    process.env.SESSION_SECRET = "test-secret-32-chars-minimum-ok!";
+    const token = createTwoFactorChallengeToken({ uid: "u1", email: "a@b.co", bootstrap: false });
+    assert.ok(token);
+    const back = verifyTwoFactorChallengeToken(token);
+    assert.equal(back?.uid, "u1");
+    assert.equal(back?.bootstrap, false);
+    // Not usable as any other token kind (and vice versa).
+    assert.equal(verifySessionToken(token), null);
+    assert.equal(verifyChatToken(token), null);
+    const chat = createChatToken({ propertyId: "p1", scope: "direct" });
+    assert.equal(verifyTwoFactorChallengeToken(chat), null);
+    assert.equal(verifyTwoFactorChallengeToken("garbage"), null);
+    assert.equal(createTwoFactorChallengeToken({ uid: "", email: null, bootstrap: false }), null);
   });
 });
 

@@ -60,6 +60,43 @@ and takes handoffs while you sort that out.
   card both say so. Nothing to configure.
 - **Password**: change it in Settings any time; changing signs out
   every other session.
+- **Two-factor authentication**: strongly recommended — see below.
+
+## Protect your account: two-factor authentication (2 min)
+
+With this on, logging in takes two steps: your password, then a
+6-digit code from an authenticator app on your phone (Google
+Authenticator, Authy, or similar — free). Even if someone learns
+your password, they can't get in without your phone.
+
+**Turn it on** (in **Settings → Two-factor authentication**):
+
+1. Press **Enable two-factor authentication**. A square QR code
+   appears on screen.
+2. Open your authenticator app, choose "add account" / the **+**,
+   and point your phone camera at the square. The account appears
+   in the app instantly. (Can't scan? Choose "enter a key
+   manually" in the app and type the long key shown under the
+   square instead.)
+3. Type the 6-digit code the app now shows into the page and press
+   **Confirm and enable**.
+4. **Save your recovery codes NOW.** Ten codes appear exactly once
+   — print them or store them somewhere safe (not on the phone
+   with the app). Each code works one time, and they are never
+   shown again. Press **I've saved these codes** when done.
+
+**Logging in afterwards:** enter your email and password as usual,
+then the current 6-digit code when asked. Lost your phone? Choose
+"Use a recovery code" on that screen and enter one saved code.
+
+**Turn it off:** Settings → Two-factor authentication →
+**Disable**, then your current password plus a current code (or
+one recovery code). Disabling deletes the stored secret and all
+recovery codes.
+
+If you lose your phone AND your recovery codes together, email us
+from your account address — getting back in then needs our manual
+help and identity checks, so keep those codes safe.
 
 ## When something looks wrong
 

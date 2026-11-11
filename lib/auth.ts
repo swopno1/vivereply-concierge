@@ -31,6 +31,7 @@
 // app fails closed rather than signing tokens with a known secret.
 
 import { createHmac, createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+import type { NextResponse } from "next/server";
 
 export const ADMIN_SESSION_COOKIE = "concierge_session";
 const CHAT_TOKEN_HOURS = 24;
@@ -43,6 +44,7 @@ export const MIN_PASSWORD_LEN = 12;
 export const THROTTLE_WINDOW_MIN = 15;
 export const THROTTLE_MAX_EMAIL_FAILS = 5;
 export const THROTTLE_MAX_IP_FAILS = 20;
+export const TWO_FACTOR_CHALLENGE_MINUTES = 5;
 
 function sessionSecret(): string | null {
   const secret = process.env.SESSION_SECRET;
@@ -208,6 +210,65 @@ export function verifySessionToken(token: string | null | undefined): Session | 
   if (payload.role === "OWNER" && !payload.propertyId) return null;
   if (payload.exp <= Math.floor(Date.now() / 1000)) return null;
   return { sid: payload.sid, uid: payload.uid, email: payload.email ?? null, role: payload.role, propertyId: payload.propertyId };
+}
+
+// --- 2FA challenge token (pure) -------------------------------------------
+// Short-lived proof that the password step passed: the login route
+// issues it INSTEAD of a session when the account has TOTP enabled,
+// and /api/auth/login/verify redeems it for a session after a valid
+// code. The purpose tag + distinct shape keep it unusable as any
+// other token kind (session v2, chat v1+propertyId). 5 minutes:
+// long enough to open an app, too short to be a standing credential.
+// Single-use is NOT enforced statelessly (documented accepted risk:
+// the token only ever travels server<->browser over HTTPS, and reuse
+// still demands a fresh valid code).
+export type TwoFactorChallenge = {
+  uid: string;
+  email: string | null;
+  bootstrap: boolean;
+};
+
+type TwoFactorChallengePayload = {
+  v: number;
+  purpose: string;
+  uid: string;
+  email: string | null;
+  bootstrap: boolean;
+  exp: number;
+};
+
+export function createTwoFactorChallengeToken(challenge: TwoFactorChallenge): string | null {
+  if (!challenge.uid) return null;
+  return encodeToken({
+    v: 1,
+    purpose: "2fa",
+    uid: challenge.uid,
+    email: challenge.email,
+    bootstrap: challenge.bootstrap,
+    exp: Math.floor(Date.now() / 1000) + TWO_FACTOR_CHALLENGE_MINUTES * 60,
+  });
+}
+
+export function verifyTwoFactorChallengeToken(token: string | null | undefined): TwoFactorChallenge | null {
+  if (!token) return null;
+  const payload = decodeToken<TwoFactorChallengePayload>(token);
+  if (!payload || payload.v !== 1 || payload.purpose !== "2fa") return null;
+  if (!payload.uid) return null;
+  if (payload.exp <= Math.floor(Date.now() / 1000)) return null;
+  return { uid: payload.uid, email: payload.email ?? null, bootstrap: payload.bootstrap === true };
+}
+
+// Session cookie, set identically by every login-completing route
+// (/api/auth/login + /api/auth/login/verify). One definition so the
+// flags can never drift between the password and 2FA paths.
+export function setSessionCookie(res: NextResponse, token: string): void {
+  res.cookies.set(ADMIN_SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_ABSOLUTE_DAYS * 24 * 3600,
+  });
 }
 
 // --- Tier 1 helpers (pure, probed) ----------------------------------------

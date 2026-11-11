@@ -6,6 +6,11 @@
 //     Unknown emails still pay one scrypt (dummy hash), so enumeration by
 //     timing buys nothing. An OWNER whose property is missing or inactive
 //     fails closed. Any role string outside the two known ones fails closed.
+// 2FA: when the account enabled TOTP, a correct password answers
+// { twoFactorRequired: true, challengeToken } INSTEAD of a session —
+// /api/auth/login/verify redeems the challenge after the code. No
+// 2FA state leaks before the password passes (unknown emails never
+// reach the check).
 // Tier 1: attempts are throttled per email + per IP (DB-backed, so it holds
 // across instances); each login mints a fresh server-side Session row and
 // the cookie carries its id (fixation impossible — ids are server-minted
@@ -21,17 +26,17 @@ import { NextRequest, NextResponse } from "next/server";
 // SERVICE PATH (marked): auth bootstrap runs before any tenant exists — bypass client by design (see Phase 1 PR service-path list).
 import { prismaService } from "@/lib/prisma";
 import {
-  ADMIN_SESSION_COOKIE,
   DUMMY_PASSWORD_HASH,
   THROTTLE_WINDOW_MIN,
-  createSessionToken,
+  createTwoFactorChallengeToken,
   isBootstrapEmail,
+  setSessionCookie,
   throttleDecision,
   verifyAdminPassword,
   verifyPassword,
   type Session,
 } from "@/lib/auth";
-import { sessionExpiresAt } from "@/lib/tenant";
+import { mintLoginSession } from "@/lib/tenant";
 import { turnstileConfigured, verifyTurnstileToken } from "@/lib/turnstile";
 import { logAudit } from "@/lib/audit";
 
@@ -105,13 +110,6 @@ export async function POST(req: NextRequest) {
     await logAudit({ actorEmail: email || null, action: "login.fail", ip });
     return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
   }
-  await logAudit({
-    actorEmail: session.email,
-    action: "login.success",
-    propertyId: session.propertyId,
-    detail: { role: session.role },
-    ip,
-  });
   // Opportunistic pruning (best-effort): yesterday's attempts, dead
   // sessions, and spent verification/reset tokens never accumulate
   // into large tables. Full retention table: docs/key-rotation.md.
@@ -122,24 +120,40 @@ export async function POST(req: NextRequest) {
   await prismaService().emailVerificationToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(() => null);
   await prismaService().passwordResetToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(() => null);
 
-  const row = await prismaService().session
-    .create({ data: { userId, role: session.role, expiresAt: sessionExpiresAt() } })
-    .catch(() => null);
-  if (!row) {
+  // 2FA gate: password passed — if the account enabled TOTP, issue a
+  // short-lived challenge instead of a session. The row lookup is by
+  // the verified session email (bootstrap included: its 2FA state
+  // lives on the row setup created for ADMIN_EMAIL).
+  const twoFaRow = session.email
+    ? await prismaService().user
+        .findUnique({
+          where: { email: session.email },
+          select: { id: true, totpSecretEnc: true, totpEnabledAt: true },
+        })
+        .catch(() => null)
+    : null;
+  if (twoFaRow?.totpSecretEnc && twoFaRow.totpEnabledAt) {
+    const challengeToken = createTwoFactorChallengeToken({
+      uid: twoFaRow.id,
+      email: session.email,
+      bootstrap: session.uid === "bootstrap",
+    });
+    if (!challengeToken) {
+      return NextResponse.json({ error: "Login is not configured." }, { status: 500 });
+    }
+    await logAudit({
+      actorEmail: session.email,
+      action: "login.2fa.challenged",
+      propertyId: session.propertyId,
+      ip,
+    });
+    return NextResponse.json({ twoFactorRequired: true, challengeToken });
+  }
+  const minted = await mintLoginSession({ session, userId, ip });
+  if (!minted) {
     return NextResponse.json({ error: "Login is unavailable right now." }, { status: 500 });
   }
-  const token = createSessionToken({ ...session, sid: row.id });
-  if (!token) {
-    await prismaService().session.delete({ where: { id: row.id } }).catch(() => null);
-    return NextResponse.json({ error: "Login is not configured." }, { status: 500 });
-  }
-  const res = NextResponse.json({ ok: true, role: session.role, propertyId: session.propertyId });
-  res.cookies.set(ADMIN_SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 7 * 24 * 3600,
-  });
+  const res = NextResponse.json({ ok: true, role: minted.role, propertyId: minted.propertyId });
+  setSessionCookie(res, minted.token);
   return res;
 }
