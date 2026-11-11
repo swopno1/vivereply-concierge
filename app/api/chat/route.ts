@@ -11,7 +11,7 @@
 // guest; real causes go to the server log.
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import { withTenant } from "@/lib/tenant-db";
 import { runAgent } from "@/lib/agent";
 import { createToolExecutor, toolDefinitionsFor, type ToolDb } from "@/lib/tools";
 import { adapterForProperty, FixtureSuiteAdapter } from "@/lib/suite";
@@ -152,21 +152,28 @@ export async function POST(req: NextRequest) {
   }
 
   const incomingId = typeof body?.conversationId === "string" ? body.conversationId : "";
+  // Tenant path: every query below runs with the verified token's
+  // property. Each block is its own short transaction — never held
+  // across the model/streaming calls further down (pool rule).
+  const tenant = chatToken.propertyId;
   let conversation = incomingId
-    ? await prisma.conversation.findUnique({ where: { id: incomingId } })
+    ? await withTenant(tenant, (tx) => tx.conversation.findUnique({ where: { id: incomingId } }))
     : null;
   // A conversation id from another property is ignored, never reused:
   // it would otherwise let one site's token read another's thread.
+  // (RLS confines the lookup too — belt and braces with this check.)
   if (conversation && conversation.propertyId !== chatToken.propertyId) {
     conversation = null;
   }
   if (!conversation) {
-    conversation = await prisma.conversation.create({
-      data: {
-        propertyId: chatToken.propertyId,
-        language: "en",
-      },
-    });
+    conversation = await withTenant(tenant, (tx) =>
+      tx.conversation.create({
+        data: {
+          propertyId: chatToken.propertyId,
+          language: "en",
+        },
+      })
+    );
   }
 
   // Language follows the guest's latest real language, both ways: a
@@ -176,18 +183,23 @@ export async function POST(req: NextRequest) {
   // conversation can never get stuck by a currency sign again.
   const detected = detectLanguage(message);
   if (detected && detected !== conversation.language) {
-    conversation = await prisma.conversation.update({
-      where: { id: conversation.id },
-      data: { language: detected },
-    });
+    const conversationId = conversation.id;
+    conversation = await withTenant(tenant, (tx) =>
+      tx.conversation.update({
+        where: { id: conversationId },
+        data: { language: detected },
+      })
+    );
   }
   // Const capture for the stream closure: a `let` narrowed above would
   // lose its narrowing inside the closure.
   const activeConversation = conversation;
 
-  await prisma.message.create({
-    data: { conversationId: activeConversation.id, role: "user", content: message },
-  });
+  await withTenant(tenant, (tx) =>
+    tx.message.create({
+      data: { conversationId: activeConversation.id, role: "user", content: message },
+    })
+  );
 
   // Streaming (UX): the turn runs inside the stream's start(), so phase
   // events reach the browser WHILE the model and the resort checks are
@@ -209,18 +221,22 @@ export async function POST(req: NextRequest) {
         // earlier cut used oldest-first + take, which silently dropped
         // the newest context past 20 messages — fixed 2026-10-29.)
         const history = (
-          await prisma.message.findMany({
-            where: { conversationId: activeConversation.id },
-            orderBy: { createdAt: "desc" },
-            take: 20,
-          })
+          await withTenant(tenant, (tx) =>
+            tx.message.findMany({
+              where: { conversationId: activeConversation.id },
+              orderBy: { createdAt: "desc" },
+              take: 20,
+            })
+          )
         ).reverse();
 
         const db: ToolDb = {
           hasQuote: async (cid, roomSlug, checkIn, checkOut) => {
-            const logs = await prisma.toolCallLog.findMany({
-              where: { conversationId: cid, toolName: "get_quote" },
-            });
+            const logs = await withTenant(tenant, (tx) =>
+              tx.toolCallLog.findMany({
+                where: { conversationId: cid, toolName: "get_quote" },
+              })
+            );
             return logs.some((l) => {
               const input = l.input as { roomSlug?: string; checkIn?: string; checkOut?: string } | null;
               return (
@@ -229,9 +245,11 @@ export async function POST(req: NextRequest) {
             });
           },
           hasDraft: async (cid) => {
-            const logs = await prisma.toolCallLog.findMany({
-              where: { conversationId: cid, toolName: "create_booking_draft" },
-            });
+            const logs = await withTenant(tenant, (tx) =>
+              tx.toolCallLog.findMany({
+                where: { conversationId: cid, toolName: "create_booking_draft" },
+              })
+            );
             return logs.some((l) => {
               const output = l.output as { bookingCode?: string } | null;
               return Boolean(output?.bookingCode);
@@ -246,7 +264,9 @@ export async function POST(req: NextRequest) {
           claimDraft: async (cid) => {
             const attempt = async (): Promise<boolean> => {
               try {
-                await prisma.draftClaim.create({ data: { conversationId: cid } });
+                await withTenant(tenant, (tx) =>
+                  tx.draftClaim.create({ data: { conversationId: cid } })
+                );
                 return true;
               } catch (e) {
                 if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -256,19 +276,23 @@ export async function POST(req: NextRequest) {
               }
             };
             if (await attempt()) return true;
-            await prisma.draftClaim
-              .deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 5 * 60_000) } } })
-              .catch(() => null);
+            await withTenant(tenant, (tx) =>
+              tx.draftClaim.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 5 * 60_000) } } })
+            ).catch(() => null);
             return attempt();
           },
           releaseDraftClaim: async (cid) => {
-            await prisma.draftClaim.deleteMany({ where: { conversationId: cid } }).catch(() => null);
+            await withTenant(tenant, (tx) =>
+              tx.draftClaim.deleteMany({ where: { conversationId: cid } })
+            ).catch(() => null);
           },
           getDraft: async (cid) => {
-            const logs = await prisma.toolCallLog.findMany({
-              where: { conversationId: cid, toolName: "create_booking_draft" },
-              orderBy: { createdAt: "desc" },
-            });
+            const logs = await withTenant(tenant, (tx) =>
+              tx.toolCallLog.findMany({
+                where: { conversationId: cid, toolName: "create_booking_draft" },
+                orderBy: { createdAt: "desc" },
+              })
+            );
             for (const l of logs) {
               const output = l.output as {
                 bookingCode?: string;
@@ -301,28 +325,36 @@ export async function POST(req: NextRequest) {
             return null;
           },
           createHandoff: async (cid, reason, summary) => {
-            await prisma.handoffRecord.create({ data: { conversationId: cid, reason, summary } });
-            await prisma.conversation.update({
-              where: { id: cid },
-              data: { status: "HANDED_OFF" },
-            });
+            await withTenant(tenant, (tx) =>
+              tx.handoffRecord.create({ data: { conversationId: cid, reason, summary } })
+            );
+            await withTenant(tenant, (tx) =>
+              tx.conversation.update({
+                where: { id: cid },
+                data: { status: "HANDED_OFF" },
+              })
+            );
           },
           // Resort payment pointer: the booking code comes from this
           // conversation's draft log (server-side, never the model), the
           // page URL from the property's binding (owner-configured). No
           // code + no page = honest error, never an invented link.
           getResortPaymentLink: async (cid) => {
-            const binding = await prisma.propertyBinding.findUnique({
-              where: { propertyId: activeConversation.propertyId },
-              select: { paymentPageUrl: true },
-            });
+            const binding = await withTenant(tenant, (tx) =>
+              tx.propertyBinding.findUnique({
+                where: { propertyId: activeConversation.propertyId },
+                select: { paymentPageUrl: true },
+              })
+            );
             if (!binding?.paymentPageUrl) {
               throw new Error("This resort hasn't set up its payment page yet.");
             }
-            const logs = await prisma.toolCallLog.findMany({
-              where: { conversationId: cid, toolName: "create_booking_draft" },
-              orderBy: { createdAt: "desc" },
-            });
+            const logs = await withTenant(tenant, (tx) =>
+              tx.toolCallLog.findMany({
+                where: { conversationId: cid, toolName: "create_booking_draft" },
+                orderBy: { createdAt: "desc" },
+              })
+            );
             for (const l of logs) {
               const output = l.output as { bookingCode?: string } | null;
               if (output?.bookingCode) {
@@ -358,21 +390,22 @@ export async function POST(req: NextRequest) {
         // configured its own payment page AND runs a real Suite backend
         // (fixture demos have no resort site to point at). One cheap row
         // read; the executor re-checks per call anyway.
-        const bindingPay = await prisma.propertyBinding
-          .findUnique({
-            where: { propertyId: activeConversation.propertyId },
-            select: { paymentPageUrl: true },
-          })
-          .catch(() => null);
+        const bindingPay = await withTenant(tenant, (tx) =>
+          tx.propertyBinding
+            .findUnique({
+              where: { propertyId: activeConversation.propertyId },
+              select: { paymentPageUrl: true },
+            })
+        ).catch(() => null);
         const resortPayOn =
           bindingPay?.paymentPageUrl != null && !(suite instanceof FixtureSuiteAdapter);
         const baseExecute = createToolExecutor(activeConversation.id, db, suite, catalogue, {
           resortPay: resortPayOn,
         });
         // Reply identity (onboarding Phase 3): absent profile = default voice.
-        const profile = await prisma.propertyProfile
-          .findUnique({ where: { propertyId: activeConversation.propertyId } })
-          .catch(() => null);
+        const profile = await withTenant(tenant, (tx) =>
+          tx.propertyProfile.findUnique({ where: { propertyId: activeConversation.propertyId } })
+        ).catch(() => null);
         // Resolution evidence (multi-tenant core): one log line per turn —
         // which property resolved to which backend, how many rooms, and
         // whether the voice is custom. The P4 isolation proof reads these.
@@ -388,14 +421,16 @@ export async function POST(req: NextRequest) {
           } catch {
             input = null;
           }
-          await prisma.toolCallLog.create({
-            data: {
-              conversationId: activeConversation.id,
-              toolName: name,
-              input: input as never,
-              output: result as never,
-            },
-          });
+          await withTenant(tenant, (tx) =>
+            tx.toolCallLog.create({
+              data: {
+                conversationId: activeConversation.id,
+                toolName: name,
+                input: input as never,
+                output: result as never,
+              },
+            })
+          );
           return result;
         };
 
@@ -417,9 +452,11 @@ export async function POST(req: NextRequest) {
               query: message,
               embed: embedText,
               search: async (embedding) => {
-                const rows = await prisma.$queryRaw<
-                  Array<{ title: string; content: string; similarity: number }>
-                >`SELECT d."title", c."content", 1 - (c."embedding" <=> ${toVectorLiteral(embedding)}::vector) AS "similarity" FROM "KnowledgeChunk" AS c JOIN "KnowledgeDocument" AS d ON d."id" = c."documentId" WHERE d."propertyId" = ${activeConversation.propertyId} AND c."indexed" = true ORDER BY c."embedding" <=> ${toVectorLiteral(embedding)}::vector ASC LIMIT 4`;
+                const rows = await withTenant(tenant, (tx) =>
+                  tx.$queryRaw<
+                    Array<{ title: string; content: string; similarity: number }>
+                  >`SELECT d."title", c."content", 1 - (c."embedding" <=> ${toVectorLiteral(embedding)}::vector) AS "similarity" FROM "KnowledgeChunk" AS c JOIN "KnowledgeDocument" AS d ON d."id" = c."documentId" WHERE d."propertyId" = ${activeConversation.propertyId} AND c."indexed" = true ORDER BY c."embedding" <=> ${toVectorLiteral(embedding)}::vector ASC LIMIT 4`
+                );
                 return rows;
               },
             });
@@ -427,14 +464,16 @@ export async function POST(req: NextRequest) {
             // Always logged on attempt (chunks may be empty): the
             // dashboard splits grounded vs silent turns from these
             // rows, and silent retrieval is a signal, not an absence.
-            await prisma.toolCallLog.create({
-              data: {
-                conversationId: activeConversation.id,
-                toolName: "rag_retrieval",
-                input: { query: message } as never,
-                output: { chunks: retrieved.chunks } as never,
-              },
-            });
+            await withTenant(tenant, (tx) =>
+              tx.toolCallLog.create({
+                data: {
+                  conversationId: activeConversation.id,
+                  toolName: "rag_retrieval",
+                  input: { query: message } as never,
+                  output: { chunks: retrieved.chunks } as never,
+                },
+              })
+            );
           } catch (e) {
             console.error(
               "RAG retrieval failed, continuing without grounding:",
@@ -465,33 +504,41 @@ export async function POST(req: NextRequest) {
           tools: toolDefinitionsFor(catalogue, { resortPay: resortPayOn }),
           execute,
           onModelCall: async (usage) => {
-            await prisma.toolCallLog.create({
-              data: {
-                conversationId: activeConversation.id,
-                toolName: "model_call",
-                output: { via: usage.via } as never,
-                promptTokens: usage.promptTokens,
-                completionTokens: usage.completionTokens,
-                reasoningTokens: usage.reasoningTokens,
-              },
-            });
+            await withTenant(tenant, (tx) =>
+              tx.toolCallLog.create({
+                data: {
+                  conversationId: activeConversation.id,
+                  toolName: "model_call",
+                  output: { via: usage.via } as never,
+                  promptTokens: usage.promptTokens,
+                  completionTokens: usage.completionTokens,
+                  reasoningTokens: usage.reasoningTokens,
+                },
+              })
+            );
           },
           onModelStart: async () => {
             send({ type: "phase", phase: "thinking" });
           },
         });
 
-        await prisma.message.create({
-          data: { conversationId: activeConversation.id, role: "assistant", content: reply },
-        });
-        await prisma.conversation.update({
-          where: { id: activeConversation.id },
-          data: { updatedAt: new Date() },
-        });
-        const turnLogs = await prisma.toolCallLog.findMany({
-          where: { conversationId: activeConversation.id, createdAt: { gte: turnStart } },
-          orderBy: { createdAt: "asc" },
-        });
+        await withTenant(tenant, (tx) =>
+          tx.message.create({
+            data: { conversationId: activeConversation.id, role: "assistant", content: reply },
+          })
+        );
+        await withTenant(tenant, (tx) =>
+          tx.conversation.update({
+            where: { id: activeConversation.id },
+            data: { updatedAt: new Date() },
+          })
+        );
+        const turnLogs = await withTenant(tenant, (tx) =>
+          tx.toolCallLog.findMany({
+            where: { conversationId: activeConversation.id, createdAt: { gte: turnStart } },
+            orderBy: { createdAt: "asc" },
+          })
+        );
         const cards = buildCards(
           turnLogs.map((l) => ({ toolName: l.toolName, input: l.input, output: l.output }))
         );

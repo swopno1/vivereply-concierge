@@ -18,7 +18,8 @@
 // fails closed).
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+// SERVICE PATH (marked): auth bootstrap runs before any tenant exists — bypass client by design (see Phase 1 PR service-path list).
+import { prismaService } from "@/lib/prisma";
 import {
   ADMIN_SESSION_COOKIE,
   DUMMY_PASSWORD_HASH,
@@ -47,8 +48,8 @@ export async function POST(req: NextRequest) {
 
   const since = new Date(Date.now() - THROTTLE_WINDOW_MIN * 60 * 1000);
   const counts = await Promise.all([
-    prisma.loginAttempt.count({ where: { email: email || "(bootstrap)", ok: false, createdAt: { gt: since } } }),
-    prisma.loginAttempt.count({ where: { ip, ok: false, createdAt: { gt: since } } }),
+    prismaService().loginAttempt.count({ where: { email: email || "(bootstrap)", ok: false, createdAt: { gt: since } } }),
+    prismaService().loginAttempt.count({ where: { ip, ok: false, createdAt: { gt: since } } }),
   ]).catch(() => [0, 0] as [number, number]);
   if (throttleDecision(counts[0], counts[1])) {
     return NextResponse.json(
@@ -77,14 +78,14 @@ export async function POST(req: NextRequest) {
   if (email && isBootstrapEmail(email) && verifyAdminPassword(password)) {
     session = { uid: "bootstrap", email, role: "SUPER_ADMIN", propertyId: null };
   } else if (email) {
-    const user = await prisma.user.findUnique({ where: { email } }).catch(() => null);
+    const user = await prismaService().user.findUnique({ where: { email } }).catch(() => null);
     const ok = await verifyPassword(
       password,
       user && user.active ? user.passwordHash : DUMMY_PASSWORD_HASH
     );
     if (user && user.active && ok) {
       if (user.role === "OWNER" && user.propertyId) {
-        const prop = await prisma.property.findUnique({ where: { id: user.propertyId } }).catch(() => null);
+        const prop = await prismaService().property.findUnique({ where: { id: user.propertyId } }).catch(() => null);
         if (prop && prop.status === "ACTIVE") {
           session = { uid: user.id, email: user.email, role: "OWNER", propertyId: user.propertyId };
           userId = user.id;
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  await prisma.loginAttempt
+  await prismaService().loginAttempt
     .create({ data: { email: email || "(bootstrap)", ip, ok: session !== null } })
     .catch(() => null);
 
@@ -114,14 +115,14 @@ export async function POST(req: NextRequest) {
   // Opportunistic pruning (best-effort): yesterday's attempts, dead
   // sessions, and spent verification/reset tokens never accumulate
   // into large tables. Full retention table: docs/key-rotation.md.
-  await prisma.loginAttempt.deleteMany({ where: { createdAt: { lt: since } } }).catch(() => null);
-  await prisma.session
+  await prismaService().loginAttempt.deleteMany({ where: { createdAt: { lt: since } } }).catch(() => null);
+  await prismaService().session
     .deleteMany({ where: { OR: [{ expiresAt: { lt: new Date() } }, { revokedAt: { lt: since } }] } })
     .catch(() => null);
-  await prisma.emailVerificationToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(() => null);
-  await prisma.passwordResetToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(() => null);
+  await prismaService().emailVerificationToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(() => null);
+  await prismaService().passwordResetToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(() => null);
 
-  const row = await prisma.session
+  const row = await prismaService().session
     .create({ data: { userId, role: session.role, expiresAt: sessionExpiresAt() } })
     .catch(() => null);
   if (!row) {
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
   }
   const token = createSessionToken({ ...session, sid: row.id });
   if (!token) {
-    await prisma.session.delete({ where: { id: row.id } }).catch(() => null);
+    await prismaService().session.delete({ where: { id: row.id } }).catch(() => null);
     return NextResponse.json({ error: "Login is not configured." }, { status: 500 });
   }
   const res = NextResponse.json({ ok: true, role: session.role, propertyId: session.propertyId });

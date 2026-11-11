@@ -11,7 +11,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
-import { prisma } from "@/lib/prisma";
+// SERVICE PATH (marked): auth bootstrap runs before any tenant exists — bypass client by design (see Phase 1 PR service-path list).
+import { prismaService } from "@/lib/prisma";
 import { ADMIN_SESSION_COOKIE, MIN_PASSWORD_LEN, hashPassword } from "@/lib/auth";
 import { revokeUserSessions } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
     );
   }
   const tokenHash = createHash("sha256").update(token).digest("hex");
-  const row = await prisma.passwordResetToken
+  const row = await prismaService().passwordResetToken
     .findUnique({ where: { tokenHash }, include: { user: true } })
     .catch(() => null);
   const live = row && !row.usedAt && row.expiresAt > new Date() && row.user.active;
@@ -45,10 +46,10 @@ export async function POST(req: NextRequest) {
   }
   // Atomic: token-mark + password-set land together or not at all,
   // so a failure is retry-safe (the link stays live).
-  const updated = await prisma
+  const updated = await prismaService()
     .$transaction([
-      prisma.passwordResetToken.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
-      prisma.user.update({
+      prismaService().passwordResetToken.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
+      prismaService().user.update({
         where: { id: row.userId },
         data: { passwordHash: await hashPassword(password), mustChangePassword: false },
       }),

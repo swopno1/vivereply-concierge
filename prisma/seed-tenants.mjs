@@ -56,6 +56,9 @@ const TENANTS = [
   // key and domain approvals — reseeding the old fixed ID here would mint a
   // confusing duplicate property and a second demo1.vivereply.com approval.
   // Fixture tenant(s) only below.
+  // Phase 1 addition (NOT a fixture entry): main() upserts the DEMO_PROPERTY_ID
+  // row itself (no user, no domains, existing rows untouched) — the demo must
+  // exist as an explicit row now that the code no-row fallbacks are gone.
   {
     id: "seabreeze-test",
     name: "Seabreeze Test Inn",
@@ -83,7 +86,10 @@ async function main() {
     dotenv?.config?.();
   } catch { /* env-only is fine */ }
 
-  const connectionString = process.env.DATABASE_URL ?? process.env.DIRECT_URL;
+  // RLS service path: seeds write unscoped rows (new tenants), which the
+  // app role could never insert — so seeds connect via DIRECT_URL (the
+  // bypass migrations connection), never the app pooler.
+  const connectionString = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
   if (!connectionString) {
     console.error("Refusing: set DATABASE_URL (or DIRECT_URL) in the environment.");
     process.exit(1);
@@ -92,6 +98,28 @@ async function main() {
   const { PrismaPg } = await import("@prisma/adapter-pg");
   const { Pool } = await import("pg");
   const prisma = new PrismaClient({ adapter: new PrismaPg(new Pool({ connectionString })) });
+
+  // Phase 1: the demo property MUST exist as an explicit row (the code
+  // no-row fallbacks are gone — a missing demo row fails closed). The id
+  // comes from DEMO_PROPERTY_ID (owner-chosen, varies per environment),
+  // never hardcoded: upsert the row with no user and no domains (safe
+  // default — signup owns the demo's login, domains are approved live).
+  // update: {} preserves signup-chosen name/widgetKey on re-runs; runs
+  // only on unfiltered invocations (a --tenant= filter means just that).
+  const onlyArgEarly = process.argv.find((a) => a.startsWith("--tenant="));
+  const demoId = (process.env.DEMO_PROPERTY_ID ?? "").trim();
+  if (!onlyArgEarly && demoId) {
+    try {
+      await prisma.property.upsert({
+        where: { id: demoId },
+        create: { id: demoId, name: "Demo Resort", widgetKey: `key-${demoId}`.slice(0, 60), status: "ACTIVE" },
+        update: {},
+      });
+      console.log(`demo property row ensured: ${demoId} (created or already present; existing rows untouched)`);
+    } catch (e) {
+      console.log(`demo property row NOT ensured (${e instanceof Error ? e.message : e}) — continuing with fixtures`);
+    }
+  }
 
   try {
     const onlyArg = process.argv.find((a) => a.startsWith("--tenant="));

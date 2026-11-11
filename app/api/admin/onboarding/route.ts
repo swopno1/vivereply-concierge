@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
+import { tenantFor, withTenant } from "@/lib/tenant-db";
 import { ONBOARDING_BUDGET, sanitizeFilename } from "@/lib/onboarding";
 import { parseProfileInput, str } from "@/lib/onboarding-profile";
 import { signDownloadUrl, signUploadUrl } from "@/lib/storage";
@@ -65,10 +66,16 @@ export async function GET(req: NextRequest) {
   if (!sessionCan(session, propertyId)) {
     return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
   }
-  const [profile, run] = await Promise.all([
-    prisma.propertyProfile.findUnique({ where: { propertyId } }),
-    prisma.onboardingRun.findUnique({ where: { propertyId } }),
-  ]);
+  const tenant = tenantFor(session, propertyId);
+  if (!tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const [profile, run] = await withTenant(tenant, (tx) =>
+    Promise.all([
+      tx.propertyProfile.findUnique({ where: { propertyId } }),
+      tx.onboardingRun.findUnique({ where: { propertyId } }),
+    ])
+  );
   return NextResponse.json({ profile, run: run ? shapeRun(run) : null });
 }
 
@@ -119,7 +126,19 @@ export async function POST(req: NextRequest) {
   }
   const profileData = parsed.data;
 
-  const existing = await prisma.onboardingRun.findUnique({ where: { propertyId } });
+  const tenant = tenantFor(session, propertyId);
+  if (!tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  // FK honesty: creating for a ghost property would 500 on the FK —
+  // answer 404 instead.
+  const property = await prisma.property.findUnique({ where: { id: propertyId } });
+  if (!property) {
+    return NextResponse.json({ error: "Property not found." }, { status: 404 });
+  }
+  const existing = await withTenant(tenant, (tx) =>
+    tx.onboardingRun.findUnique({ where: { propertyId } })
+  );
   if (existing && !existing.approvedRerun) {
     return NextResponse.json(
       {
@@ -130,29 +149,35 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  await prisma.propertyProfile.upsert({
-    where: { propertyId },
-    create: { propertyId, ...profileData },
-    update: profileData,
-  });
+  await withTenant(tenant, (tx) =>
+    tx.propertyProfile.upsert({
+      where: { propertyId },
+      create: { propertyId, ...profileData },
+      update: profileData,
+    })
+  );
 
   let run;
   if (existing) {
-    run = await prisma.onboardingRun.update({
-      where: { propertyId },
-      data: {
-        status: "PENDING",
-        filePaths,
-        website,
-        stats: Prisma.JsonNull,
-        error: null,
-        approvedRerun: false,
-      },
-    });
+    run = await withTenant(tenant, (tx) =>
+      tx.onboardingRun.update({
+        where: { propertyId },
+        data: {
+          status: "PENDING",
+          filePaths,
+          website,
+          stats: Prisma.JsonNull,
+          error: null,
+          approvedRerun: false,
+        },
+      })
+    );
   } else {
-    run = await prisma.onboardingRun.create({
-      data: { propertyId, status: "PENDING", filePaths, website },
-    });
+    run = await withTenant(tenant, (tx) =>
+      tx.onboardingRun.create({
+        data: { propertyId, status: "PENDING", filePaths, website },
+      })
+    );
   }
 
   let files: { path: string; downloadUrl: string }[] = [];
@@ -162,7 +187,7 @@ export async function POST(req: NextRequest) {
     );
   } catch (e) {
     const error = e instanceof Error ? e.message : "Could not sign uploads.";
-    await prisma.onboardingRun.update({ where: { id: run.id }, data: { error } });
+    await withTenant(tenant, (tx) => tx.onboardingRun.update({ where: { id: run.id }, data: { error } }));
     return NextResponse.json({ run: shapeRun({ ...run, error }), worker: { invoked: false, note: error } });
   }
   // Raw-bundle signing is best-effort: without it the worker skips the
@@ -179,14 +204,16 @@ export async function POST(req: NextRequest) {
   let worker = { invoked: false, note: "Worker not configured — run stays queued." };
   try {
     worker = await invokeIngestionWorker({ runId: run.id, propertyId, website, files, storageHost, rawUploadUrl });
-    await prisma.onboardingRun.update({
-      where: { id: run.id },
-      data: { status: worker.invoked ? "RUNNING" : "PENDING" },
-    });
+    await withTenant(tenant, (tx) =>
+      tx.onboardingRun.update({
+        where: { id: run.id },
+        data: { status: worker.invoked ? "RUNNING" : "PENDING" },
+      })
+    );
   } catch (e) {
     worker = { invoked: false, note: e instanceof Error ? e.message : "Worker invoke failed." };
   }
-  const fresh = await prisma.onboardingRun.findUnique({ where: { propertyId } });
+  const fresh = await withTenant(tenant, (tx) => tx.onboardingRun.findUnique({ where: { propertyId } }));
   return NextResponse.json({ run: fresh ? shapeRun(fresh) : shapeRun(run), worker });
 }
 
@@ -211,10 +238,22 @@ export async function PATCH(req: NextRequest) {
   if (!parsed.ok) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
-  const saved = await prisma.propertyProfile.upsert({
-    where: { propertyId },
-    create: { propertyId, ...parsed.data },
-    update: parsed.data,
-  });
+  const tenant = tenantFor(session, propertyId);
+  if (!tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  // FK honesty: upserting for a ghost property would 500 on the FK —
+  // answer 404 instead.
+  const property = await prisma.property.findUnique({ where: { id: propertyId } });
+  if (!property) {
+    return NextResponse.json({ error: "Property not found." }, { status: 404 });
+  }
+  const saved = await withTenant(tenant, (tx) =>
+    tx.propertyProfile.upsert({
+      where: { propertyId },
+      create: { propertyId, ...parsed.data },
+      update: parsed.data,
+    })
+  );
   return NextResponse.json({ profile: saved });
 }

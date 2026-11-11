@@ -8,7 +8,7 @@
 // filters to one status; an unknown status is a 400, never a silent all.
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { withTenant } from "@/lib/tenant-db";
 import { isBridgeStatus, verifyBridgeRequest } from "@/lib/bridge";
 
 export async function GET(req: NextRequest) {
@@ -23,17 +23,21 @@ export async function GET(req: NextRequest) {
       { status: 400 }
     );
   }
-  const rows = await prisma.handoffRecord.findMany({
-    where: {
-      conversation: { propertyId: auth.propertyId },
-      ...(statusParam ? { status: statusParam } : {}),
-    },
-    orderBy: { createdAt: "desc" },
-    include: {
-      notes: { orderBy: { createdAt: "asc" } },
-      _count: { select: { notes: true } },
-    },
-  });
+  // Tenant path: the verified credential's property (bridge key or
+  // embed token — both resolve to exactly one property in auth).
+  const rows = await withTenant(auth.propertyId, (tx) =>
+    tx.handoffRecord.findMany({
+      where: {
+        conversation: { propertyId: auth.propertyId },
+        ...(statusParam ? { status: statusParam } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        notes: { orderBy: { createdAt: "asc" } },
+        _count: { select: { notes: true } },
+      },
+    })
+  );
   return NextResponse.json(
     rows.map((h) => ({
       id: h.id,

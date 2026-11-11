@@ -8,8 +8,9 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { prisma, prismaService } from "@/lib/prisma";
 import { getSession, resolvePropertyId, sessionOwnerVerified } from "@/lib/tenant";
+import { withTenant } from "@/lib/tenant-db";
 import { WIDGET_KEYS } from "@/demo-config/widget-keys";
 import CopyButton from "../../components/CopyButton";
 import SignOutButton from "../../components/SignOutButton";
@@ -94,10 +95,12 @@ export default async function SettingsPage({
   }
   const params = (await searchParams) ?? {};
   const propertyId = await resolvePropertyId(session, params.property);
+  // SERVICE PATH (marked): self-read by verified session uid (super-admin
+  // rows carry no property, so no tenant could scope this read).
   const me =
     session.uid === "bootstrap"
       ? null
-      : await prisma.user
+      : await prismaService().user
           .findUnique({ where: { id: session.uid }, select: { mustChangePassword: true } })
           .catch(() => null);
 
@@ -107,16 +110,20 @@ export default async function SettingsPage({
   const origin = `${proto}://${host}`;
 
   const property = await prisma.property.findUnique({ where: { id: propertyId } }).catch(() => null);
-  const domains = await prisma.approvedDomain.findMany({
-    where: { propertyId },
-    orderBy: { createdAt: "asc" },
-  });
+  const [domains, tokenCount, tokenRows] = await withTenant(propertyId, (tx) =>
+    Promise.all([
+      tx.approvedDomain.findMany({
+        where: { propertyId },
+        orderBy: { createdAt: "asc" },
+      }),
+      tx.bridgeToken.count({ where: { propertyId, active: true } }),
+      tx.bridgeToken.findMany({
+        where: { propertyId },
+        orderBy: { createdAt: "asc" },
+      }),
+    ])
+  );
   const activeDomains = domains.filter((d) => d.active);
-  const tokenCount = await prisma.bridgeToken.count({ where: { propertyId, active: true } });
-  const tokenRows = await prisma.bridgeToken.findMany({
-    where: { propertyId },
-    orderBy: { createdAt: "asc" },
-  });
   const initialTokens = tokenRows.map((r) => ({
     id: r.id,
     prefix: r.prefix,
@@ -132,26 +139,28 @@ export default async function SettingsPage({
     active: d.active,
     createdAt: d.createdAt.toISOString(),
   }));
-  const chatbotProfile = await prisma.propertyProfile
-    .findUnique({ where: { propertyId } })
-    .catch(() => null);
-  const recentLogs = await prisma.toolCallLog.findMany({
-    where: {
-      conversation: { propertyId },
-      toolName: {
-        in: [
-          "check_availability",
-          "get_quote",
-          "create_booking_draft",
-          "lookup_booking_by_code",
-          "request_booking_details",
-        ],
-      },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-    include: { conversation: { select: { propertyId: true } } },
-  });
+  const [chatbotProfile, recentLogs] = await withTenant(propertyId, (tx) =>
+    Promise.all([
+      tx.propertyProfile.findUnique({ where: { propertyId } }).catch(() => null),
+      tx.toolCallLog.findMany({
+        where: {
+          conversation: { propertyId },
+          toolName: {
+            in: [
+              "check_availability",
+              "get_quote",
+              "create_booking_draft",
+              "lookup_booking_by_code",
+              "request_booking_details",
+            ],
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: { conversation: { select: { propertyId: true } } },
+      }),
+    ])
+  );
   const backendFailures = recentLogs
     .filter((l) => {
       const out = l.output as { error?: unknown } | null;
@@ -164,10 +173,12 @@ export default async function SettingsPage({
       propertyId: l.conversation.propertyId,
       createdAt: l.createdAt.toISOString(),
     }));
-  const bindingRows = await prisma.propertyBinding.findMany({
-    where: { propertyId },
-    orderBy: { createdAt: "asc" },
-  });
+  const bindingRows = await withTenant(propertyId, (tx) =>
+    tx.propertyBinding.findMany({
+      where: { propertyId },
+      orderBy: { createdAt: "asc" },
+    })
+  );
   const initialBindings = bindingRows.map((r) => ({
     id: r.id,
     propertyId: r.propertyId,
@@ -183,8 +194,9 @@ export default async function SettingsPage({
   // cross-property tenants + onboarding approvals. Owners never fetch
   // these rows — the queries below run for super-admins only.
   const isSuper = session.role === "SUPER_ADMIN";
+  // SERVICE PATH (marked): cross-property oversight scans.
   const allProperties = isSuper
-    ? await prisma.property
+    ? await prismaService().property
         .findMany({
           orderBy: { id: "asc" },
           include: { users: { select: { id: true, email: true, role: true, active: true } } },
@@ -192,7 +204,7 @@ export default async function SettingsPage({
         .catch(() => [])
     : [];
   const initialRuns = isSuper
-    ? await prisma.onboardingRun
+    ? await prismaService().onboardingRun
         .findMany({ orderBy: { updatedAt: "desc" } })
         .catch(() => [])
         .then((rows) =>

@@ -9,13 +9,22 @@
 //     OWNER only its own property; nobody touches anything signed out.
 //   - resolvePropertyId(session, param): which property a page acts for.
 //     OWNER is pinned to its own (a ?property= override is ignored, not
-//     an error). SUPER_ADMIN may pass ?property=<active-id>, else the demo
-//     property. Signed out also yields the demo property (public chat).
+//     an error; a null propertyId throws — fail closed, never demo).
+//     SUPER_ADMIN may pass ?property=<active-id>, else the demo
+//     property. Signed out also yields the demo property id (public
+//     chat) — but the id alone serves nothing: every consumer checks
+//     isPropertyActive, which fails closed on a missing row, so the
+//     demo works only through its explicit seeded Property row.
 //   - revokeSession / revokeUserSessions: the kill switches logout,
 //     password change, and admin revoke act through.
+//   - withTenant: run tenant-table queries with app.tenant_id set (the
+//     RLS path — see below). Auth bootstrap + cross-property reads use
+//     the bypass service client instead (prismaService, explicitly
+//     marked at each call site, listed in the Phase 1 PR).
 
 import { cookies } from "next/headers";
-import { prisma } from "@/lib/prisma";
+import { prisma, prismaService } from "@/lib/prisma";
+import { withTenant } from "@/lib/tenant-db";
 import {
   ADMIN_SESSION_COOKIE,
   SESSION_ABSOLUTE_DAYS,
@@ -36,7 +45,12 @@ export async function getSession(): Promise<Session | null> {
   const store = await cookies();
   const session = verifySessionToken(store.get(ADMIN_SESSION_COOKIE)?.value);
   if (!session) return null;
-  const row = await prisma.session.findUnique({ where: { id: session.sid } }).catch(() => null);
+  // SERVICE PATH (marked): the session row is read before any tenant is
+  // established (and super-admin sessions have no property at all), so
+  // it cannot go through withTenant. The unguessable sid + verified
+  // signature are the authorization here, not RLS.
+  const db = prismaService();
+  const row = await db.session.findUnique({ where: { id: session.sid } }).catch(() => null);
   if (!row || row.revokedAt) return null;
   const now = new Date();
   if (row.expiresAt <= now) return null;
@@ -46,7 +60,7 @@ export async function getSession(): Promise<Session | null> {
   const rowUid = row.userId ?? "bootstrap";
   if (rowUid !== session.uid || row.role !== session.role) return null;
   if (now.getTime() - row.lastSeenAt.getTime() > TOUCH_EVERY_MS) {
-    await prisma.session.update({ where: { id: row.id }, data: { lastSeenAt: now } }).catch(() => null);
+    await db.session.update({ where: { id: row.id }, data: { lastSeenAt: now } }).catch(() => null);
   }
   // Suspension bites existing sessions too: an OWNER whose property is no
   // longer ACTIVE loses the session on next use. SUPER_ADMIN (no property)
@@ -57,15 +71,18 @@ export async function getSession(): Promise<Session | null> {
   return session;
 }
 
+// SERVICE PATH (marked): session lifecycle writes address exact session
+// ids from verified cookies, including super-admin sessions that have
+// no property — so they bypass tenant scoping by design.
 export async function revokeSession(sid: string): Promise<void> {
-  await prisma.session.updateMany({
+  await prismaService().session.updateMany({
     where: { id: sid, revokedAt: null },
     data: { revokedAt: new Date() },
   }).catch(() => null);
 }
 
 export async function revokeUserSessions(userId: string): Promise<number> {
-  const result = await prisma.session.updateMany({
+  const result = await prismaService().session.updateMany({
     where: { userId, revokedAt: null },
     data: { revokedAt: new Date() },
   }).catch(() => null);
@@ -87,9 +104,14 @@ export async function sessionOwnerVerified(session: Session | null): Promise<boo
   if (!session) return false;
   if (session.role === "SUPER_ADMIN") return true;
   if (!session.uid || session.uid === "bootstrap") return false;
-  const user = await prisma.user
-    .findUnique({ where: { id: session.uid }, select: { emailVerifiedAt: true } })
-    .catch(() => null);
+  // Tenant path: the User row is read with the session's own verified
+  // property as tenant (callers must not wrap this call — helpers wrap
+  // internally; the nesting guard throws).
+  const tenant = session.propertyId;
+  if (!tenant) return false;
+  const user = await withTenant(tenant, (tx) =>
+    tx.user.findUnique({ where: { id: session.uid }, select: { emailVerifiedAt: true } })
+  ).catch(() => null);
   return user?.emailVerifiedAt != null;
 }
 
@@ -97,13 +119,13 @@ export function demoPropertyId(): string {
   return process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat";
 }
 
-// Tenant kill-switch predicate. ACTIVE means live; anything else (or a
-// missing row for a non-demo property) means suspended. The demo property
-// keeps its no-row fallback so a fresh DB still serves the demo; every
-// other property fails closed.
+// Tenant kill-switch predicate. ACTIVE means live; anything else means
+// suspended — including a MISSING row (Phase 1 killed the demo no-row
+// fallback: the demo serves only through its explicit seeded Property
+// row, and a missing row fails closed everywhere this is checked).
 export async function isPropertyActive(propertyId: string): Promise<boolean> {
   const row = await prisma.property.findUnique({ where: { id: propertyId } }).catch(() => null);
-  if (!row) return propertyId === demoPropertyId();
+  if (!row) return false;
   return row.status === "ACTIVE";
 }
 
@@ -111,7 +133,12 @@ export async function resolvePropertyId(
   session: Session | null,
   param: string | null | undefined
 ): Promise<string> {
-  if (session && session.role === "OWNER") return session.propertyId ?? demoPropertyId();
+  if (session && session.role === "OWNER") {
+    // Owner sessions always carry a property (verifySessionToken rejects
+    // OWNER without one) — a null here fails closed, never silent demo.
+    if (!session.propertyId) throw new Error("OWNER session without propertyId (fail closed).");
+    return session.propertyId;
+  }
   if (session && param) {
     const row = await prisma.property.findUnique({ where: { id: param } }).catch(() => null);
     if (row && row.status === "ACTIVE") return row.id;

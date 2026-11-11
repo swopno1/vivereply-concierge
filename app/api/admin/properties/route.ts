@@ -12,7 +12,9 @@
 // non-ACTIVE property on next use (see isPropertyActive).
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+// SERVICE PATH (marked): tenant registration + suspension span tenants
+// (and creation precedes any tenant) — bypass by design.
+import { prismaService } from "@/lib/prisma";
 import {
   generateTempPassword,
   hashPassword,
@@ -73,9 +75,9 @@ export async function POST(req: NextRequest) {
   }
 
   const [dupId, dupKey, dupEmail] = await Promise.all([
-    prisma.property.findUnique({ where: { id } }),
-    prisma.property.findUnique({ where: { widgetKey } }),
-    prisma.user.findUnique({ where: { email: ownerEmail } }),
+    prismaService().property.findUnique({ where: { id } }),
+    prismaService().property.findUnique({ where: { widgetKey } }),
+    prismaService().user.findUnique({ where: { email: ownerEmail } }),
   ]).catch(() => [null, null, null]);
   if (dupId) {
     return NextResponse.json({ error: "That property ID is already registered." }, { status: 409 });
@@ -90,12 +92,12 @@ export async function POST(req: NextRequest) {
   const tempPassword = generateTempPassword();
   const passwordHash = await hashPassword(tempPassword);
   try {
-    await prisma.$transaction([
-      prisma.property.create({ data: { id, name, widgetKey, status: "ACTIVE" } }),
+    await prismaService().$transaction([
+      prismaService().property.create({ data: { id, name, widgetKey, status: "ACTIVE" } }),
       ...domains.map((domain) =>
-        prisma.approvedDomain.create({ data: { domain, propertyId: id, active: true } })
+        prismaService().approvedDomain.create({ data: { domain, propertyId: id, active: true } })
       ),
-      prisma.user.create({
+      prismaService().user.create({
         // Team-registered: email attested, verified at creation (see schema).
         data: { email: ownerEmail, passwordHash, role: "OWNER", propertyId: id, active: true, mustChangePassword: true, emailVerifiedAt: new Date() },
       }),
@@ -127,11 +129,11 @@ export async function PATCH(req: NextRequest) {
   if (!SUSPEND_STATUSES.includes(status)) {
     return NextResponse.json({ error: "Status must be ACTIVE or INACTIVE." }, { status: 400 });
   }
-  const row = await prisma.property.findUnique({ where: { id } });
+  const row = await prismaService().property.findUnique({ where: { id } });
   if (!row) {
     return NextResponse.json({ error: "Property not found." }, { status: 404 });
   }
-  await prisma.property.update({ where: { id }, data: { status } });
+  await prismaService().property.update({ where: { id }, data: { status } });
   await logAudit({
     actorEmail: session.email,
     action: status === "ACTIVE" ? "property.resume" : "property.suspend",

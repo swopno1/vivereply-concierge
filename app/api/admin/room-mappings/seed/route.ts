@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
+import { tenantFor, withTenant } from "@/lib/tenant-db";
 import { DEMO_ROOMS } from "@/demo-config/rooms";
 
 export async function POST(req: NextRequest) {
@@ -27,26 +28,40 @@ export async function POST(req: NextRequest) {
   if (!sessionCan(session, propertyId)) {
     return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
   }
+  const tenant = tenantFor(session, propertyId);
+  if (!tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  // FK honesty: creating for a ghost property would 500 on the FK —
+  // answer 404 instead.
+  const property = await prisma.property.findUnique({ where: { id: propertyId } });
+  if (!property) {
+    return NextResponse.json({ error: "Property not found." }, { status: 404 });
+  }
   let created = 0;
   let skipped = 0;
   for (const room of DEMO_ROOMS) {
-    const existing = await prisma.roomMapping.findUnique({
-      where: { propertyId_slug: { propertyId, slug: room.slug } },
-    });
+    const existing = await withTenant(tenant, (tx) =>
+      tx.roomMapping.findUnique({
+        where: { propertyId_slug: { propertyId, slug: room.slug } },
+      })
+    );
     if (existing) {
       skipped += 1;
       continue;
     }
-    await prisma.roomMapping.create({
-      data: {
-        propertyId,
-        slug: room.slug,
-        name: room.name,
-        basePricePoisha: room.basePricePoisha,
-        suiteRoomId: room.suiteRoomId,
-        highlights: room.highlights,
-      },
-    });
+    await withTenant(tenant, (tx) =>
+      tx.roomMapping.create({
+        data: {
+          propertyId,
+          slug: room.slug,
+          name: room.name,
+          basePricePoisha: room.basePricePoisha,
+          suiteRoomId: room.suiteRoomId,
+          highlights: room.highlights,
+        },
+      })
+    );
     created += 1;
   }
   return NextResponse.json({ propertyId, created, skipped });

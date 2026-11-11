@@ -8,7 +8,8 @@
 // MIN_PASSWORD_LEN; the temporary-password flag clears on change.
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+// SERVICE PATH (marked): auth bootstrap runs before any tenant exists — bypass client by design (see Phase 1 PR service-path list).
+import { prismaService } from "@/lib/prisma";
 import { ADMIN_SESSION_COOKIE, MIN_PASSWORD_LEN, hashPassword, verifyPassword } from "@/lib/auth";
 import { getSession, revokeUserSessions } from "@/lib/tenant";
 
@@ -17,7 +18,7 @@ export async function PATCH(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }
-  const user = await prisma.user.findUnique({ where: { id: session.uid } }).catch(() => null);
+  const user = await prismaService().user.findUnique({ where: { id: session.uid } }).catch(() => null);
   if (!user || !user.active) {
     return NextResponse.json(
       { error: "The bootstrap password changes in the deployment environment, not here." },
@@ -39,7 +40,7 @@ export async function PATCH(req: NextRequest) {
   if (!(await verifyPassword(current, user.passwordHash))) {
     return NextResponse.json({ error: "The current password is wrong." }, { status: 403 });
   }
-  await prisma.user.update({
+  await prismaService().user.update({
     where: { id: user.id },
     data: { passwordHash: await hashPassword(next), mustChangePassword: false },
   });

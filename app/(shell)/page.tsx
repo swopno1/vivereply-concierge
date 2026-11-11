@@ -12,7 +12,7 @@
 import Chat from "../components/Chat";
 import { createChatToken } from "@/lib/auth";
 import { getSession, resolvePropertyId } from "@/lib/tenant";
-import { prisma } from "@/lib/prisma";
+import { withTenant } from "@/lib/tenant-db";
 
 export default async function Home({
   searchParams,
@@ -27,10 +27,12 @@ export default async function Home({
   // chat this is and what to try. Signed-in viewers (an owner on
   // their own chat, or staff previewing) get a setup shortcut
   // instead of the demo badge.
-  const [property, profile] = await Promise.all([
-    prisma.property.findUnique({ where: { id: propertyId } }).catch(() => null),
-    prisma.propertyProfile.findUnique({ where: { propertyId } }).catch(() => null),
-  ]);
+  const [property, profile] = await withTenant(propertyId, (tx) =>
+    Promise.all([
+      tx.property.findUnique({ where: { id: propertyId } }).catch(() => null),
+      tx.propertyProfile.findUnique({ where: { propertyId } }).catch(() => null),
+    ])
+  );
   const name = profile?.assistantName?.trim() || property?.name || "Vivereply Concierge";
   const isPreview = !!session;
   return (

@@ -13,8 +13,9 @@
 // money — this URL only points at the cash counter.
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, prismaService } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
+import { tenantFor, withTenant } from "@/lib/tenant-db";
 import { encryptSecret } from "@/lib/secrets";
 import { clientIp, logAudit } from "@/lib/audit";
 import { cleanPaymentPageUrl } from "@/lib/resort-pay";
@@ -73,10 +74,20 @@ export async function GET() {
   if (!(await sessionOwnerVerified(session))) {
     return NextResponse.json({ error: "Verify your email to configure your resort." }, { status: 403 });
   }
-  const rows = await prisma.propertyBinding.findMany({
-    where: session.role === "OWNER" ? { propertyId: session.propertyId ?? "" } : {},
-    orderBy: { createdAt: "asc" },
-  });
+  // Owners list their own rows (tenant path); super-admins list across
+  // properties (SERVICE PATH, marked).
+  const tenant = tenantFor(session);
+  if (session.role === "OWNER" && !tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const rows = tenant
+    ? await withTenant(tenant, (tx) =>
+        tx.propertyBinding.findMany({
+          where: { propertyId: tenant },
+          orderBy: { createdAt: "asc" },
+        })
+      )
+    : await prismaService().propertyBinding.findMany({ orderBy: { createdAt: "asc" } });
   return NextResponse.json(rows.map(shape));
 }
 
@@ -114,7 +125,19 @@ export async function POST(req: NextRequest) {
       );
     }
   }
-  const existing = await prisma.propertyBinding.findUnique({ where: { propertyId } });
+  const tenant = tenantFor(session, propertyId);
+  if (!tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  // FK honesty: creating for a ghost property would 500 on the FK —
+  // answer 404 instead.
+  const property = await prisma.property.findUnique({ where: { id: propertyId } });
+  if (!property) {
+    return NextResponse.json({ error: "Property not found." }, { status: 404 });
+  }
+  const existing = await withTenant(tenant, (tx) =>
+    tx.propertyBinding.findUnique({ where: { propertyId } })
+  );
   if (existing) {
     return NextResponse.json(
       { error: "That property already has a binding — edit it instead." },
@@ -132,9 +155,11 @@ export async function POST(req: NextRequest) {
       );
     }
   }
-  const row = await prisma.propertyBinding.create({
-    data: { propertyId, suiteBaseUrl, secretEnc, paymentPageUrl, version: 1 },
-  });
+  const row = await withTenant(tenant, (tx) =>
+    tx.propertyBinding.create({
+      data: { propertyId, suiteBaseUrl, secretEnc, paymentPageUrl, version: 1 },
+    })
+  );
   // URL + whether a secret was set — never the secret itself.
   await logAudit({
     actorEmail: session.email,
@@ -160,8 +185,16 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Binding id is required." }, { status: 400 });
   }
   // Look up first: a row from another property answers 404, never 403 —
-  // the id alone must not reveal that the row exists.
-  const current = await prisma.propertyBinding.findUnique({ where: { id } });
+  // the id alone must not reveal that the row exists. Owners read inside
+  // their own tenant (RLS confines the lookup); super-admins read
+  // cross-property (SERVICE PATH, marked).
+  const tenant = tenantFor(session);
+  if (session.role === "OWNER" && !tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const current = tenant
+    ? await withTenant(tenant, (tx) => tx.propertyBinding.findUnique({ where: { id } }))
+    : await prismaService().propertyBinding.findUnique({ where: { id } });
   if (!current || !sessionCan(session, current.propertyId)) {
     return NextResponse.json({ error: "Binding not found." }, { status: 404 });
   }
@@ -210,7 +243,9 @@ export async function PATCH(req: NextRequest) {
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
   }
-  const row = await prisma.propertyBinding.update({ where: { id }, data: updates }).catch(() => null);
+  const row = tenant
+    ? await withTenant(tenant, (tx) => tx.propertyBinding.update({ where: { id }, data: updates })).catch(() => null)
+    : await prismaService().propertyBinding.update({ where: { id }, data: updates }).catch(() => null);
   if (!row) {
     return NextResponse.json({ error: "Binding not found." }, { status: 404 });
   }
@@ -241,11 +276,21 @@ export async function DELETE(req: NextRequest) {
   if (!id) {
     return NextResponse.json({ error: "Binding id is required." }, { status: 400 });
   }
-  const current = await prisma.propertyBinding.findUnique({ where: { id } });
+  const delTenant = tenantFor(session);
+  if (session.role === "OWNER" && !delTenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const current = delTenant
+    ? await withTenant(delTenant, (tx) => tx.propertyBinding.findUnique({ where: { id } }))
+    : await prismaService().propertyBinding.findUnique({ where: { id } });
   if (!current || !sessionCan(session, current.propertyId)) {
     return NextResponse.json({ error: "Binding not found." }, { status: 404 });
   }
-  await prisma.propertyBinding.delete({ where: { id } });
+  if (delTenant) {
+    await withTenant(delTenant, (tx) => tx.propertyBinding.delete({ where: { id } }));
+  } else {
+    await prismaService().propertyBinding.delete({ where: { id } });
+  }
   await logAudit({
     actorEmail: session.email,
     action: "binding.remove",

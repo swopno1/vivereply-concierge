@@ -11,8 +11,9 @@
 // Room IDs are opaque backend identifiers (usually UUIDs, never enforced).
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, prismaService } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
+import { tenantFor, withTenant } from "@/lib/tenant-db";
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -86,10 +87,16 @@ export async function GET(req: NextRequest) {
   if (!sessionCan(session, propertyId)) {
     return NextResponse.json({ error: "Not authorized for this property." }, { status: 403 });
   }
-  const rows = await prisma.roomMapping.findMany({
-    where: { propertyId },
-    orderBy: { createdAt: "asc" },
-  });
+  const tenant = tenantFor(session, propertyId);
+  if (!tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const rows = await withTenant(tenant, (tx) =>
+    tx.roomMapping.findMany({
+      where: { propertyId },
+      orderBy: { createdAt: "asc" },
+    })
+  );
   return NextResponse.json(rows.map(shape));
 }
 
@@ -114,16 +121,30 @@ export async function POST(req: NextRequest) {
   if (!cleaned.ok) {
     return NextResponse.json({ error: cleaned.error }, { status: 400 });
   }
-  const existing = await prisma.roomMapping.findUnique({
-    where: { propertyId_slug: { propertyId, slug: cleaned.room.slug } },
-  });
+  const tenant = tenantFor(session, propertyId);
+  if (!tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  // FK honesty: creating for a ghost property would 500 on the FK —
+  // answer 404 instead.
+  const property = await prisma.property.findUnique({ where: { id: propertyId } });
+  if (!property) {
+    return NextResponse.json({ error: "Property not found." }, { status: 404 });
+  }
+  const existing = await withTenant(tenant, (tx) =>
+    tx.roomMapping.findUnique({
+      where: { propertyId_slug: { propertyId, slug: cleaned.room.slug } },
+    })
+  );
   if (existing) {
     return NextResponse.json(
       { error: "That slug already exists for this property — edit it instead." },
       { status: 409 }
     );
   }
-  const row = await prisma.roomMapping.create({ data: { propertyId, ...cleaned.room } });
+  const row = await withTenant(tenant, (tx) =>
+    tx.roomMapping.create({ data: { propertyId, ...cleaned.room } })
+  );
   return NextResponse.json(shape(row), { status: 201 });
 }
 
@@ -140,7 +161,16 @@ export async function PATCH(req: NextRequest) {
   if (!id) {
     return NextResponse.json({ error: "Row id is required." }, { status: 400 });
   }
-  const existing = await prisma.roomMapping.findUnique({ where: { id } });
+  // Owners read inside their own tenant (RLS confines the id lookup:
+  // another tenant's id reads as missing → same 404). Super-admins act
+  // cross-property (SERVICE PATH, marked).
+  const tenant = tenantFor(session);
+  if (session.role === "OWNER" && !tenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const existing = tenant
+    ? await withTenant(tenant, (tx) => tx.roomMapping.findUnique({ where: { id } }))
+    : await prismaService().roomMapping.findUnique({ where: { id } });
   if (!existing || !sessionCan(session, existing.propertyId)) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });
   }
@@ -156,14 +186,22 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: cleaned.error }, { status: 400 });
   }
   if (cleaned.room.slug !== existing.slug) {
-    const clash = await prisma.roomMapping.findUnique({
-      where: { propertyId_slug: { propertyId: existing.propertyId, slug: cleaned.room.slug } },
-    });
+    const clash = tenant
+      ? await withTenant(tenant, (tx) =>
+          tx.roomMapping.findUnique({
+            where: { propertyId_slug: { propertyId: existing.propertyId, slug: cleaned.room.slug } },
+          })
+        )
+      : await prismaService().roomMapping.findUnique({
+          where: { propertyId_slug: { propertyId: existing.propertyId, slug: cleaned.room.slug } },
+        });
     if (clash) {
       return NextResponse.json({ error: "That slug already exists for this property." }, { status: 409 });
     }
   }
-  const row = await prisma.roomMapping.update({ where: { id }, data: cleaned.room });
+  const row = tenant
+    ? await withTenant(tenant, (tx) => tx.roomMapping.update({ where: { id }, data: cleaned.room }))
+    : await prismaService().roomMapping.update({ where: { id }, data: cleaned.room });
   return NextResponse.json(shape(row));
 }
 
@@ -180,10 +218,20 @@ export async function DELETE(req: NextRequest) {
   if (!id) {
     return NextResponse.json({ error: "Row id is required." }, { status: 400 });
   }
-  const current = await prisma.roomMapping.findUnique({ where: { id } });
+  const delTenant = tenantFor(session);
+  if (session.role === "OWNER" && !delTenant) {
+    return NextResponse.json({ error: "Not authorized." }, { status: 401 });
+  }
+  const current = delTenant
+    ? await withTenant(delTenant, (tx) => tx.roomMapping.findUnique({ where: { id } }))
+    : await prismaService().roomMapping.findUnique({ where: { id } });
   if (!current || !sessionCan(session, current.propertyId)) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });
   }
-  await prisma.roomMapping.delete({ where: { id } });
+  if (delTenant) {
+    await withTenant(delTenant, (tx) => tx.roomMapping.delete({ where: { id } }));
+  } else {
+    await prismaService().roomMapping.delete({ where: { id } });
+  }
   return NextResponse.json({ deleted: true, slug: current.slug });
 }

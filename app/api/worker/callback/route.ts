@@ -9,7 +9,11 @@
 // token ceiling trips or the run already ended).
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+// SERVICE PATH (marked): first-party infrastructure callback (shared-secret
+// authed); the tenant varies per call and comes from the run row itself,
+// so tenant-scoping the reads is impossible — the exact run id + worker
+// secret are the authorization, not RLS.
+import { prismaService } from "@/lib/prisma";
 import { verifyWorkerSecret } from "@/lib/worker";
 import { overBudget, type RunStats } from "@/lib/onboarding";
 
@@ -42,7 +46,7 @@ export async function POST(req: NextRequest) {
   if (!runId || (type !== "progress" && type !== "complete" && type !== "failed")) {
     return NextResponse.json({ error: "runId and a valid type are required." }, { status: 400 });
   }
-  const run = await prisma.onboardingRun.findUnique({ where: { id: runId } });
+  const run = await prismaService().onboardingRun.findUnique({ where: { id: runId } });
   if (!run) {
     return NextResponse.json({ error: "Run not found." }, { status: 404 });
   }
@@ -52,14 +56,14 @@ export async function POST(req: NextRequest) {
 
   if (type === "failed") {
     const error = typeof body?.error === "string" && body.error ? body.error.slice(0, 500) : "Worker failed.";
-    await prisma.onboardingRun.update({ where: { id: runId }, data: { status: "FAILED", error } });
+    await prismaService().onboardingRun.update({ where: { id: runId }, data: { status: "FAILED", error } });
     return NextResponse.json({ stop: true });
   }
 
   const stats = mergeStats(run.stats, body?.stats);
   const breach = overBudget(stats);
   if (breach) {
-    await prisma.onboardingRun.update({
+    await prismaService().onboardingRun.update({
       where: { id: runId },
       data: {
         status: "PARTIAL",
@@ -71,13 +75,13 @@ export async function POST(req: NextRequest) {
 
   if (type === "complete") {
     const truncated = body?.stats?.truncated === true;
-    await prisma.onboardingRun.update({
+    await prismaService().onboardingRun.update({
       where: { id: runId },
       data: { status: truncated ? "PARTIAL" : "COMPLETE", stats: { ...stats, truncated } },
     });
     return NextResponse.json({ stop: true });
   }
 
-  await prisma.onboardingRun.update({ where: { id: runId }, data: { status: "RUNNING", stats } });
+  await prismaService().onboardingRun.update({ where: { id: runId }, data: { status: "RUNNING", stats } });
   return NextResponse.json({ stop: false });
 }

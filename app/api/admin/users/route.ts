@@ -7,7 +7,8 @@
 //     password: the recovery path, documented, not an accident.
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+// SERVICE PATH (marked): super-admin acts on any tenant's login rows — bypass by design.
+import { prismaService } from "@/lib/prisma";
 import { getSession, revokeUserSessions } from "@/lib/tenant";
 import { clientIp, logAudit } from "@/lib/audit";
 
@@ -25,11 +26,11 @@ export async function PATCH(req: NextRequest) {
   if (!id) {
     return NextResponse.json({ error: "User id is required." }, { status: 400 });
   }
-  const user = await prisma.user.findUnique({ where: { id } });
+  const user = await prismaService().user.findUnique({ where: { id } });
   if (!user) {
     return NextResponse.json({ error: "Login not found." }, { status: 404 });
   }
-  await prisma.user.update({ where: { id }, data: { active } });
+  await prismaService().user.update({ where: { id }, data: { active } });
   let revoked = 0;
   if (!active) {
     revoked = await revokeUserSessions(id);

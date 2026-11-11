@@ -13,7 +13,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, randomBytes } from "node:crypto";
-import { prisma } from "@/lib/prisma";
+// SERVICE PATH (marked): auth bootstrap runs before any tenant exists — bypass client by design (see Phase 1 PR service-path list).
+import { prismaService } from "@/lib/prisma";
 import {
   ADMIN_SESSION_COOKIE,
   MIN_PASSWORD_LEN,
@@ -49,7 +50,7 @@ async function uniquePropertyId(base: string): Promise<{ id: string; widgetKey: 
     const suffix = randomBytes(3).toString("hex");
     const id = `${base}-${suffix}`;
     const widgetKey = `key-${base}-${suffix}`.slice(0, 60);
-    const clash = await prisma.property
+    const clash = await prismaService().property
       .findFirst({ where: { OR: [{ id }, { widgetKey }] }, select: { id: true } })
       .catch(() => null);
     if (!clash) return { id, widgetKey };
@@ -80,14 +81,14 @@ export async function POST(req: NextRequest) {
 
   const since = new Date(Date.now() - THROTTLE_WINDOW_MIN * 60 * 1000);
   const counts = await Promise.all([
-    prisma.signupAttempt.count({ where: { email, ok: false, createdAt: { gt: since } } }),
-    prisma.signupAttempt.count({ where: { ip, ok: false, createdAt: { gt: since } } }),
+    prismaService().signupAttempt.count({ where: { email, ok: false, createdAt: { gt: since } } }),
+    prismaService().signupAttempt.count({ where: { ip, ok: false, createdAt: { gt: since } } }),
   ]).catch(() => [0, 0] as [number, number]);
   if (throttleDecision(counts[0], counts[1])) {
     return NextResponse.json({ error: "Too many attempts. Try again later." }, { status: 429 });
   }
   const logAttempt = (ok: boolean) =>
-    prisma.signupAttempt.create({ data: { email, ip, ok } }).catch(() => null);
+    prismaService().signupAttempt.create({ data: { email, ip, ok } }).catch(() => null);
 
   if (!turnstileToken || !(await verifyTurnstileToken(turnstileToken, ip))) {
     await logAttempt(false);
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
   // Duplicate (or bootstrap) email: 409, no account, no session.
   const taken =
     isBootstrapEmail(email) ||
-    (await prisma.user.findUnique({ where: { email }, select: { id: true } }).catch(() => null));
+    (await prismaService().user.findUnique({ where: { email }, select: { id: true } }).catch(() => null));
   if (taken) {
     await logAttempt(false);
     return NextResponse.json({ error: "This email is already registered. Log in instead." }, { status: 409 });
@@ -112,7 +113,7 @@ export async function POST(req: NextRequest) {
   }
   const rawToken = randomBytes(32).toString("base64url");
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
-  const user = await prisma.$transaction(async (tx) => {
+  const user = await prismaService().$transaction(async (tx) => {
     await tx.property.create({ data: { id: ids.id, name: resortName, widgetKey: ids.widgetKey, status: "ACTIVE" } });
     const created = await tx.user.create({
       data: {
@@ -144,10 +145,10 @@ export async function POST(req: NextRequest) {
     emailSent = false; // account stands; the owner resends from Settings
   }
   await logAttempt(true);
-  await prisma.signupAttempt.deleteMany({ where: { createdAt: { lt: since } } }).catch(() => null);
+  await prismaService().signupAttempt.deleteMany({ where: { createdAt: { lt: since } } }).catch(() => null);
   await logAudit({ actorEmail: email, action: "signup.success", propertyId: ids.id, detail: { resortName }, ip });
 
-  const row = await prisma.session
+  const row = await prismaService().session
     .create({ data: { userId: user.id, role: "OWNER", expiresAt: sessionExpiresAt() } })
     .catch(() => null);
   if (!row) {

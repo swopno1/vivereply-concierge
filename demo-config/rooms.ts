@@ -52,11 +52,13 @@ export function catalogueText(rooms: DemoRoom[] = DEMO_ROOMS): string {
 // property falls back to this file until it is seeded; any other property
 // without rows fails honestly instead of borrowing the demo's rooms.
 export async function catalogueForProperty(propertyId: string): Promise<DemoRoom[]> {
-  const { prisma } = await import("@/lib/prisma");
-  const rows = await prisma.roomMapping.findMany({
-    where: { propertyId },
-    orderBy: { createdAt: "asc" },
-  });
+  const { withTenant } = await import("@/lib/tenant-db");
+  const rows = await withTenant(propertyId, (tx) =>
+    tx.roomMapping.findMany({
+      where: { propertyId },
+      orderBy: { createdAt: "asc" },
+    })
+  );
   if (rows.length > 0) {
     return rows.map((r) => ({
       slug: r.slug,
@@ -79,8 +81,8 @@ export type CatalogueSource = "settings" | "demo-file" | "none";
 export async function describeCatalogueResolution(
   propertyId: string
 ): Promise<{ source: CatalogueSource; rooms: number }> {
-  const { prisma } = await import("@/lib/prisma");
-  const count = await prisma.roomMapping.count({ where: { propertyId } });
+  const { withTenant } = await import("@/lib/tenant-db");
+  const count = await withTenant(propertyId, (tx) => tx.roomMapping.count({ where: { propertyId } }));
   if (count > 0) return { source: "settings", rooms: count };
   if (propertyId === (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat")) {
     return { source: "demo-file", rooms: DEMO_ROOMS.length };

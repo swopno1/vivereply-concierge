@@ -9,7 +9,7 @@
 // seeding a domain row. In production (NODE_ENV=production) there is
 // no exception — only the approved list counts.
 
-import { prisma } from "@/lib/prisma";
+import { withTenant } from "@/lib/tenant-db";
 
 export function normalizeHostname(raw: string): string | null {
   const host = raw.trim().toLowerCase();
@@ -26,9 +26,14 @@ export async function isDomainApproved(propertyId: string, hostname: string): Pr
   const normalized = normalizeHostname(hostname);
   if (!normalized) return false;
   if (process.env.NODE_ENV !== "production" && normalized === "localhost") return true;
-  const row = await prisma.approvedDomain.findFirst({
-    where: { domain: normalized, propertyId, active: true },
-  });
+  // Tenant path: ApprovedDomain is RLS'd; the caller passes a verified
+  // propertyId (token/session/resolved). Call OUTSIDE tx blocks —
+  // helpers wrap internally; the nesting guard throws.
+  const row = await withTenant(propertyId, (tx) =>
+    tx.approvedDomain.findFirst({
+      where: { domain: normalized, propertyId, active: true },
+    })
+  );
   return row !== null;
 }
 

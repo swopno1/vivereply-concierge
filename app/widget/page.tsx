@@ -13,7 +13,7 @@ import { resolveWidgetProperty } from "@/demo-config/widget-keys";
 import { verifyChatToken } from "@/lib/auth";
 import { isDomainApproved } from "@/lib/domains";
 import { isPropertyActive } from "@/lib/tenant";
-import { prisma } from "@/lib/prisma";
+import { withTenant } from "@/lib/tenant-db";
 
 export const dynamic = "force-dynamic";
 
@@ -95,9 +95,9 @@ export default async function WidgetPage({
   // Chatbot identity (owner self-service): the owner's assistant name
   // heads the panel; their greeting line — or a named default — opens
   // the conversation. Absent profile = legacy default voice.
-  const profile = await prisma.propertyProfile
-    .findUnique({ where: { propertyId: token.propertyId } })
-    .catch(() => null);
+  const profile = await withTenant(token.propertyId, (tx) =>
+    tx.propertyProfile.findUnique({ where: { propertyId: token.propertyId } })
+  ).catch(() => null);
   const name = profile?.assistantName?.trim() || null;
   const greeting =
     profile?.greeting?.trim() ||
