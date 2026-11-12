@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withTenant } from "@/lib/tenant-db";
 import { isBridgeStatus, verifyBridgeRequest } from "@/lib/bridge";
+import { latestMessagesByConversation } from "@/lib/handoffs";
 
 export async function GET(req: NextRequest) {
   const auth = await verifyBridgeRequest(req.headers.get("authorization"));
@@ -38,23 +39,38 @@ export async function GET(req: NextRequest) {
       },
     })
   );
+  // §2c triage fields, one batched query: the newest message per listed
+  // conversation (the Suite badges "Guest replied" off lastMessageRole).
+  const latest = await withTenant(auth.propertyId, (tx) =>
+    latestMessagesByConversation(
+      tx,
+      rows.map((h) => h.conversationId)
+    )
+  );
   return NextResponse.json(
-    rows.map((h) => ({
-      id: h.id,
-      conversationId: h.conversationId,
-      propertyId: auth.propertyId,
-      reason: h.reason,
-      summary: h.summary,
-      status: h.status,
-      assignee: h.assignee,
-      createdAt: h.createdAt.toISOString(),
-      noteCount: h._count.notes,
-      notes: h.notes.map((n) => ({
-        id: n.id,
-        author: n.author,
-        body: n.body,
-        createdAt: n.createdAt.toISOString(),
-      })),
-    }))
+    rows.map((h) => {
+      const last = latest.get(h.conversationId) ?? null;
+      return {
+        id: h.id,
+        conversationId: h.conversationId,
+        propertyId: auth.propertyId,
+        reason: h.reason,
+        summary: h.summary,
+        status: h.status,
+        assignee: h.assignee,
+        guestPhone: h.guestPhone,
+        guestEmail: h.guestEmail,
+        lastMessageRole: last?.role ?? null,
+        lastMessageAt: last ? last.at.toISOString() : null,
+        createdAt: h.createdAt.toISOString(),
+        noteCount: h._count.notes,
+        notes: h.notes.map((n) => ({
+          id: n.id,
+          author: n.author,
+          body: n.body,
+          createdAt: n.createdAt.toISOString(),
+        })),
+      };
+    })
   );
 }

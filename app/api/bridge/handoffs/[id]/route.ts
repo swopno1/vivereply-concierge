@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withTenant } from "@/lib/tenant-db";
 import { isBridgeStatus, verifyBridgeRequest } from "@/lib/bridge";
+import { applyHandoffSideEffects, type HandoffTransition } from "@/lib/handoffs";
 
 async function inProperty(propertyId: string, id: string) {
   return withTenant(propertyId, (tx) =>
@@ -23,6 +24,10 @@ async function inProperty(propertyId: string, id: string) {
 }
 
 function shape(h: NonNullable<Awaited<ReturnType<typeof inProperty>>>, propertyId: string) {
+  // §2c: transcript entries carry author; the last entry doubles as the
+  // triage pair (same values the list computes with its batched query).
+  const transcript = h.conversation.messages;
+  const last = transcript.length > 0 ? transcript[transcript.length - 1] : null;
   return {
     id: h.id,
     conversationId: h.conversationId,
@@ -31,6 +36,10 @@ function shape(h: NonNullable<Awaited<ReturnType<typeof inProperty>>>, propertyI
     summary: h.summary,
     status: h.status,
     assignee: h.assignee,
+    guestPhone: h.guestPhone,
+    guestEmail: h.guestEmail,
+    lastMessageRole: last?.role ?? null,
+    lastMessageAt: last ? last.createdAt.toISOString() : null,
     createdAt: h.createdAt.toISOString(),
     notes: h.notes.map((n) => ({
       id: n.id,
@@ -38,8 +47,9 @@ function shape(h: NonNullable<Awaited<ReturnType<typeof inProperty>>>, propertyI
       body: n.body,
       createdAt: n.createdAt.toISOString(),
     })),
-    transcript: h.conversation.messages.map((m) => ({
+    transcript: transcript.map((m) => ({
       role: m.role,
+      author: m.author,
       content: m.content,
       createdAt: m.createdAt.toISOString(),
     })),
@@ -91,12 +101,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const existing = await withTenant(auth.propertyId, (tx) =>
     tx.handoffRecord.findFirst({
       where: { id, conversation: { propertyId: auth.propertyId } },
+      include: { conversation: { select: { language: true } } },
     })
   );
   if (!existing) {
     return NextResponse.json({ error: "Handoff not found." }, { status: 404 });
   }
-  await withTenant(auth.propertyId, (tx) => tx.handoffRecord.update({ where: { id }, data: updates }));
+  // Hand-back / re-pause side effects (§2b): Close hands the guest back
+  // to the bot when no active handoff remains (bot-return line included);
+  // reopen pauses again. Transitional no-ops just recompute the mirror.
+  const transition: HandoffTransition =
+    updates.status === "CLOSED" && existing.status !== "CLOSED"
+      ? "close"
+      : existing.status === "CLOSED" && updates.status !== undefined && updates.status !== "CLOSED"
+        ? "reopen"
+        : "other";
+  const lang = existing.conversation.language === "bn" ? "bn" : "en";
+  await withTenant(auth.propertyId, async (tx) => {
+    await tx.handoffRecord.update({ where: { id }, data: updates });
+    await applyHandoffSideEffects(tx, { conversationId: existing.conversationId, transition, lang });
+  });
   const handoff = await inProperty(auth.propertyId, id);
   if (!handoff) {
     return NextResponse.json({ error: "Handoff not found." }, { status: 404 });

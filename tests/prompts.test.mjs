@@ -108,3 +108,14 @@ describe("systemPrompt card-details rule", () => {
     }
   });
 });
+
+describe("systemPrompt staff-continuity rule", () => {
+  it("tells the model to continue naturally after staff help, both languages", () => {
+    for (const lang of ["en", "bn"]) {
+      const p = systemPrompt(lang, null, ROOMS, null, { resortPay: false });
+      assert.ok(p.includes("the guest was helped by a person"), lang);
+      assert.ok(p.includes("never repeat or contradict what staff said"), lang);
+      assert.ok(p.includes("don't claim their words as your own"), lang);
+    }
+  });
+});

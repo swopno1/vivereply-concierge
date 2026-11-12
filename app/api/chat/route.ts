@@ -31,6 +31,7 @@ import { isPropertyActive } from "@/lib/tenant";
 import { resortPaymentUrl } from "@/lib/resort-pay";
 import { formatTaka } from "@/demo-config/rates";
 import { gateDecision, monthStartUtc, pauseMessage } from "@/lib/billing";
+import { appendHandoffNotice, ensureConversationHandoff, runStaffModeTurn } from "@/lib/handoffs";
 
 /**
  * Human one-liners for the streamed "Checking…" status. Built ONLY from
@@ -137,7 +138,7 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       start(controller) {
         controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ type: "done", reply, cards: [], conversationId: null })}\n\n`)
+          encoder.encode(`data: ${JSON.stringify({ type: "done", reply, cards: [], conversationId: null, replyRole: "assistant" })}\n\n`)
         );
         controller.close();
       },
@@ -215,7 +216,7 @@ export async function POST(req: NextRequest) {
         const stream = new ReadableStream({
           start(controller) {
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: "done", reply, cards: [], conversationId: null })}\n\n`)
+              encoder.encode(`data: ${JSON.stringify({ type: "done", reply, cards: [], conversationId: null, replyRole: "assistant" })}\n\n`)
             );
             controller.close();
           },
@@ -312,9 +313,12 @@ export async function POST(req: NextRequest) {
   // still running — the whole point. Auth, conversation setup, and the
   // user message above stay outside the stream, so they still return
   // proper JSON errors. Events: { type: "phase", phase, detail? },
-  // { type: "done", reply, conversationId, cards },
-  // { type: "error", error }. The assistant message is saved BEFORE the
-  // done event, exactly as the old JSON contract did.
+  // { type: "done", reply, conversationId, cards, replyRole,
+  //   systemNotice? }, { type: "error", error }. replyRole tells the
+  // widget how to render (assistant bubble vs system line vs nothing
+  // when empty); systemNotice carries the handoff-turn contact ask.
+  // The assistant message is saved BEFORE the done event, exactly as
+  // the old JSON contract did.
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
@@ -322,6 +326,31 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
       };
       try {
+        // Staff-mode gate (§1/§4): a conversation with an active handoff
+        // belongs to the team — no agent, no adapter, no tools. Billing
+        // already ran above and keeps precedence. On infrastructure
+        // failure the gate fails open (like every chat-path guard) and
+        // the BOT path below either serves or errors honestly.
+        const staffTurn = await withTenant(tenant, (tx) =>
+          runStaffModeTurn(tx, {
+            conversationId: activeConversation.id,
+            guestMessage: message,
+            lang: activeConversation.language === "bn" ? "bn" : "en",
+          })
+        ).catch((e) => {
+          console.error("Staff gate failed, continuing to BOT path:", e instanceof Error ? e.message : e);
+          return null;
+        });
+        if (staffTurn) {
+          send({
+            type: "done",
+            reply: staffTurn.reply,
+            conversationId: activeConversation.id,
+            cards: [],
+            replyRole: staffTurn.replyRole,
+          });
+          return;
+        }
         // History window = the LAST 20 messages: newest-first fetch,
         // reversed back to chronological order for the model. (An
         // earlier cut used oldest-first + take, which silently dropped
@@ -336,6 +365,9 @@ export async function POST(req: NextRequest) {
           )
         ).reverse();
 
+        // Set when THIS turn actually inserts a handoff row (deduped
+        // re-requests don't count): drives the Amendment A1 notice.
+        let turnCreatedHandoff = false;
         const db: ToolDb = {
           hasQuote: async (cid, roomSlug, checkIn, checkOut) => {
             const logs = await withTenant(tenant, (tx) =>
@@ -431,15 +463,10 @@ export async function POST(req: NextRequest) {
             return null;
           },
           createHandoff: async (cid, reason, summary) => {
-            await withTenant(tenant, (tx) =>
-              tx.handoffRecord.create({ data: { conversationId: cid, reason, summary } })
+            const result = await withTenant(tenant, (tx) =>
+              ensureConversationHandoff(tx, { conversationId: cid, reason, summary })
             );
-            await withTenant(tenant, (tx) =>
-              tx.conversation.update({
-                where: { id: cid },
-                data: { status: "HANDED_OFF" },
-              })
-            );
+            if (result.created) turnCreatedHandoff = true;
           },
           // Resort payment pointer: the booking code comes from this
           // conversation's draft log (server-side, never the model), the
@@ -654,6 +681,40 @@ export async function POST(req: NextRequest) {
             data: { updatedAt: new Date() },
           })
         );
+        // Amendment A1: the turn that created a handoff ends with the
+        // contact ask (persisted right after the reply, like every
+        // system line). The resort phone is read only on this path.
+        let systemNotice: {
+          id: string;
+          role: "system";
+          author: null;
+          content: string;
+          createdAt: string;
+        } | null = null;
+        if (turnCreatedHandoff) {
+          const profile = await withTenant(tenant, (tx) =>
+            tx.propertyProfile.findUnique({
+              where: { propertyId: tenant },
+              select: { phone: true },
+            })
+          ).catch(() => null);
+          const trimmedPhone = profile?.phone?.trim() ?? "";
+          const phone = trimmedPhone ? trimmedPhone : null;
+          const row = await withTenant(tenant, (tx) =>
+            appendHandoffNotice(tx, {
+              conversationId: activeConversation.id,
+              lang: activeConversation.language === "bn" ? "bn" : "en",
+              resortPhone: phone,
+            })
+          );
+          systemNotice = {
+            id: row.id,
+            role: "system",
+            author: null,
+            content: row.content,
+            createdAt: row.createdAt.toISOString(),
+          };
+        }
         const turnLogs = await withTenant(tenant, (tx) =>
           tx.toolCallLog.findMany({
             where: { conversationId: activeConversation.id, createdAt: { gte: turnStart } },
@@ -663,7 +724,14 @@ export async function POST(req: NextRequest) {
         const cards = buildCards(
           turnLogs.map((l) => ({ toolName: l.toolName, input: l.input, output: l.output }))
         );
-        send({ type: "done", reply, conversationId: activeConversation.id, cards });
+        send({
+          type: "done",
+          reply,
+          conversationId: activeConversation.id,
+          cards,
+          replyRole: "assistant",
+          ...(systemNotice ? { systemNotice } : {}),
+        });
       } catch (err) {
         console.error("Agent error:", err instanceof Error ? err.message : err);
         send({ type: "error", error: "The assistant is unavailable right now. Please try again." });

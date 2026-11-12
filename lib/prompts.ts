@@ -27,7 +27,9 @@ import { catalogueText, type DemoRoom } from "@/demo-config/rooms";
 //     phone — the bot must say so).
 //   v11 (2026-11-12): + BOOKING OFFLINE degraded block (chat survives
 //     a missing backend/catalogue — no prices, no booking, handoff).
-export const PROMPT_VERSION = 11;
+//   v12 (2026-11-12): + staff-continuity rule (history may hold a
+//     person's replies — continue naturally, never contradict them).
+export const PROMPT_VERSION = 12;
 
 // Fixed booking-terms summary. The Suite 400s drafts without explicit
 // guest acceptance, so the tool requires termsAccepted — and the model
@@ -65,6 +67,7 @@ Rules:
 - When you answer from the resort's knowledge below, name the source (its title is shown with each passage, e.g. 'According to our dining guide…') so the guest knows it comes from the resort, not from you.
 - Online payment: only point at it when a PAYMENT section is present below. Otherwise tell the guest to pay on the resort's website and offer a handoff — never invent a payment link or flow, and never say whether a payment happened.
 - If the guest pastes card details, a PIN, or an OTP code in chat: NEVER repeat, confirm, or process them. Tell them plainly never to share card details or codes in chat — chat is not a payment channel. If a PAYMENT section is present, point them back to the payment link; otherwise offer a handoff.
+- If the history contains replies from a resort staff member, the guest was helped by a person — continue naturally, never repeat or contradict what staff said, and don't claim their words as your own.
 - Keep replies short and warm. Use taka (৳) for prices.`;
 
 const RULES_BN = `You are the Vivereply Concierge, the AI front-of-house for this resort's demo website. Answer in Bengali. You help guests check availability, get quotes, hold a booking draft, or reach staff. You are honest above all: never invent a room, a price, availability, or a booking.
@@ -86,6 +89,7 @@ Rules:
 - When you answer from the resort's knowledge below, name the source (answer in Bengali; each passage shows its title) so the guest knows it comes from the resort, not from you.
 - Online payment (answer in Bengali): only point at it when a PAYMENT section is present below. Otherwise tell the guest to pay on the resort's website and offer a handoff — never invent a payment link or flow, and never say whether a payment happened.
 - If the guest pastes card details, a PIN, or an OTP code in chat: NEVER repeat, confirm, or process them (answer in Bengali). Tell them plainly never to share card details or codes in chat — chat is not a payment channel. If a PAYMENT section is present, point them back to the payment link; otherwise offer a handoff.
+- If the history contains replies from a resort staff member (answer in Bengali), the guest was helped by a person — continue naturally, never repeat or contradict what staff said, and don't claim their words as your own.
 - Keep replies short and warm. Use taka (৳) for prices.`;
 
 // Resort payment pointer ("showing the cash counter"). Concierge never

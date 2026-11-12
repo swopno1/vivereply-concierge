@@ -1,17 +1,17 @@
 // Staff iframe widget UI (P3). Client component rendered bare inside the
 // client dashboard's iframe. Same-origin calls to /api/bridge/* carry the
 // embed token (never a bridge key — keys must never reach a browser). Full
-// staff loop: filter by status, read the transcript, add follow-up notes,
-// assign, and close/reopen. A 401 means the 15-minute token died: the
-// widget says so plainly and stops (the dashboard mints a fresh token per
-// page load, so a dashboard refresh fixes it).
+// staff loop: filter by status, read the transcript, reply to the guest,
+// add follow-up notes, assign, and close/reopen. A 401 means the 15-minute
+// token died: the widget says so plainly and stops (the dashboard mints a
+// fresh token per page load, so a dashboard refresh fixes it).
 
 "use client";
 
 import { useEffect, useState } from "react";
 
 type Note = { id: string; author: string; body: string; createdAt: string };
-type TranscriptMsg = { role: string; content: string; createdAt: string };
+type TranscriptMsg = { role: string; author: string | null; content: string; createdAt: string };
 type Handoff = {
   id: string;
   conversationId: string;
@@ -19,6 +19,8 @@ type Handoff = {
   summary: string;
   status: string;
   assignee: string | null;
+  guestPhone: string | null;
+  guestEmail: string | null;
   createdAt: string;
   noteCount: number;
   notes: Note[];
@@ -34,12 +36,13 @@ export default function StaffEmbed({ token, propertyId }: { token: string; prope
   const [detail, setDetail] = useState<Handoff | null>(null);
   const [author, setAuthor] = useState("");
   const [noteBody, setNoteBody] = useState("");
+  const [replyBody, setReplyBody] = useState("");
   const [assignee, setAssignee] = useState("");
   const [message, setMessage] = useState("");
   const [expired, setExpired] = useState(false);
   const [loading, setLoading] = useState(true);
-  // One in-flight detail load / mutation at a time ("note" | "assign" |
-  // status value): buttons disable + relabel while set, so a
+  // One in-flight detail load / mutation at a time ("note" | "reply" |
+  // "assign" | status value): buttons disable + relabel while set, so a
   // double-click can neither double-post nor race two moves.
   const [busy, setBusy] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -120,6 +123,37 @@ export default function StaffEmbed({ token, propertyId }: { token: string; prope
         return;
       }
       setNoteBody("");
+      await loadDetail(detail.id);
+      await loadList(filter);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function sendReply() {
+    if (!detail || !author.trim() || !replyBody.trim()) {
+      setMessage("Author and reply text are required.");
+      return;
+    }
+    if (busy) return;
+    setMessage("");
+    setBusy("reply");
+    try {
+      const res = await fetch(`/api/bridge/handoffs/${detail.id}/replies`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ author: author.trim(), body: replyBody.trim() }),
+      });
+      if (res.status === 401) {
+        setExpired(true);
+        return;
+      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error || "Could not send the reply.");
+        return;
+      }
+      setReplyBody("");
       await loadDetail(detail.id);
       await loadList(filter);
     } finally {
@@ -261,21 +295,93 @@ export default function StaffEmbed({ token, propertyId }: { token: string; prope
             </span>
           </div>
 
+          {(detail.guestPhone || detail.guestEmail) && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-200 pt-2 text-sm">
+              <span className="text-xs font-semibold text-gray-500">Guest contact</span>
+              {detail.guestPhone && (
+                <a
+                  href={`tel:${detail.guestPhone.replace(/\s+/g, "")}`}
+                  className="text-gray-900 underline underline-offset-2"
+                >
+                  {detail.guestPhone}
+                </a>
+              )}
+              {detail.guestEmail && (
+                <a href={`mailto:${detail.guestEmail}`} className="text-gray-900 underline underline-offset-2">
+                  {detail.guestEmail}
+                </a>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-col gap-2">
-            {(detail.transcript ?? []).map((m, i) => (
-              <div
-                key={i}
-                className={`max-w-[85%] rounded-2xl px-3 py-1.5 text-sm leading-relaxed ${
-                  m.role === "user" ? "self-end bg-black text-white" : "self-start bg-gray-100 text-gray-900"
-                }`}
+            {(detail.transcript ?? []).map((m, i) =>
+              m.role === "user" ? (
+                <div
+                  key={i}
+                  className="max-w-[85%] self-end rounded-2xl bg-black px-3 py-1.5 text-sm leading-relaxed text-white"
+                >
+                  {m.content}
+                </div>
+              ) : m.role === "staff" ? (
+                <div
+                  key={i}
+                  className="max-w-[85%] self-start rounded-2xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm leading-relaxed text-gray-900"
+                >
+                  <p className="text-xs font-semibold text-sky-800">
+                    {m.author ? `${m.author} (staff)` : "Staff reply"}
+                  </p>
+                  {m.content}
+                </div>
+              ) : m.role === "system" ? (
+                <p key={i} className="self-center text-center text-xs text-gray-400">
+                  {m.content}
+                </p>
+              ) : (
+                <div
+                  key={i}
+                  className="max-w-[85%] self-start rounded-2xl bg-gray-100 px-3 py-1.5 text-sm leading-relaxed text-gray-900"
+                >
+                  {m.content}
+                </div>
+              )
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2 border-t border-gray-200 pt-2">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Reply to guest</p>
+              <p className="text-xs text-gray-500">The guest sees this in the widget.</p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={author}
+                onChange={(e) => setAuthor(e.target.value)}
+                placeholder="Your name"
+                aria-label="Your name"
+                className="w-36 shrink-0 rounded-full border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-black"
+              />
+              <input
+                value={replyBody}
+                onChange={(e) => setReplyBody(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && sendReply()}
+                placeholder="Write to the guest…"
+                aria-label="Reply text"
+                className="min-w-0 flex-1 rounded-full border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-black"
+              />
+              <button
+                onClick={sendReply}
+                disabled={busy !== null}
+                className="shrink-0 rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
               >
-                {m.content}
-              </div>
-            ))}
+                {busy === "reply" ? "Sending…" : "Send"}
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-col gap-1 border-t border-gray-200 pt-2">
             <p className="text-xs font-semibold text-gray-500">Follow-up notes</p>
+            <p className="text-xs text-gray-500">Internal — the guest never sees these.</p>
             {detail.notes.length === 0 && (
               <p className="text-sm text-gray-500">No notes yet.</p>
             )}
@@ -289,16 +395,11 @@ export default function StaffEmbed({ token, propertyId }: { token: string; prope
           <div className="flex flex-col gap-2 border-t border-gray-200 pt-2">
             <div className="flex gap-2">
               <input
-                value={author}
-                onChange={(e) => setAuthor(e.target.value)}
-                placeholder="Your name"
-                className="w-36 shrink-0 rounded-full border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-black"
-              />
-              <input
                 value={noteBody}
                 onChange={(e) => setNoteBody(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addNote()}
                 placeholder="Add a follow-up note…"
+                aria-label="Note text"
                 className="min-w-0 flex-1 rounded-full border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-black"
               />
               <button

@@ -111,6 +111,7 @@ export default async function WidgetPage({
       greeting={greeting}
       token={params.token ?? ""}
       source="widget"
+      propertyKey={params.key ?? ""}
     />
   );
 }

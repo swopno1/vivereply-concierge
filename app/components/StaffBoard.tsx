@@ -2,15 +2,15 @@
 
 // In-app staff board (session auth, same-origin cookies). The triage loop
 // the old /staff page lacked: filter by status with live counts, a compact
-// list, one transcript at a time, notes, assignment, and resolve/reopen —
-// the same workflow as the client-dashboard iframe, for owners working
-// directly in the app. Plain-language statuses throughout: staff triage
-// attention, not enum values.
+// list, one transcript at a time, guest replies, notes, assignment, and
+// resolve/reopen — the same workflow as the client-dashboard iframe, for
+// owners working directly in the app. Plain-language statuses throughout:
+// staff triage attention, not enum values.
 
 import { useEffect, useState } from "react";
 
 type Note = { id: string; author: string; body: string; createdAt: string };
-type TranscriptMsg = { role: string; content: string; createdAt: string };
+type TranscriptMsg = { role: string; author: string | null; content: string; createdAt: string };
 type DraftRef = {
   guestFirstName: string | null;
   room: string | null;
@@ -29,7 +29,12 @@ type Row = {
   noteCount: number;
   draft: DraftRef | null;
 };
-type Detail = Row & { notes: Note[]; transcript: TranscriptMsg[] };
+type Detail = Row & {
+  notes: Note[];
+  transcript: TranscriptMsg[];
+  guestPhone: string | null;
+  guestEmail: string | null;
+};
 
 const FILTERS = [
   { value: "OPEN", label: "Needs attention" },
@@ -75,13 +80,14 @@ export default function StaffBoard({
   const [detailLoading, setDetailLoading] = useState(false);
   const [author, setAuthor] = useState(defaultAuthor);
   const [noteBody, setNoteBody] = useState("");
+  const [replyBody, setReplyBody] = useState("");
   const [assignee, setAssignee] = useState("");
   const [editingAssignee, setEditingAssignee] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  // One in-flight mutation at a time: keys are "note" | "assign" | status
-  // value. Buttons disable + relabel while set, so a double-click can
-  // neither double-post a note nor race two status moves.
+  // One in-flight mutation at a time: keys are "note" | "reply" |
+  // "assign" | status value. Buttons disable + relabel while set, so a
+  // double-click can neither double-post nor race two moves.
   const [busy, setBusy] = useState<string | null>(null);
 
   async function loadList(nextFilter: string) {
@@ -165,6 +171,32 @@ export default function StaffBoard({
         return;
       }
       setNoteBody("");
+      await refreshDetail(detail.id);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function sendReply() {
+    if (!detail || !author.trim() || !replyBody.trim()) {
+      setMessage("Your name and the reply text are both required.");
+      return;
+    }
+    if (busy) return;
+    setMessage(null);
+    setBusy("reply");
+    try {
+      const res = await fetch(`/api/admin/handoffs/${detail.id}/replies`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ propertyId, author: author.trim(), body: replyBody.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMessage(data?.error ?? "Could not send the reply.");
+        return;
+      }
+      setReplyBody("");
       await refreshDetail(detail.id);
     } finally {
       setBusy(null);
@@ -414,26 +446,100 @@ export default function StaffBoard({
                 )}
               </div>
 
+              {(detail.guestPhone || detail.guestEmail) && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-200 pt-2 text-sm">
+                  <span className="text-xs font-semibold text-gray-500">Guest contact</span>
+                  {detail.guestPhone && (
+                    <a
+                      href={`tel:${detail.guestPhone.replace(/\s+/g, "")}`}
+                      className="text-gray-900 underline underline-offset-2 hover:text-black"
+                    >
+                      {detail.guestPhone}
+                    </a>
+                  )}
+                  {detail.guestEmail && (
+                    <a
+                      href={`mailto:${detail.guestEmail}`}
+                      className="text-gray-900 underline underline-offset-2 hover:text-black"
+                    >
+                      {detail.guestEmail}
+                    </a>
+                  )}
+                </div>
+              )}
+
               <div className="flex max-h-96 flex-col gap-2 overflow-y-auto border-t border-gray-200 pt-2">
                 {detail.transcript.length === 0 && (
                   <p className="text-sm text-gray-500">No messages in this conversation.</p>
                 )}
-                {detail.transcript.map((m, i) => (
-                  <div
-                    key={i}
-                    className={`max-w-[85%] rounded-2xl px-3 py-1.5 text-sm leading-relaxed ${
-                      m.role === "user"
-                        ? "self-end bg-black text-white"
-                        : "self-start bg-gray-100 text-gray-900"
-                    }`}
+                {detail.transcript.map((m, i) =>
+                  m.role === "user" ? (
+                    <div
+                      key={i}
+                      className="max-w-[85%] self-end rounded-2xl bg-black px-3 py-1.5 text-sm leading-relaxed text-white"
+                    >
+                      {m.content}
+                    </div>
+                  ) : m.role === "staff" ? (
+                    <div
+                      key={i}
+                      className="max-w-[85%] self-start rounded-2xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm leading-relaxed text-gray-900"
+                    >
+                      <p className="text-xs font-semibold text-sky-800">
+                        {m.author ? `${m.author} (staff)` : "Staff reply"}
+                      </p>
+                      {m.content}
+                    </div>
+                  ) : m.role === "system" ? (
+                    <p key={i} className="self-center text-center text-xs text-gray-400">
+                      {m.content}
+                    </p>
+                  ) : (
+                    <div
+                      key={i}
+                      className="max-w-[85%] self-start rounded-2xl bg-gray-100 px-3 py-1.5 text-sm leading-relaxed text-gray-900"
+                    >
+                      {m.content}
+                    </div>
+                  )
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2 border-t border-gray-200 pt-2">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Reply to guest</p>
+                  <p className="text-xs text-gray-500">The guest sees this in the widget.</p>
+                </div>
+                <input
+                  value={author}
+                  onChange={(e) => setAuthor(e.target.value)}
+                  placeholder="Your name"
+                  aria-label="Your name"
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-black"
+                />
+                <div className="flex gap-2">
+                  <input
+                    value={replyBody}
+                    onChange={(e) => setReplyBody(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && void sendReply()}
+                    placeholder="Write to the guest…"
+                    aria-label="Reply text"
+                    className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-black"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void sendReply()}
+                    disabled={busy !== null}
+                    className="shrink-0 rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
                   >
-                    {m.content}
-                  </div>
-                ))}
+                    {busy === "reply" ? "Sending…" : "Send reply"}
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-col gap-1 border-t border-gray-200 pt-2">
                 <p className="text-xs font-semibold text-gray-500">Follow-up notes</p>
+                <p className="text-xs text-gray-500">Internal — the guest never sees these.</p>
                 {detail.notes.length === 0 && (
                   <p className="text-sm text-gray-500">No notes yet.</p>
                 )}
@@ -448,13 +554,6 @@ export default function StaffBoard({
               </div>
 
               <div className="flex flex-col gap-2 border-t border-gray-200 pt-2">
-                <input
-                  value={author}
-                  onChange={(e) => setAuthor(e.target.value)}
-                  placeholder="Your name"
-                  aria-label="Note author"
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-black"
-                />
                 <div className="flex gap-2">
                   <input
                     value={noteBody}

@@ -52,6 +52,10 @@ GET /api/bridge/handoffs?status=OPEN        # or IN_PROGRESS, CLOSED
   "summary": "25 colleagues…",
   "status": "OPEN",
   "assignee": null,
+  "guestPhone": null,
+  "guestEmail": null,
+  "lastMessageRole": "user",
+  "lastMessageAt": "2026-10-28T…",
   "createdAt": "2026-10-28T…",
   "noteCount": 1,
   "notes": [{ "id": "cm…", "author": "Rafi", "body": "Called back…", "createdAt": "…" }]
@@ -69,8 +73,13 @@ GET /api/bridge/handoffs/<id>
 → `200` the record as above, plus:
 
 ```json
-"transcript": [{ "role": "user", "content": "…", "createdAt": "…" }]
+"transcript": [{ "role": "staff", "author": "Rafi", "content": "…", "createdAt": "…" }]
 ```
+
+Transcript roles are `user`, `assistant`, `staff`, or `system`.
+`author` is set on staff messages only (elsewhere `null`). `system`
+entries are join/holding/return notices — render them as muted lines,
+never as bot bubbles, and never send them anywhere as bot words.
 
 Unknown id (or another property's) → `404 { "error": "Handoff not found." }`.
 
@@ -89,6 +98,11 @@ Content-Type: application/json
 - Send at least one field; anything else → `400`.
 - → `200` the full record (same shape as GET one).
 
+Side effects (continuity semantics): closing the last active handoff on
+a conversation hands the guest back to the bot and appends the bot-return
+notice to the thread; reopening pauses the bot again. See "Continuity
+semantics" below.
+
 ### Add a follow-up note
 
 ```
@@ -100,6 +114,38 @@ Content-Type: application/json
 
 - `author` required, ≤ 100 chars. `body` required, ≤ 2000 chars.
 - → `201 { "id", "handoffId", "author", "body", "createdAt" }`.
+- Notes are internal: staff only, never shown to the guest.
+
+### Reply to the guest
+
+```
+POST /api/bridge/handoffs/<id>/replies
+Content-Type: application/json
+
+{ "author": "Rafi", "body": "Yes — sea-facing rooms are free that weekend." }
+```
+
+- `author` required, ≤ 100 chars. `body` required, 1–2000 chars.
+- The reply lands in the guest's thread as a staff message; the widget
+  picks it up on its next poll. The first reply on a conversation is
+  preceded by a staff-joined system line, and an `OPEN` handoff moves to
+  `IN_PROGRESS` on reply.
+- → `201 { "message": { "id", "role": "staff", "author", "content",
+  "createdAt" }, "handoff": { "id", "status" } }`.
+- Replying to a `CLOSED` handoff → `409`: reopen first, then reply.
+
+### Continuity semantics
+
+- A conversation is in STAFF mode while it has an `OPEN` or
+  `IN_PROGRESS` handoff; otherwise the bot serves it. Close = hand-back
+  to the bot, reopen = pause again.
+- While in STAFF mode the bot stays silent: guest messages are saved
+  for staff to read, and the guest sees a holding line (once) instead
+  of bot answers.
+- List rows carry `lastMessageRole` / `lastMessageAt` (the newest
+  thread message, or nulls) plus the captured `guestPhone` /
+  `guestEmail` (nulls until the guest shares them). Badge "Guest
+  replied" when an active handoff's `lastMessageRole` is `"user"`.
 
 ## Client-side example (Node, server only)
 
