@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
 import { tenantFor, withTenant } from "@/lib/tenant-db";
 import { isBridgeStatus } from "@/lib/bridge";
+import { latestMessagesByConversation } from "@/lib/handoffs";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -83,19 +84,34 @@ export async function GET(req: NextRequest) {
       checkOut: typeof output.checkOut === "string" ? output.checkOut : null,
     });
   }
+  // §2c triage fields, one batched query (same as the bridge list):
+  // the newest message per listed conversation.
+  const latest = await withTenant(tenant, (tx) =>
+    latestMessagesByConversation(
+      tx,
+      rows.map((h) => h.conversationId)
+    )
+  );
   return NextResponse.json({
-    rows: rows.map((h) => ({
-      id: h.id,
-      conversationId: h.conversationId,
-      reason: h.reason,
-      summary: h.summary,
-      status: h.status,
-      assignee: h.assignee,
-      language: h.conversation.language,
-      createdAt: h.createdAt.toISOString(),
-      noteCount: h._count.notes,
-      draft: draftByConversation.get(h.conversationId) ?? null,
-    })),
+    rows: rows.map((h) => {
+      const last = latest.get(h.conversationId) ?? null;
+      return {
+        id: h.id,
+        conversationId: h.conversationId,
+        reason: h.reason,
+        summary: h.summary,
+        status: h.status,
+        assignee: h.assignee,
+        guestPhone: h.guestPhone,
+        guestEmail: h.guestEmail,
+        lastMessageRole: last?.role ?? null,
+        lastMessageAt: last ? last.at.toISOString() : null,
+        language: h.conversation.language,
+        createdAt: h.createdAt.toISOString(),
+        noteCount: h._count.notes,
+        draft: draftByConversation.get(h.conversationId) ?? null,
+      };
+    }),
     counts,
   });
 }

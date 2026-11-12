@@ -551,3 +551,40 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
   (5-room round-trip, old-Suite 404 line, currency refusal); widget
   unknown-key preserved; post-purge eval needs a real binding row for
   the eval property (flagged for Cosmo/founder).
+
+## 2026-11-12 — Handover F: staff↔guest continuity (branch)
+
+- Branch feature/staff-guest-continuity off main@1f39781.
+- Contract (§2): POST /api/bridge/handoffs/[id]/replies (201 shape,
+  OPEN→IN_PROGRESS, CLOSED→409, staff-joined line, audit
+  bridge.handoff_reply without the body) + admin twin (audit
+  admin.handoff_reply); PATCH side effects both routes via shared
+  lib/handoffs.ts (close-last → OPEN + bot-return line, reopen →
+  HANDED_OFF, else mirror); list/detail gain author + guestPhone/
+  guestEmail + lastMessageRole/At (batched DISTINCT ON); GET
+  /api/chat/messages (widget-token auth, 50/poll/soft-unknown-after,
+  120/min/IP limiter) + POST /api/chat/contact (400/404/409/{ok}).
+- Chat (§4 + A1/A2): staff-mode gate before booking resolution
+  (holding once then "", contact extraction first with confirm
+  instead of holding); createHandoff dedupes; done carries
+  replyRole everywhere (+ systemNotice on handoff turns); history
+  maps staff→assistant+prefix, drops system; prompt rule EN+BN,
+  v11 → v12.
+- Widget (§6 + A2): sessionStorage thread, history-on-mount,
+  10s visibility-aware poll with adopt-or-append dedupe, STAFF
+  banner + call link, contact form, staff/system rendering,
+  replyRole/systemNotice handling. Boards (§7): staff transcript
+  side, reply composers, contact blocks. Docs (§8) updated.
+- Schema (§5): Message.author?, HandoffRecord.guestPhone/Email?;
+  prisma validate + generate clean; NO policy changes (Message
+  already behind the conversation tenant policy). Live deploy
+  needs `prisma db push` for the three columns.
+- Evidence (sandbox, this branch): 250/250 unit (198 baseline +
+  38 staff-continuity + 13 guest-contact + 1 prompts); tsc clean;
+  webpack build green 57/57 with all four new routes present.
+  Route-auth/404 wiring has no repo harness (DB + Next runtime):
+  reviewed + covered live per the handover acceptance. Handover D
+  (Suite rooms endpoint) is unrelated to this PR — no dependency.
+- NOT verified here (needs live): full Cosmo acceptance list —
+  hold/reply/badge/close/return/reload/contact-form/typed-capture
+  flows on demo13 with the Suite board (Handover G).

@@ -205,6 +205,7 @@ model Message {
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   role           String
+  author         String?
   content        String
   createdAt      DateTime     @default(now())
 
@@ -234,6 +235,8 @@ model HandoffRecord {
   summary        String
   status         String        @default("OPEN")
   assignee       String?
+  guestPhone     String?
+  guestEmail     String?
   createdAt      DateTime      @default(now())
   notes          HandoffNote[]
 }

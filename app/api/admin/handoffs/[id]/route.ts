@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, sessionCan, sessionOwnerVerified, type Session } from "@/lib/tenant";
 import { tenantFor, withTenant } from "@/lib/tenant-db";
 import { isBridgeStatus } from "@/lib/bridge";
+import { applyHandoffSideEffects, type HandoffTransition } from "@/lib/handoffs";
 
 async function gate(propertyId: string): Promise<Session | NextResponse> {
   const session = await getSession();
@@ -34,10 +35,16 @@ function shape(h: {
   summary: string;
   status: string;
   assignee: string | null;
+  guestPhone: string | null;
+  guestEmail: string | null;
   createdAt: Date;
   notes: { id: string; author: string; body: string; createdAt: Date }[];
-  conversation: { messages: { role: string; content: string; createdAt: Date }[] };
+  conversation: { messages: { role: string; author: string | null; content: string; createdAt: Date }[] };
 }) {
+  // §2c: transcript entries carry author; the last entry doubles as the
+  // triage pair (same values the list computes with its batched query).
+  const transcript = h.conversation.messages;
+  const last = transcript.length > 0 ? transcript[transcript.length - 1] : null;
   return {
     id: h.id,
     conversationId: h.conversationId,
@@ -45,6 +52,10 @@ function shape(h: {
     summary: h.summary,
     status: h.status,
     assignee: h.assignee,
+    guestPhone: h.guestPhone,
+    guestEmail: h.guestEmail,
+    lastMessageRole: last?.role ?? null,
+    lastMessageAt: last ? last.createdAt.toISOString() : null,
     createdAt: h.createdAt.toISOString(),
     notes: h.notes.map((n) => ({
       id: n.id,
@@ -52,8 +63,9 @@ function shape(h: {
       body: n.body,
       createdAt: n.createdAt.toISOString(),
     })),
-    transcript: h.conversation.messages.map((m) => ({
+    transcript: transcript.map((m) => ({
       role: m.role,
+      author: m.author,
       content: m.content,
       createdAt: m.createdAt.toISOString(),
     })),
@@ -118,12 +130,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const existing = await withTenant(tenant, (tx) =>
     tx.handoffRecord.findFirst({
       where: { id, conversation: { propertyId } },
+      include: { conversation: { select: { language: true } } },
     })
   );
   if (!existing) {
     return NextResponse.json({ error: "Handoff not found." }, { status: 404 });
   }
-  await withTenant(tenant, (tx) => tx.handoffRecord.update({ where: { id }, data: updates }));
+  // Same hand-back / re-pause side effects as the bridge PATCH (§2b),
+  // through the shared helper — close of the last active handoff
+  // returns the guest to the bot (bot-return line included).
+  const transition: HandoffTransition =
+    updates.status === "CLOSED" && existing.status !== "CLOSED"
+      ? "close"
+      : existing.status === "CLOSED" && updates.status !== undefined && updates.status !== "CLOSED"
+        ? "reopen"
+        : "other";
+  const lang = existing.conversation.language === "bn" ? "bn" : "en";
+  await withTenant(tenant, async (tx) => {
+    await tx.handoffRecord.update({ where: { id }, data: updates });
+    await applyHandoffSideEffects(tx, { conversationId: existing.conversationId, transition, lang });
+  });
   const handoff = await withTenant(tenant, (tx) =>
     tx.handoffRecord.findFirst({
       where: { id, conversation: { propertyId } },

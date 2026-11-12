@@ -97,6 +97,36 @@ export async function checkForgotPasswordRateByIp(ip: string, now = new Date()):
   return { allowed: false, retryAfterSec };
 }
 
+// Guest-thread polling throttle (§2d): same bucket table, disjoint
+// keyspace ("guestmsgs:<ip>"), generous ceiling — an open widget polls
+// every ~10s (6/min), so 120/min/IP never trips a real guest and only
+// bites scrapers. Fail open with an alarm, like every throttle here.
+const GUEST_MESSAGES_IP_MAX_PER_MIN = 120;
+
+export async function checkGuestMessagesRateByIp(ip: string, now = new Date()): Promise<RateDecision> {
+  if (!ip) return { allowed: true };
+  const windowStart = windowStartOf(now);
+  const key = `guestmsgs:${ip.slice(0, 71)}`;
+  let row: { count: number };
+  try {
+    row = await prisma.ipRateBucket.upsert({
+      where: { ip_windowStart: { ip: key, windowStart } },
+      create: { ip: key, windowStart, count: 1 },
+      update: { count: { increment: 1 } },
+      select: { count: true },
+    });
+  } catch (e) {
+    console.error("guest-messages IP throttle blind (allowing request):", e instanceof Error ? e.message : e);
+    return { allowed: true };
+  }
+  prisma.ipRateBucket
+    .deleteMany({ where: { windowStart: { lt: new Date(now.getTime() - 2 * 3600_000) } } })
+    .catch(() => null);
+  if (row.count <= GUEST_MESSAGES_IP_MAX_PER_MIN) return { allowed: true };
+  const retryAfterSec = Math.max(1, Math.ceil((windowStart.getTime() + RATE_WINDOW_MS - now.getTime()) / 1000));
+  return { allowed: false, retryAfterSec };
+}
+
 // Same shape, keyed by client IP. A single scraper behind one address
 // gets cut off long before it can spend the property's whole budget.
 export async function checkChatRateByIp(ip: string, now = new Date()): Promise<RateDecision> {
