@@ -189,11 +189,38 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = buildToolDefinitions(
   DEMO_ROOMS.map((r) => r.slug)
 );
 
-export function toolDefinitionsFor(rooms: DemoRoom[], opts?: { resortPay?: boolean }): ToolDefinition[] {
+export type DegradedOpts = {
+  resortPay?: boolean;
+  // Degraded chat: the route states what resolved. hasSuite false →
+  // handoff only (booking tools need the backend); hasCatalogue false
+  // → the catalogue trio goes (no rooms to resolve). Defaults keep
+  // full mode for callers that predate degradation.
+  hasSuite?: boolean;
+  hasCatalogue?: boolean;
+};
+
+const SUITE_ONLY_TOOLS = new Set(["verify_booking", "lookup_booking_by_code", "request_booking_details"]);
+const CATALOGUE_TOOLS = new Set(["check_availability", "get_quote", "create_booking_draft"]);
+
+// Standard degraded result: never a throw — the model gets an honest
+// line plus the handoff instruction, and the turn continues.
+export const BOOKING_DEGRADED_MESSAGE =
+  "The resort's booking system is being set up. Explain that prices, availability, and booking aren't available yet — do not invent any — and offer to connect the guest with staff (request_handoff).";
+
+export function toolDefinitionsFor(rooms: DemoRoom[], opts?: DegradedOpts): ToolDefinition[] {
+  const suiteOn = opts?.hasSuite ?? true;
+  const catalogueOn = opts?.hasCatalogue ?? rooms.length > 0;
   return buildToolDefinitions(
     rooms.map((r) => r.slug),
     opts
-  );
+  ).filter((d) => {
+    const name = d.function.name;
+    // No suite → nothing bookable is offered at all (this also strips a
+    // resort-pay definition smuggled in by a mis-set flag).
+    if (!suiteOn && name !== "request_handoff") return false;
+    if (!catalogueOn && CATALOGUE_TOOLS.has(name)) return false;
+    return true;
+  });
 }
 
 function err(message: string): Record<string, unknown> {
@@ -230,11 +257,18 @@ function resolveRoom(args: StayArgs, rooms: DemoRoom[]): DemoRoom | Record<strin
 export function createToolExecutor(
   conversationId: string,
   db: ToolDb,
-  suite: SuiteAdapter,
+  suite: SuiteAdapter | null,
   catalogue: DemoRoom[],
-  opts?: { resortPay?: boolean }
+  opts?: DegradedOpts
 ) {
   const resortPayOn = opts?.resortPay === true;
+  // A null adapter forces suite-off even if a caller mis-sets the flag —
+  // the gate below must never let a null dereference through.
+  const suiteOn = (opts?.hasSuite ?? suite !== null) && suite !== null;
+  const catalogueOn = opts?.hasCatalogue ?? catalogue.length > 0;
+  // TS alias: every liveSuite call below already sits inside a
+  // try/catch that degrades to {error}, so this can never throw out.
+  const liveSuite = suite as SuiteAdapter;
   return async function execute(name: string, argsJson: string): Promise<unknown> {
     let args: Record<string, unknown>;
     try {
@@ -243,10 +277,21 @@ export function createToolExecutor(
       return err("Invalid tool arguments.");
     }
 
+    // Degraded gate (defensive twin of the definitions filter): a
+    // booking tool called without its dependency answers {error} with
+    // the handoff instruction — never throws, never touches the Suite.
+    if (!suiteOn && (SUITE_ONLY_TOOLS.has(name) || CATALOGUE_TOOLS.has(name))) {
+      return err(BOOKING_DEGRADED_MESSAGE);
+    }
+    if (!catalogueOn && CATALOGUE_TOOLS.has(name)) {
+      return err(BOOKING_DEGRADED_MESSAGE);
+    }
+
     // Resort payment pointer. The gate is enforced here too — not just
     // by hiding the definition — so a smuggled tool call fails closed
     // with a guest-safe message.
     if (name === "get_resort_payment_link") {
+      if (!suiteOn) return err(BOOKING_DEGRADED_MESSAGE);
       if (!resortPayOn) return err("This resort hasn't set up its payment page yet. Tell the guest to pay on the resort's website or offer a handoff to staff.");
       if (!(await db.hasDraft(conversationId))) {
         return err("There is no booking draft in this conversation yet. Confirm a quote and the guest's details first.");
@@ -293,7 +338,7 @@ export function createToolExecutor(
       const code = typeof args.code === "string" ? args.code.trim() : "";
       if (!code) return err("A booking code is needed to look a booking up. Ask the guest for their code.");
       try {
-        const found = await suite.lookupBookingByCode(code);
+        const found = await liveSuite.lookupBookingByCode(code);
         return {
           bookingCode: found.bookingCode,
           firstName: found.firstName,
@@ -315,7 +360,7 @@ export function createToolExecutor(
       const phone = typeof args.phone === "string" ? args.phone.trim() : "";
       if (!email && !phone) return err("An email address or phone number is needed. Ask the guest for one.");
       try {
-        await suite.requestBookingDetails({ ...(email ? { email } : {}), ...(phone ? { phone } : {}) });
+        await liveSuite.requestBookingDetails({ ...(email ? { email } : {}), ...(phone ? { phone } : {}) });
         return {
           sent: true,
           message: "If a booking exists for that contact, its details have been sent to the email address on the booking. For privacy, booking details are never shown in chat. Give the guest exactly this confirmation, and never say whether a booking was found.",
@@ -339,7 +384,7 @@ export function createToolExecutor(
 
     if (name === "check_availability") {
       try {
-        const availability = await suite.getAvailability(room.suiteRoomId, checkIn, checkOut);
+        const availability = await liveSuite.getAvailability(room.suiteRoomId, checkIn, checkOut);
         return { room: room.name, checkIn, checkOut, available: availability.available };
       } catch (e) {
         return err(
@@ -351,7 +396,7 @@ export function createToolExecutor(
 
     if (name === "get_quote") {
       try {
-        const availability = await suite.getAvailability(room.suiteRoomId, checkIn, checkOut);
+        const availability = await liveSuite.getAvailability(room.suiteRoomId, checkIn, checkOut);
         if (availability.available <= 0) {
           return err(`The ${room.name} is sold out for ${checkIn} to ${checkOut}. Offer another room or dates.`);
         }
@@ -408,7 +453,7 @@ export function createToolExecutor(
         return err("A booking is already being created in this conversation. Please wait a moment and try again.");
       }
       try {
-        const booking = await suite.createBooking(
+        const booking = await liveSuite.createBooking(
           room.suiteRoomId,
           { guestName, guestEmail, guestPhone },
           checkIn,

@@ -35,8 +35,8 @@ describe("segments", () => {
     const p = systemPrompt("en", null, undefined, { assistantName: "Aria", suggestionSegments: [] });
     assert.match(p, /Offer no travel\/dining\/transport advice/);
   });
-  it("prompt version bumped for the segments change", () => {
-    assert.equal(PROMPT_VERSION, 10);
+  it("prompt version bumped for the degraded-chat change", () => {
+    assert.equal(PROMPT_VERSION, 11);
   });
 });
 

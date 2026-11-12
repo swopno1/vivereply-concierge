@@ -28,6 +28,7 @@ import OwnerActions from "../../components/OwnerActions";
 import PropertyStatusToggle from "../../components/PropertyStatusToggle";
 import AuditTrail from "../../components/AuditTrail";
 import { CASES } from "@/eval/cases.mjs";
+import { BACKEND_FAILURE_TOOL_NAMES, isFailureOutput } from "@/lib/booking-mode";
 
 export const dynamic = "force-dynamic";
 
@@ -166,13 +167,7 @@ export default async function SettingsPage({
         where: {
           conversation: { propertyId },
           toolName: {
-            in: [
-              "check_availability",
-              "get_quote",
-              "create_booking_draft",
-              "lookup_booking_by_code",
-              "request_booking_details",
-            ],
+            in: BACKEND_FAILURE_TOOL_NAMES,
           },
         },
         orderBy: { createdAt: "desc" },
@@ -182,10 +177,7 @@ export default async function SettingsPage({
     ])
   );
   const backendFailures = recentLogs
-    .filter((l) => {
-      const out = l.output as { error?: unknown } | null;
-      return out !== null && typeof out === "object" && typeof out.error === "string";
-    })
+    .filter((l) => isFailureOutput(l.output))
     .slice(0, 10)
     .map((l) => ({
       toolName: l.toolName,
