@@ -449,3 +449,23 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
   lookup-code infra flake passed on retry), probes 10/10 zero
   skips (live RAG canary), 98/98 unit. Seed is fixture-only now;
   probes take B + canary from env (docs/seed-users.md).
+
+## 2026-11-12 — Handover A: decouple guest chat from booking adapter (branch)
+
+- Branch feature/decouple-chat-booking-adapter off main@6be92f0.
+  Resolution failure degrades the turn (BOOKING OFFLINE prompt
+  block, tools gated by dependency, one ToolCallLog failure row for
+  the owner feed) instead of ending it with an error banner. The
+  string "The resort's booking connection needs attention" is
+  REMOVED (grep over app/lib/tests/scripts/eval: zero hits).
+- Prompt v10 → v11 (BOOKING OFFLINE block, EN+BN); eval stamps the
+  new version automatically. Non-degraded turns byte-identical
+  (covered by test).
+- Evidence (sandbox, this branch): 179/179 unit green (162 baseline
+  + 17 new tests/chat-degraded.test.mjs), tsc clean, webpack build
+  green 55/55. Full-mode tool/prompt behavior unchanged (existing
+  tool-guards + prompts suites green unmodified except the version
+  pin 10 → 11).
+- NOT verified here (needs live): no-binding guest turn on a real
+  property, owner feed row visible in Settings, isolation probes.
+  Cosmo live steps per handover acceptance.

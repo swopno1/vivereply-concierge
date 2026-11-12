@@ -17,6 +17,7 @@ import { runAgent } from "@/lib/agent";
 import { createToolExecutor, toolDefinitionsFor, type ToolDb } from "@/lib/tools";
 import { adapterForProperty, FixtureSuiteAdapter } from "@/lib/suite";
 import { catalogueForProperty } from "@/demo-config/rooms";
+import { resolutionFailureRow, resolveBookingMode } from "@/lib/booking-mode";
 import { systemPrompt } from "@/lib/prompts";
 import { detectLanguage } from "@/lib/language";
 import { buildCards } from "@/lib/cards";
@@ -474,22 +475,31 @@ export async function POST(req: NextRequest) {
         };
 
         // Per-property backend + catalogue (adapter Phases 2-3): the
-        // token's property selects its Suite binding and its room list. A
-        // misconfigured property fails this turn honestly instead of
-        // borrowing another property's backend or rooms — the guest gets a
-        // generic line, the real cause goes to the log.
-        let suite;
-        let catalogue;
-        try {
-          suite = await adapterForProperty(activeConversation.propertyId);
-          catalogue = await catalogueForProperty(activeConversation.propertyId);
-        } catch (e) {
-          console.error(
-            "Suite binding failed:",
-            e instanceof Error ? e.message : e
-          );
-          send({ type: "error", error: "The resort's booking connection needs attention. Please try again later." });
-          return;
+        // token's property selects its Suite binding and its room list.
+        // Resolution failure DEGRADES the turn, never ends it — a dead
+        // guest chat is always worse than a degraded one. No suite →
+        // handoff-only tools; suite without catalogue → suite tools
+        // stay, catalogue tools go. The model is told (BOOKING OFFLINE
+        // prompt block), and the failure is recorded for the owner
+        // (Settings → Booking system → Recent backend failures) — the
+        // guest just gets honest answers, never an error banner.
+        const mode = await resolveBookingMode(activeConversation.propertyId, {
+          resolveSuite: adapterForProperty,
+          resolveCatalogue: catalogueForProperty,
+        });
+        const suite = mode.suite;
+        const catalogue = mode.catalogue;
+        const degraded = mode.degradedReason !== null;
+        if (mode.degradedReason) {
+          const reason = mode.degradedReason;
+          await withTenant(tenant, (tx) =>
+            tx.toolCallLog.create({ data: resolutionFailureRow(activeConversation.id, reason) })
+          ).catch((e) => {
+            console.error(
+              "concierge: degraded-row write failed",
+              e instanceof Error ? e.message : e
+            );
+          });
         }
         // Resort-pay pointer for THIS turn: on when the property
         // configured its own payment page AND runs a real Suite backend
@@ -503,9 +513,11 @@ export async function POST(req: NextRequest) {
             })
         ).catch(() => null);
         const resortPayOn =
-          bindingPay?.paymentPageUrl != null && !(suite instanceof FixtureSuiteAdapter);
+          mode.hasSuite && bindingPay?.paymentPageUrl != null && !(suite instanceof FixtureSuiteAdapter);
         const baseExecute = createToolExecutor(activeConversation.id, db, suite, catalogue, {
           resortPay: resortPayOn,
+          hasSuite: mode.hasSuite,
+          hasCatalogue: mode.hasCatalogue,
         });
         // Reply identity (onboarding Phase 3): absent profile = default voice.
         const profile = await withTenant(tenant, (tx) =>
@@ -515,7 +527,7 @@ export async function POST(req: NextRequest) {
         // which property resolved to which backend, how many rooms, and
         // whether the voice is custom. The P4 isolation proof reads these.
         console.log(
-          `concierge: property=${activeConversation.propertyId} adapter=${suite instanceof FixtureSuiteAdapter ? "fixture" : "http"} rooms=${catalogue.length} persona=${profile ? "custom" : "default"}`
+          `concierge: property=${activeConversation.propertyId} adapter=${suite === null ? "none" : suite instanceof FixtureSuiteAdapter ? "fixture" : "http"} rooms=${catalogue.length} persona=${profile ? "custom" : "default"} degraded=${degraded ? "yes" : "no"}`
         );
         const execute = async (name: string, argsJson: string) => {
           send({ type: "phase", phase: "checking", detail: toolDetail(name, argsJson) });
@@ -599,14 +611,20 @@ export async function POST(req: NextRequest) {
                 grounding,
                 catalogue,
                 profile,
-                resortPayOn ? { resortPay: true as const } : { resortPay: false as const }
+                resortPayOn
+                  ? { resortPay: true as const, degraded }
+                  : { resortPay: false as const, degraded }
               ),
             },
             // Token budget: 20 messages kept, each capped (lib/history)
             // so old pastes can't tax every later turn.
             ...capHistoryForModel(history),
           ],
-          tools: toolDefinitionsFor(catalogue, { resortPay: resortPayOn }),
+          tools: toolDefinitionsFor(catalogue, {
+            resortPay: resortPayOn,
+            hasSuite: mode.hasSuite,
+            hasCatalogue: mode.hasCatalogue,
+          }),
           execute,
           onModelCall: async (usage) => {
             await withTenant(tenant, (tx) =>

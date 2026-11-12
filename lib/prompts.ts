@@ -25,7 +25,9 @@ import { catalogueText, DEMO_ROOMS, type DemoRoom } from "@/demo-config/rooms";
 //   v10 (2026-11-04): + pay-page phone-verification line (demo1
 //     /booking/pay pre-fills the code but unlocks on the booking
 //     phone — the bot must say so).
-export const PROMPT_VERSION = 10;
+//   v11 (2026-11-12): + BOOKING OFFLINE degraded block (chat survives
+//     a missing backend/catalogue — no prices, no booking, handoff).
+export const PROMPT_VERSION = 11;
 
 // Fixed booking-terms summary. The Suite 400s drafts without explicit
 // guest acceptance, so the tool requires termsAccepted — and the model
@@ -104,6 +106,14 @@ const PAYMENT_BN = `PAYMENT — this resort configured its own payment page. Poi
 - Sposhto kore bolun: shudhu resort-er official site-ei payment korun, page-er thikana miliye nin, ar jene rakhun karmira kokhono card-er tothyo ba code chaiben na.
 - Otithi payment hoyeche kina jiggesh korle bolun resort-er site-er payment apni dekhte pan na — confirmation email ba receipt dekhte bolun — ebong handoff-er prostab din. Payment hoyeche kina kokhono nischit korben na, oshikar korben na, andaz korben na.`;
 
+// Degraded chat (booking offline): the property's backend or room
+// list did not resolve, so the tools are gated — but the turn goes
+// on. This block overrides the catalogue rules below it: no prices,
+// no availability, no booking offers, handoff for booking intent.
+const DEGRADED_EN = `BOOKING OFFLINE — this property's booking system is not connected yet. Answer questions from the knowledge provided. Do not quote prices or availability and do not offer to book — prices, availability, and booking are unavailable this turn. For booking requests, explain the booking system is being set up and offer to connect the guest with staff (request_handoff).`;
+
+const DEGRADED_BN = `BOOKING OFFLINE — ei property-r booking system ekhono connected na (answer in Bengali). Knowledge-e ja ache tai diye answer din. Do not quote prices or availability and do not offer to book — ei turn-e price, availability, booking kichui available na. Booking chaile bolun booking system setup hochche, ebong staff-er sathe jogajog-er (request_handoff) prostab din.`;
+
 export type PropertyPersona = {
   assistantName?: string | null;
   tone?: string | null;
@@ -117,7 +127,7 @@ export function systemPrompt(
   grounding?: string | null,
   rooms: DemoRoom[] = DEMO_ROOMS,
   persona?: PropertyPersona | null,
-  opts?: { resortPay?: boolean }
+  opts?: { resortPay?: boolean; degraded?: boolean }
 ): string {
   const rules = language === "bn" ? RULES_BN : RULES_EN;
   // Step 3 grounding (supporting only): verified property information
@@ -142,5 +152,9 @@ export function systemPrompt(
   const paymentBlock =
     opts?.resortPay === true ? `\n\n${language === "bn" ? PAYMENT_BN : PAYMENT_EN}` : "";
   const termsBlock = `\n\n${language === "bn" ? TERMS_BN : TERMS_EN}`;
-  return `${rules}\n\nAvailable rooms:\n${catalogueText(rooms)}${groundingBlock}${voice}${paymentBlock}${termsBlock}`;
+  // Degraded block sits directly under the rules so it overrides the
+  // catalogue rules ("offer rooms at catalogue prices") that follow.
+  const degradedBlock =
+    opts?.degraded === true ? `\n\n${language === "bn" ? DEGRADED_BN : DEGRADED_EN}` : "";
+  return `${rules}${degradedBlock}\n\nAvailable rooms:\n${catalogueText(rooms)}${groundingBlock}${voice}${paymentBlock}${termsBlock}`;
 }
