@@ -1,10 +1,10 @@
 // Room-catalogue manager UI (adapter Phase 3). Client component used by
 // the protected /settings server page. One property at a time: load its
-// rows, edit inline, add, delete, or seed from the demo catalogue file
-// (seed skips existing slugs, never overwrites). Prices are typed in taka
-// and stored as integer poisha. Rows govern the chat catalogue for any
-// property that has them — the file remains the demo fallback until it is
-// seeded, so seeding is the moment to compare quotes before and after.
+// rows, edit inline, add, delete, or sync wholesale from the booking
+// system's published room list (sync replaces the list; manual edits
+// stay for any property, synced or not). Prices are typed in taka and
+// stored as integer poisha. Rows govern the chat catalogue for any
+// property that has them.
 
 "use client";
 
@@ -157,23 +157,24 @@ export default function RoomCatalogues({ initialPropertyId }: { initialPropertyI
     if (res.ok) await load(loadedFor);
   }
 
-  async function seed() {
+  async function sync() {
     if (!loadedFor || sending) return;
+    if (!window.confirm("Sync replaces this list with your booking system's rooms.")) return;
     setMessage("");
     setNotice("");
     setSending(true);
     try {
-      const res = await fetch("/api/admin/room-mappings/seed", {
+      const res = await fetch("/api/admin/room-mappings/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ propertyId: loadedFor }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "Could not seed catalogue.");
-      setNotice(`Seeded ${data.created} rooms, skipped ${data.skipped} existing.`);
+      if (!res.ok) throw new Error(data?.error || "Could not sync catalogue.");
+      setNotice(`Synced ${data.count} rooms from your booking system.`);
       await load(loadedFor);
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Could not seed catalogue.");
+      setMessage(e instanceof Error ? e.message : "Could not sync catalogue.");
     } finally {
       setSending(false);
     }
@@ -211,12 +212,12 @@ export default function RoomCatalogues({ initialPropertyId }: { initialPropertyI
         )}
         {loadedFor && (
           <button
-            onClick={seed}
+            onClick={sync}
             disabled={sending}
-            title="Copy the demo catalogue file into this property (skips existing slugs)"
+            title="Replace this list with the booking system's published rooms"
             className="rounded-full border px-5 py-2 text-sm disabled:opacity-40"
           >
-            Seed from demo
+            Sync from booking system
           </button>
         )}
       </div>
@@ -231,8 +232,9 @@ export default function RoomCatalogues({ initialPropertyId }: { initialPropertyI
         <div className="flex flex-col gap-2">
           {rows.length === 0 && (
             <p className="text-sm text-gray-500">
-              No rows for {loadedFor} — chat falls back to the demo file for the demo property,
-              and fails honestly for any other property, until rows exist.
+              No rows for {loadedFor} — sync from the booking system above, or add rooms
+              manually below. Until rows exist, the chat answers questions but can&apos;t
+              check prices or availability or take bookings.
             </p>
           )}
           {rows.map((row) => (

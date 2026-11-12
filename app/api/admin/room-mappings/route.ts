@@ -7,15 +7,15 @@
 //             highlights[] } creates (409 on dup slug)
 //   PATCH -> { id, ...fields } updates one row
 //   DELETE -> { id } removes one row
-// Seeding from the demo file lives at POST .../room-mappings/seed.
-// Room IDs are opaque backend identifiers (usually UUIDs, never enforced).
+// Wholesale sync from the booking system lives at POST
+// .../room-mappings/sync. Room IDs are opaque backend identifiers
+// (usually UUIDs, never enforced).
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma, prismaService } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
 import { tenantFor, withTenant } from "@/lib/tenant-db";
-
-const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+import { MAX_SLUG_LEN, SLUG_RE } from "@/lib/room-slug";
 
 function cleanRoom(body: Record<string, unknown>):
   | { ok: true; room: { slug: string; name: string; basePricePoisha: number; suiteRoomId: string; highlights: string[] } }
@@ -25,7 +25,7 @@ function cleanRoom(body: Record<string, unknown>):
   const basePricePoisha = body.basePricePoisha;
   const suiteRoomId = typeof body.suiteRoomId === "string" ? body.suiteRoomId.trim() : "";
   const highlights = body.highlights;
-  if (!SLUG_RE.test(slug) || slug.length > 60) {
+  if (!SLUG_RE.test(slug) || slug.length > MAX_SLUG_LEN) {
     return { ok: false, error: "Slug must look like bamboo-cottage (lowercase, dashes, max 60)." };
   }
   if (!name || name.length > 100) {

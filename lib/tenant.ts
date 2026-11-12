@@ -10,11 +10,9 @@
 //   - resolvePropertyId(session, param): which property a page acts for.
 //     OWNER is pinned to its own (a ?property= override is ignored, not
 //     an error; a null propertyId throws — fail closed, never demo).
-//     SUPER_ADMIN may pass ?property=<active-id>, else the configured
-//     demo property — and when no demo property is configured (unset
-//     DEMO_PROPERTY_ID, i.e. production), no selection throws instead
-//     of silently serving a special property. Signed-out callers never
-//     reach this (pages redirect to login first).
+//     SUPER_ADMIN must pass ?property=<active-id>: no selection throws
+//     instead of silently serving a special property. Signed-out
+//     callers never reach this (pages redirect to login first).
 //   - revokeSession / revokeUserSessions: the kill switches logout,
 //     password change, and admin revoke act through.
 //   - withTenant: run tenant-table queries with app.tenant_id set (the
@@ -23,7 +21,6 @@
 //     marked at each call site, listed in the Phase 1 PR).
 
 import { cookies } from "next/headers";
-import { demoPropertyId } from "./demo";
 import { prisma, prismaService } from "@/lib/prisma";
 import { withTenant } from "@/lib/tenant-db";
 import { logAudit } from "@/lib/audit";
@@ -172,13 +169,8 @@ export async function resolvePropertyId(
     const row = await prisma.property.findUnique({ where: { id: param } }).catch(() => null);
     if (row && row.status === "ACTIVE") return row.id;
   }
-  // No valid selection: the configured demo property, or a fail-closed
-  // throw when none is configured. A super-admin page opened without
-  // ?property= in production lands on the error boundary — honest, and
-  // the fix is the URL: append ?property=<active-id>.
-  const demo = demoPropertyId();
-  if (!demo) {
-    throw new Error("No property selected (?property=<id>) and DEMO_PROPERTY_ID is not set.");
-  }
-  return demo;
+  // No valid selection: fail closed. A super-admin page opened without
+  // ?property= lands on the error boundary — honest, and the fix is the
+  // URL: append ?property=<active-id>.
+  throw new Error("No property selected. Super-admins must pass ?property=<id>.");
 }

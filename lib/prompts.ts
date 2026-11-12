@@ -2,7 +2,7 @@
 // model can only offer rooms and prices that actually exist. Nothing here
 // may promise a booking, a rate, or availability the tools have not shown.
 
-import { catalogueText, DEMO_ROOMS, type DemoRoom } from "@/demo-config/rooms";
+import { catalogueText, type DemoRoom } from "@/demo-config/rooms";
 
 // Prompt version: bump on ANY rule change and note it here, so eval
 // runs stay comparable across prompt edits. The runner stamps every
@@ -124,8 +124,8 @@ export type PropertyPersona = {
 
 export function systemPrompt(
   language: "en" | "bn",
-  grounding?: string | null,
-  rooms: DemoRoom[] = DEMO_ROOMS,
+  grounding: string | null = null,
+  rooms: DemoRoom[],
   persona?: PropertyPersona | null,
   opts?: { resortPay?: boolean; degraded?: boolean }
 ): string {

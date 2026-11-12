@@ -23,7 +23,7 @@ describe("segments", () => {
     assert.equal(isSegmentId(""), false);
   });
   it("prompt lists enabled segments as grounded-only", () => {
-    const p = systemPrompt("en", null, undefined, {
+    const p = systemPrompt("en", null, [], {
       assistantName: "Aria",
       suggestionSegments: ["dining", "spots"],
     });
@@ -32,7 +32,7 @@ describe("segments", () => {
     assert.match(p, /never general knowledge/);
   });
   it("prompt with no segments refuses advice topics", () => {
-    const p = systemPrompt("en", null, undefined, { assistantName: "Aria", suggestionSegments: [] });
+    const p = systemPrompt("en", null, [], { assistantName: "Aria", suggestionSegments: [] });
     assert.match(p, /Offer no travel\/dining\/transport advice/);
   });
   it("prompt version bumped for the degraded-chat change", () => {
@@ -71,7 +71,7 @@ describe("token budgets", () => {
       search: async () =>
         [1, 2, 3, 4].map((i) => ({ title: `D${i}`, content: "z".repeat(2000), similarity: 0.9 })),
     });
-    const full = systemPrompt("en", text, undefined, {
+    const full = systemPrompt("en", text, [], {
       assistantName: "Aria",
       suggestionSegments: ["dining", "transport", "area-plans", "spots", "activities"],
     });

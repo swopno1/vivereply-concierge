@@ -11,7 +11,7 @@ import { redirect } from "next/navigation";
 import { prisma, prismaService } from "@/lib/prisma";
 import { getSession, resolvePropertyId, sessionOwnerVerified } from "@/lib/tenant";
 import { withTenant } from "@/lib/tenant-db";
-import { visibleWidgetKeys } from "@/demo-config/widget-keys";
+import type { WidgetProperty } from "@/demo-config/widget-keys";
 import CopyButton from "../../components/CopyButton";
 import SignOutButton from "../../components/SignOutButton";
 import SuiteBindings from "../../components/SuiteBindings";
@@ -231,12 +231,12 @@ export default async function SettingsPage({
         )
     : [];
 
-  // Widget keys for THIS property: static entries plus the seeded row's
-  // key (deduped — the demo key lives in both until the seed runs).
-  const keys = visibleWidgetKeys().filter(([, prop]) => prop.propertyId === propertyId);
-  if (property && !keys.some(([key]) => key === property.widgetKey)) {
-    keys.push([property.widgetKey, { propertyId: property.id, title: property.name }]);
-  }
+  // Widget key for THIS property: the Property row's own key (minted at
+  // signup). No row, no snippet.
+  const keys: Array<[string, WidgetProperty]> =
+    property != null
+      ? [[property.widgetKey, { propertyId: property.id, title: property.name }]]
+      : [];
   const bridgeExample = [
     `# Staff bridge — run from the client SERVER, never the browser.`,
     `# Mint the key in Bridge keys below; it is shown once.`,
@@ -466,7 +466,7 @@ export default async function SettingsPage({
       <Section
         id="rooms"
         title="Room catalogues"
-        blurb="One room list per property. Rows govern chat once present; seed the demo file to start."
+        blurb="One room list per property. Sync it from your booking system, or add rows manually — rows govern chat once present."
       >
         <RoomCatalogues initialPropertyId={propertyId} />
       </Section>
@@ -508,7 +508,7 @@ export default async function SettingsPage({
         <Section
           id="exam"
           title="Chatbot exam"
-          blurb="The 19-case eval, runnable from here. Demo hotel only — a run can never touch real bookings. Same exam as the terminal runner."
+          blurb="The 19-case eval, runnable from here against the configured eval property. Same exam as the terminal runner."
         >
           <EvalRunner
             cases={(CASES as { id: string; category: string; turns: unknown[] }[]).map((c) => ({
