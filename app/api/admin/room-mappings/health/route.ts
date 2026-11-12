@@ -2,8 +2,7 @@
 // cookie, verified owner, own property only. For each mapped room, hits
 // the backend availability endpoint for a near-future stay: 404 means the
 // Suite room is gone/renamed (broken mapping), anything else means the id
-// resolves (even 0 available — sold out is healthy). Fixture properties
-// have no backend ids to check and report all-ok.
+// resolves (even 0 available — sold out is healthy).
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
 import { tenantFor, withTenant } from "@/lib/tenant-db";
@@ -38,11 +37,6 @@ export async function GET(req: NextRequest) {
   }
   const rows = await withTenant(tenant, (tx) => tx.roomMapping.findMany({ where: { propertyId } }));
   const resolved = await resolveSuiteBinding(propertyId);
-  if (resolved.kind === "fixture") {
-    return NextResponse.json({
-      results: rows.map((r) => ({ slug: r.slug, suiteRoomId: r.suiteRoomId, ok: true, skipped: "fixture" })),
-    });
-  }
   if (resolved.kind === "none") {
     return NextResponse.json({
       results: rows.map((r) => ({ slug: r.slug, suiteRoomId: r.suiteRoomId, ok: false, reason: "no backend connected" })),

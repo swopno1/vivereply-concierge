@@ -6,8 +6,8 @@
 // two connections (propertyId is unique server-side; POST 409s on a dup).
 //
 // The status line at the top is the owner's honest answer to "is my system
-// live, or the demo default?" — fetched server-side from the same resolution
-// the chat path uses, never revealing a secret.
+// live?" — fetched server-side from the same resolution the chat path
+// uses, never revealing a secret.
 
 import { useEffect, useState } from "react";
 
@@ -24,9 +24,8 @@ type Binding = {
 };
 
 type Status = {
-  backend: { source: "settings" | "demo-env" | "fixture" | "none"; baseUrl: string | null };
-  catalogue: { source: "settings" | "demo-file" | "none"; rooms: number };
-  isDemoProperty: boolean;
+  backend: { source: "settings" | "none"; baseUrl: string | null };
+  catalogue: { source: "settings" | "none"; rooms: number };
 };
 
 export default function SuiteBindings({
@@ -48,12 +47,6 @@ export default function SuiteBindings({
   const [removing, setRemoving] = useState(false);
 
   const mine = rows.find((r) => r.propertyId === initialPropertyId) ?? null;
-
-  // Demo-aware copy: only the demo property falls back to the demo
-  // default, so only it may be told so. Unknown (status still loading
-  // or unreachable) reads as non-demo — never promise a fallback that
-  // likely does not exist.
-  const isDemo = status?.isDemoProperty ?? false;
 
   // Status banner: refresh after every save/delete so it always reflects reality.
   async function loadStatus() {
@@ -123,9 +116,7 @@ export default function SuiteBindings({
     if (!mine || removing) return;
     if (
       !confirm(
-        isDemo
-          ? "Remove this connection? The property falls back to the demo default until you add one again."
-          : "Remove this connection? Guests will still get answers to questions, but prices, availability and bookings will pause until you add a connection again."
+        "Remove this connection? Guests will still get answers to questions, but prices, availability and bookings will pause until you add a connection again."
       )
     ) {
       return;
@@ -142,11 +133,7 @@ export default function SuiteBindings({
       setBaseUrl("");
       setSecret("");
       setPayPage("");
-      setMsg(
-        isDemo
-          ? "Connection removed. The property now uses the demo default."
-          : "Connection removed. Booking features are paused for this property until you add a connection again."
-      );
+      setMsg("Connection removed. Booking features are paused for this property until you add a connection again.");
       void reload();
     } else {
       setMsg("Remove failed.");
@@ -164,11 +151,25 @@ export default function SuiteBindings({
         body: JSON.stringify({ id: mine.id }),
       });
       const j = await r.json().catch(() => ({}));
-      setMsg(
-        r.ok && j.ok
-          ? `Connected in ${j.latencyMs}ms — your booking system answered${j.ping ? "" : " (reachable, older protocol)"}.`
-          : (j.error ?? j.detail ?? "Connection test failed.")
-      );
+      if (!(r.ok && j.ok)) {
+        setMsg(j.error ?? j.detail ?? "Connection test failed.");
+        return;
+      }
+      let line = `Connected in ${j.latencyMs}ms — your booking system answered${j.ping ? "" : " (reachable, older protocol)"}.`;
+      // A working connection loads its own room list: auto-sync the
+      // catalogue now (same wholesale replace as the sync button).
+      try {
+        const s = await fetch("/api/admin/room-mappings/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ propertyId: initialPropertyId }),
+        });
+        const sj = await s.json().catch(() => ({}));
+        line += s.ok ? ` Synced ${sj.count} rooms.` : ` Room sync failed: ${sj.error ?? "unknown error"}.`;
+      } catch {
+        line += " Room sync failed: no answer.";
+      }
+      setMsg(line);
     } catch {
       setMsg("Connection test failed to reach the server.");
     } finally {
@@ -208,20 +209,14 @@ export default function SuiteBindings({
           <p>
             {status.backend.source === "settings" &&
               `Guest questions on prices, availability, and bookings are answered from ${status.backend.baseUrl}.`}
-            {status.backend.source === "demo-env" &&
-              `Guest chats currently use the demo default (${status.backend.baseUrl}). Save your connection below to switch to your own system.`}
-            {status.backend.source === "fixture" &&
-              "This property answers from a built-in demo fixture, not a live booking system."}
             {status.backend.source === "none" &&
               "Guest chats answer questions, but cannot check prices or availability or take bookings until you connect a booking system."}
           </p>
           <p>
             {status.catalogue.source === "settings" &&
               `Room list: your own catalogue (${status.catalogue.rooms} rooms).`}
-            {status.catalogue.source === "demo-file" &&
-              `Room list: the demo catalogue (${status.catalogue.rooms} rooms) until you add your own in the Room catalogues room below.`}
             {status.catalogue.source === "none" &&
-              "Room list: none yet — add rooms in the Room catalogues room below."}
+              "Room list: none yet — sync from your booking system or add rooms in the Room catalogues room below."}
           </p>
         </div>
       )}
@@ -271,15 +266,7 @@ export default function SuiteBindings({
         </div>
       ) : (
         <p className="text-sm text-gray-500">
-          {isDemo ? (
-            <>
-              No connection yet for <span className="font-mono">{initialPropertyId}</span>. Save
-              one below to switch this property from the demo default to your own booking
-              system.
-            </>
-          ) : (
-            "No connection saved yet. Add one below so guests can check prices and availability and book."
-          )}
+          No connection saved yet. Add one below so guests can check prices and availability and book.
         </p>
       )}
 

@@ -15,7 +15,7 @@ import { withTenant } from "@/lib/tenant-db";
 import { answerBrand } from "@/lib/brand-knowledge";
 import { runAgent } from "@/lib/agent";
 import { createToolExecutor, toolDefinitionsFor, type ToolDb } from "@/lib/tools";
-import { adapterForProperty, FixtureSuiteAdapter } from "@/lib/suite";
+import { adapterForProperty } from "@/lib/suite";
 import { catalogueForProperty } from "@/demo-config/rooms";
 import { resolutionFailureRow, resolveBookingMode } from "@/lib/booking-mode";
 import { systemPrompt } from "@/lib/prompts";
@@ -502,9 +502,8 @@ export async function POST(req: NextRequest) {
           });
         }
         // Resort-pay pointer for THIS turn: on when the property
-        // configured its own payment page AND runs a real Suite backend
-        // (fixture demos have no resort site to point at). One cheap row
-        // read; the executor re-checks per call anyway.
+        // configured its own payment page AND runs a real Suite backend.
+        // One cheap row read; the executor re-checks per call anyway.
         const bindingPay = await withTenant(tenant, (tx) =>
           tx.propertyBinding
             .findUnique({
@@ -512,8 +511,7 @@ export async function POST(req: NextRequest) {
               select: { paymentPageUrl: true },
             })
         ).catch(() => null);
-        const resortPayOn =
-          mode.hasSuite && bindingPay?.paymentPageUrl != null && !(suite instanceof FixtureSuiteAdapter);
+        const resortPayOn = mode.hasSuite && bindingPay?.paymentPageUrl != null;
         const baseExecute = createToolExecutor(activeConversation.id, db, suite, catalogue, {
           resortPay: resortPayOn,
           hasSuite: mode.hasSuite,
@@ -527,7 +525,7 @@ export async function POST(req: NextRequest) {
         // which property resolved to which backend, how many rooms, and
         // whether the voice is custom. The P4 isolation proof reads these.
         console.log(
-          `concierge: property=${activeConversation.propertyId} adapter=${suite === null ? "none" : suite instanceof FixtureSuiteAdapter ? "fixture" : "http"} rooms=${catalogue.length} persona=${profile ? "custom" : "default"} degraded=${degraded ? "yes" : "no"}`
+          `concierge: property=${activeConversation.propertyId} adapter=${suite === null ? "none" : "http"} rooms=${catalogue.length} persona=${profile ? "custom" : "default"} degraded=${degraded ? "yes" : "no"}`
         );
         const execute = async (name: string, argsJson: string) => {
           send({ type: "phase", phase: "checking", detail: toolDetail(name, argsJson) });

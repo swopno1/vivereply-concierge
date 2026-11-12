@@ -267,7 +267,7 @@ const PROBES = [
     async run(notes) {
       if (!B.password) return "skip: PROBE_B_PASSWORD unset";
       // Asymmetric corpora by design: B (live property) has onboarded
-      // RAG docs; A (seabreeze fixture) has none. The canary is
+      // RAG docs; A (seabreeze test tenant) has none. The canary is
       // corpus-specific by nature — B's RAG comes from ITS onboarding
       // (content differs per property), so the question + the answer
       // pattern it must contain come from env, not code. Pick Q/A from

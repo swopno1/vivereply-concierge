@@ -3,21 +3,15 @@
 // only, and only from the server (never from the browser).
 //
 // Shape: SuiteAdapter (interface) + HttpSuiteAdapter (built per call from
-// a binding: base URL + optional secret + version). The module-level
-// functions below preserve the original zero-config path — same names,
-// same behavior — by borrowing the default env binding. Phase 2 routes
-// per-property bindings through the same class; tools.ts never sees the
-// difference.
+// the property's binding row: base URL + optional secret + version). No
+// property is special: no binding row means no backend, full stop.
 //
 // Response guards: a backend answering outside the spec yields an honest
 // "answered unexpectedly" error (the agent surfaces it and offers a
 // handoff), never a crash on undefined fields and never an invented number.
 
 import { withTenant } from "@/lib/tenant-db";
-import { demoPropertyId } from "./demo";
 import { decryptSecret } from "./secrets";
-import { fixtureRoomsFor } from "@/demo-config/fixture";
-import { isDateString, nightsBetween, quoteForStay } from "@/demo-config/rates";
 
 export type SuiteBinding = {
   baseUrl: string;
@@ -29,19 +23,6 @@ export const SUITE_API_VERSION = 1;
 
 /** Must match the Suite CURRENT_TERMS_VERSION (travel-scaffold src/lib/legal/version.ts). Bump together. */
 export const SUITE_TERMS_VERSION = "v1";
-
-function suiteBaseUrl(): string {
-  const base = process.env.SUITE_API_BASE_URL;
-  if (!base) throw new Error("SUITE_API_BASE_URL is not set");
-  return base.replace(/\/$/, "");
-}
-
-export function defaultBinding(): SuiteBinding {
-  // Demo-env path: SUITE_API_SECRET identifies Concierge traffic so the
-  // Suite can exempt it from IP rate limits (CA-3). Unset = anonymous.
-  const secret = process.env.SUITE_API_SECRET?.trim() || null;
-  return { baseUrl: suiteBaseUrl(), secret, version: SUITE_API_VERSION };
-}
 
 type SuiteError = { error: string };
 
@@ -104,6 +85,14 @@ export type BookingLookup = {
   checkOut: string;
   status: string;
 };
+
+// Room catalogue fetch (Suite Handover D consumer): the booking system
+// publishes its own room list. Same suiteFetch path as every other
+// call (secret Bearer, version header, 15s timeout, no-store); raw JSON
+// out — validation lives in lib/room-sync.ts, never here.
+export async function fetchSuiteRooms(binding: SuiteBinding): Promise<unknown> {
+  return suiteFetch(binding, "/api/concierge/rooms");
+}
 
 export interface SuiteAdapter {
   getAvailability(roomId: string, checkIn: string, checkOut: string): Promise<Availability>;
@@ -213,120 +202,20 @@ export class HttpSuiteAdapter implements SuiteAdapter {
   }
 }
 
-// Fixture adapter (multi-tenant core, TEST ONLY). Same SuiteAdapter
-// contract, no HTTP: deterministic availability (rooms always full),
-// totals from the SAME quoteForStay math as the quote tool (so fixture
-// drafts always match their quotes), drafts kept in process memory under
-// FIX- codes. Drafts do NOT survive a server restart — lookup afterwards
-// answers "not found" honestly. Details delivery is a stub ({ sent: true }
-// — a fixture cannot email). Anything this adapter touches is labeled
-// FIXTURE, in codes and in docs.
-const fixtureDrafts = new Map<string, { firstName: string; checkIn: string; checkOut: string }>();
-// Fixture idempotency ledger: same property + key replays the SAME
-// draft instead of minting a second — the in-memory mirror of the
-// Idempotency-Key contract real Suites implement (suite-api-spec.md).
-const fixtureIdemKeys = new Map<string, BookingDraft>();
-let fixtureCounter = 0;
-
-export class FixtureSuiteAdapter implements SuiteAdapter {
-  constructor(private propertyId: string) {}
-
-  private room(roomId: string) {
-    const room = fixtureRoomsFor(this.propertyId)?.find((r) => r.suiteRoomId === roomId);
-    if (!room) throw new Error("not found");
-    return room;
-  }
-
-  async getAvailability(roomId: string, checkIn: string, checkOut: string): Promise<Availability> {
-    const room = this.room(roomId);
-    if (!isDateString(checkIn) || !isDateString(checkOut) || nightsBetween(checkIn, checkOut) < 1) {
-      throw new Error("Check-out must be after check-in.");
-    }
-    return { available: room.units.length, units: [...room.units] };
-  }
-
-  async createBooking(
-    roomId: string,
-    guest: BookingGuest,
-    checkIn: string,
-    checkOut: string,
-    opts?: { idempotencyKey?: string; terms?: { accepted: boolean; version: string } }
-  ): Promise<BookingDraft> {
-    if (opts?.terms?.accepted !== true || !opts.terms.version) {
-      throw new Error("Terms confirmation is required before drafting a booking.");
-    }
-    const room = this.room(roomId);
-    if (!guest.guestName.trim() || !guest.guestEmail.trim() || !guest.guestPhone.trim()) {
-      throw new Error("Guest name, email, and phone are required.");
-    }
-    const quote = quoteForStay(room.basePricePoisha, checkIn, checkOut);
-    if (quote.nights < 1) throw new Error("Check-out must be after check-in.");
-    if (opts?.idempotencyKey) {
-      const replay = fixtureIdemKeys.get(`${this.propertyId}:${opts.idempotencyKey}`);
-      if (replay) return replay;
-    }
-    fixtureCounter += 1;
-    const bookingCode = `FIX-${Date.now().toString(36).toUpperCase()}-${fixtureCounter.toString(36).toUpperCase()}`;
-    const firstName = guest.guestName.trim().split(/\s+/)[0] ?? guest.guestName.trim();
-    fixtureDrafts.set(`${this.propertyId}:${bookingCode}`, { firstName, checkIn, checkOut });
-    const draft = { id: bookingCode, bookingCode, totalAmountPoisha: quote.totalPoisha };
-    if (opts?.idempotencyKey) {
-      fixtureIdemKeys.set(`${this.propertyId}:${opts.idempotencyKey}`, draft);
-    }
-    return draft;
-  }
-
-  async lookupBookingByCode(code: string): Promise<BookingLookup> {
-    const draft = fixtureDrafts.get(`${this.propertyId}:${code}`);
-    if (!draft) throw new Error("not found");
-    return {
-      bookingCode: code,
-      firstName: draft.firstName,
-      checkIn: draft.checkIn,
-      checkOut: draft.checkOut,
-      status: "PENDING",
-    };
-  }
-
-  async requestBookingDetails(_contact: { email?: string; phone?: string }): Promise<{ sent: boolean }> {
-    return { sent: true };
-  }
-
-  async ping(): Promise<{ ok: boolean; suiteVersion: number }> {
-    return { ok: true, suiteVersion: SUITE_API_VERSION };
-  }
-}
-
-// Per-property adapter (Phase 2, multi-tenant core). Precedence:
-//   1. Fixture registry — a registered test property NEVER touches HTTP,
-//      even if a binding row exists. Graduate by removing it from
-//      demo-config/fixture.ts (a deliberate commit), then adding its row.
-//   2. Binding row — the property's own HTTP backend.
-//   3. Demo env fallback — the demo property without a row (zero-downtime
-//      cutover until it is seeded).
-//   4. Anything else fails honestly instead of borrowing another backend.
+// Per-property adapter (Phase 2, multi-tenant core). Binding row or
+// nothing: a property with its own row gets its own HTTP backend, and
+// anything else fails honestly instead of borrowing another backend.
 export type ResolvedSuiteBinding =
-  | { kind: "fixture" }
   | { kind: "http"; baseUrl: string; secret: string | null; version: number }
   | { kind: "none" };
 
 /** Shared resolution behind adapterForProperty and the mapping health probe. */
 export async function resolveSuiteBinding(propertyId: string): Promise<ResolvedSuiteBinding> {
-  if (fixtureRoomsFor(propertyId)) {
-    return { kind: "fixture" };
-  }
   // Tenant path (call OUTSIDE tx blocks — helpers wrap internally).
   const row = await withTenant(propertyId, (tx) =>
     tx.propertyBinding.findUnique({ where: { propertyId } })
   );
   if (!row) {
-    // Demo-env fallback for the CONFIGURED demo property only. Unset
-    // DEMO_PROPERTY_ID (production) means no property takes this path.
-    const demoId = demoPropertyId();
-    if (demoId !== null && propertyId === demoId) {
-      const demo = defaultBinding();
-      return { kind: "http", baseUrl: demo.baseUrl, secret: demo.secret, version: demo.version };
-    }
     return { kind: "none" };
   }
   const secret = row.secretEnc ? decryptSecret(row.secretEnc) : null;
@@ -335,25 +224,21 @@ export async function resolveSuiteBinding(propertyId: string): Promise<ResolvedS
 
 export async function adapterForProperty(propertyId: string): Promise<SuiteAdapter> {
   const resolved = await resolveSuiteBinding(propertyId);
-  if (resolved.kind === "fixture") {
-    return new FixtureSuiteAdapter(propertyId);
-  }
   if (resolved.kind === "http") {
     return new HttpSuiteAdapter({ baseUrl: resolved.baseUrl, secret: resolved.secret, version: resolved.version });
   }
   throw new Error(`Property "${propertyId}" is not connected to a booking backend.`);
 }
 
-export type BackendSource = "settings" | "demo-env" | "fixture" | "none";
+export type BackendSource = "settings" | "none";
 
-// Read-only mirror of adapterForProperty's decision (same order, same
-// demo scoping) for the Settings status banner. NEVER returns a secret
-// — base URL only. Keep the two in sync: if the precedence below ever
-// changes, adapterForProperty changes with it.
+// Read-only mirror of adapterForProperty's decision for the Settings
+// status banner. NEVER returns a secret — base URL only. Keep the two
+// in sync: if the precedence below ever changes, adapterForProperty
+// changes with it.
 export async function describeBackendResolution(
   propertyId: string
 ): Promise<{ source: BackendSource; baseUrl: string | null }> {
-  if (fixtureRoomsFor(propertyId)) return { source: "fixture", baseUrl: null };
   // Tenant path (call OUTSIDE tx blocks — helpers wrap internally).
   const row = await withTenant(propertyId, (tx) =>
     tx.propertyBinding.findUnique({
@@ -362,40 +247,5 @@ export async function describeBackendResolution(
     })
   );
   if (row) return { source: "settings", baseUrl: row.suiteBaseUrl };
-  const demoId = demoPropertyId();
-  if (demoId !== null && propertyId === demoId) {
-    const env = process.env.SUITE_API_BASE_URL ?? "";
-    return env ? { source: "demo-env", baseUrl: env.replace(/\/$/, "") } : { source: "none", baseUrl: null };
-  }
   return { source: "none", baseUrl: null };
-}
-
-// Default-binding path (Phase 1 behavior: identical to the old module).
-// A fresh adapter per call keeps env reads lazy, exactly like before.
-export async function getAvailability(
-  roomId: string,
-  checkIn: string,
-  checkOut: string
-): Promise<Availability> {
-  return new HttpSuiteAdapter(defaultBinding()).getAvailability(roomId, checkIn, checkOut);
-}
-
-export async function createBooking(
-  roomId: string,
-  guest: BookingGuest,
-  checkIn: string,
-  checkOut: string
-): Promise<BookingDraft> {
-  return new HttpSuiteAdapter(defaultBinding()).createBooking(roomId, guest, checkIn, checkOut);
-}
-
-export async function lookupBookingByCode(code: string): Promise<BookingLookup> {
-  return new HttpSuiteAdapter(defaultBinding()).lookupBookingByCode(code);
-}
-
-export async function requestBookingDetails(contact: {
-  email?: string;
-  phone?: string;
-}): Promise<{ sent: boolean }> {
-  return new HttpSuiteAdapter(defaultBinding()).requestBookingDetails(contact);
 }

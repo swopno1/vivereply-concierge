@@ -6,7 +6,7 @@
 //   POST   -> { propertyId, suiteBaseUrl, secret?, paymentPageUrl? } creates (409 on dup)
 //   PATCH  -> { id, suiteBaseUrl?, secret?, paymentPageUrl? } updates;
 //             secret "" clears, paymentPageUrl "" clears
-//   DELETE -> { id } removes the row (chat falls back to env for demo)
+//   DELETE -> { id } removes the row (chat degrades to Q&A-only for the property)
 // URL rule: http(s) only. Secret rule: stored encrypted, shown nowhere.
 // Payment-page rule: the resort's OWN pay page (owner-configured); the
 // bot deep-links it with ?booking=CODE. Concierge never takes resort

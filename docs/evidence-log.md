@@ -521,3 +521,33 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
   uniform unconfigured-property behaviour on the VM; founder
   workflow note — super-admin pages without ?property= now hit the
   error boundary when unset (append ?property=<active-id>).
+
+## 2026-11-12 — Handover E: room sync + demo purge (branch)
+
+- Branch feature/room-sync-purge-demo off main@7fec913.
+- Part 1 (sync): new POST /api/admin/room-mappings/sync (binding-derived
+  GET /api/concierge/rooms via suiteFetch, wholesale replace in one tx
+  after full validate; lib/room-sync.ts pure + injectable, lib/room-slug.ts
+  shared with the manual API). Triggered by the new "Sync from booking
+  system" button (verbatim confirm) and automatically after a successful
+  Test. Built against stubbed Handover D fixtures — travel-scaffold PRs
+  #85/#86 were OPEN at build time, so the live round-trip is still to do.
+- Part 2 (purge): seed route + button + handler deleted; DEMO_ROOMS,
+  findRoomBySlug, rooms.krishnachura.ts, fixture.ts, FixtureSuiteAdapter
+  (moved byte-identical to tests/fixture-adapter.ts), demo-env binding,
+  dead legacy env exports, static WIDGET_KEYS + getters, lib/demo.ts all
+  gone from product code. Catalogue/prompt are explicit required args;
+  BackendSource/CatalogueSource narrowed to settings|none; super-admin
+  pages always require ?property=; widget resolution is DB-only.
+- Sweep: zero DEMO_ROOMS/Seed-from-demo/demo-krishnachura/seabreeze/
+  FixtureSuiteAdapter hits in app/lib/demo-config; zero DEMO/SUITE env
+  reads in runtime (modes collapsed — see PR for the justify list:
+  seeds, probes, eval, scripts, docs, tests).
+- Evidence (sandbox, this branch): 198/198 unit IDENTICAL with the var
+  unset and set (192 baseline − 10 retired demo-defaults + 16 new
+  room-sync); tsc clean; webpack build green 55/55 with /sync present
+  and /seed absent (404s by absence).
+- NOT verified here (needs live): sync against a real D endpoint
+  (5-room round-trip, old-Suite 404 line, currency refusal); widget
+  unknown-key preserved; post-purge eval needs a real binding row for
+  the eval property (flagged for Cosmo/founder).

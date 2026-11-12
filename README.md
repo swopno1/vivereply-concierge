@@ -168,8 +168,7 @@ Environment (see `.env.example` for the full list):
 - `META_API_KEY` — Meta Model API key (starts `LLM_`)
 - `BASETEN_API_KEY` — optional fallback backend (demo insurance only)
 - `META_API_BASE_URL`, `META_MODEL` — provider endpoint + agent model
-- `SUITE_API_BASE_URL` — demo Suite deployment (demo1, fallback)
-- `DEMO_PROPERTY_ID` — demo property slug
+- `SUITE_API_BASE_URL` — Suite target for the nightly contract checks only (the app itself reads no Suite env)
 - `DATABASE_URL` — Supabase transaction pooler (port 6543, runtime)
 - `DIRECT_URL` — Supabase session pooler (port 5432, migrations)
 - `GEMINI_API_KEY` — Google AI Studio, embeddings only

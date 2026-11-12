@@ -6,7 +6,7 @@
 // Tools are deliberately free of any Prisma import: the route injects a
 // small ToolDb implementation, so this file typechecks anywhere.
 
-import { DEMO_ROOMS, type DemoRoom } from "@/demo-config/rooms";
+import { type DemoRoom } from "@/demo-config/rooms";
 import { isDateString, nightsBetween, quoteForStay, formatTaka } from "@/demo-config/rates";
 import type { SuiteAdapter } from "./suite";
 import { SUITE_TERMS_VERSION } from "./suite";
@@ -184,10 +184,6 @@ function buildToolDefinitions(roomSlugs: string[], opts?: { resortPay?: boolean 
   }
   return defs;
 }
-
-export const TOOL_DEFINITIONS: ToolDefinition[] = buildToolDefinitions(
-  DEMO_ROOMS.map((r) => r.slug)
-);
 
 export type DegradedOpts = {
   resortPay?: boolean;
