@@ -26,5 +26,9 @@ export async function GET(req: NextRequest) {
     describeBackendResolution(propertyId),
     describeCatalogueResolution(propertyId),
   ]);
-  return NextResponse.json({ backend, catalogue });
+  // Demo flag for owner copy: only the demo property falls back to the
+  // demo default, so only it may be told so. Same comparison as the
+  // resolvers above (lib/suite.ts, demo-config/rooms.ts).
+  const isDemoProperty = propertyId === (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat");
+  return NextResponse.json({ backend, catalogue, isDemoProperty });
 }

@@ -29,6 +29,7 @@ import PropertyStatusToggle from "../../components/PropertyStatusToggle";
 import AuditTrail from "../../components/AuditTrail";
 import { CASES } from "@/eval/cases.mjs";
 import { BACKEND_FAILURE_TOOL_NAMES, isFailureOutput } from "@/lib/booking-mode";
+import { securityChecklistRows } from "@/lib/security-checklist";
 
 export const dynamic = "force-dynamic";
 
@@ -293,13 +294,13 @@ export default async function SettingsPage({
           : []
         )
           .concat([
-            ["chatbot", "Name + topics"],
-            ["widget-codes", "Widget codes"],
-            ["domains", "Domains"],
-            ["bridge-codes", "Bridge codes"],
+            ["chatbot", "Chatbot name + topics"],
+            ["widget-codes", "Chat widget codes"],
+            ["domains", "Widget domains"],
+            ["bridge-codes", "Staff bridge codes"],
             ["bridge-keys", "Bridge keys"],
             ["booking", "Booking system"],
-            ["rooms", "Rooms"],
+            ["rooms", "Room catalogues"],
             ["secrets", "Secrets"],
             ["security", "Security"],
             ["exam", "Exam"],
@@ -484,23 +485,19 @@ export default async function SettingsPage({
         blurb="What protects this app right now — live status, not promises."
       >
         <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm shadow-sm">
-          {[
-            ["Owner + super-admin logins (scrypt / signed session cookie)", true],
-            [`Approved widget domains (${activeDomains.length} active)`, activeDomains.length > 0],
-            ["Widget token handshake (per-message domain re-check)", true],
-            [`Bridge keys (hashed, revocable, ${tokenCount} active)`, true],
-            ["Staff widget tokens (15-minute, origin-bound)", true],
-            ["Rate limiting (chat per-property + per-IP, login throttle)", true],
-            ["Two-factor authentication", false],
-          ].map(([label, on]) => (
-            <p key={String(label)} className="flex items-center justify-between gap-3 text-gray-900">
-              <span>{label as string}</span>
+          {securityChecklistRows({
+            activeDomainCount: activeDomains.length,
+            bridgeTokenCount: tokenCount,
+            twoFaEnabled,
+          }).map((row) => (
+            <p key={row.label} className="flex items-center justify-between gap-3 text-gray-900">
+              <span>{row.label}</span>
               <span
                 className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                  on ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-500"
+                  row.on ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-500"
                 }`}
               >
-                {on ? "On" : "Off"}
+                {row.on ? "On" : "Off"}
               </span>
             </p>
           ))}

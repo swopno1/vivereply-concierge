@@ -56,7 +56,7 @@ export function deriveSetupState(facts: SetupFacts): SetupState {
     },
     {
       id: "domain",
-      title: "Website domain approved",
+      title: "Website domain added",
       status: facts.activeDomains.length > 0 ? "done" : "pending",
       detail:
         facts.activeDomains.length > 0
@@ -74,17 +74,17 @@ export function deriveSetupState(facts: SetupFacts): SetupState {
     },
     {
       id: "booking",
-      title: "Booking backend connected + tested",
+      title: "Booking system connected + tested",
       status:
         facts.binding && facts.binding.lastTestOk === true && facts.roomCount > 0
           ? "done"
           : "pending",
       detail: !facts.binding
-        ? "Save your Suite connection in Settings first."
+        ? "Save your booking system connection in Settings → Booking system first."
         : facts.binding.lastTestOk !== true
-          ? "Saved — press Test connection in Settings until it answers."
+          ? "Saved — press Test connection in Settings → Booking system until it answers."
           : facts.roomCount === 0
-            ? "Backend answers — now add rooms (no row, no quote)."
+            ? "Booking system answers — now add rooms (no row, no quote)."
             : `Live: ${facts.binding.suiteBaseUrl} · ${facts.roomCount} room(s).`,
     },
     {

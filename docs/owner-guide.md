@@ -26,15 +26,14 @@ landed. One run per resort; extra runs need our approval (ask us).
 
 ## 3. Connect your booking system (10 min)
 
-In **Settings → Booking system connection**:
+In **Settings → Booking system**:
 
 1. Paste your Suite base URL + key, press **Test** — proceed only
    on green. Your key encrypts immediately; we never show it again.
 2. In **Room catalogues**, add every room the chatbot may sell with
    live prices. No row, no quote — the bot never invents rooms.
 
-No booking system yet? Tell us — the chat still answers questions
-and takes handoffs while you sort that out.
+No booking system yet? The chat still answers questions from your knowledge base and takes handoffs while you sort that out — it just can't check prices or availability or take booking drafts until you connect one.
 
 ## 4. Put it on your website (10 min, your webmaster can do it)
 
@@ -69,7 +68,7 @@ With this on, logging in takes two steps: your password, then a
 Authenticator, Authy, or similar — free). Even if someone learns
 your password, they can't get in without your phone.
 
-**Turn it on** (in **Settings → Two-factor authentication**):
+**Turn it on** (in **Settings → Profile → Two-factor authentication**):
 
 1. Press **Enable two-factor authentication**. A square QR code
    appears on screen.
@@ -89,7 +88,7 @@ your password, they can't get in without your phone.
 then the current 6-digit code when asked. Lost your phone? Choose
 "Use a recovery code" on that screen and enter one saved code.
 
-**Turn it off:** Settings → Two-factor authentication →
+**Turn it off:** Settings → Profile → Two-factor authentication →
 **Disable**, then your current password plus a current code (or
 one recovery code). Disabling deletes the stored secret and all
 recovery codes.
@@ -136,7 +135,7 @@ together before anything pauses.
 
 - Chat answers "I don't know" on documented facts → your knowledge
   run missed it; re-check uploads, ask us for a re-run.
-- Quotes fail or drafts error → Settings → booking connection →
+- Quotes fail or drafts error → Settings → Booking system →
   Test. Red means your Suite or key needs attention.
 - Widget missing on your site → the host isn't in Domains (step 4.1).
 - Anything else → email us with your resort name, what you clicked,

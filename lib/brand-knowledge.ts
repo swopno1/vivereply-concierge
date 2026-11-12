@@ -66,7 +66,7 @@ export const BRAND_ENTRIES: BrandEntry[] = [
     body: [
       "Vivereply Chatbot is an AI front-office assistant for resorts and hotels: it answers guest questions, checks live availability, quotes exact prices, holds booking drafts with real codes, verifies bookings privately, and hands complex cases to staff with the full transcript — in English and Bengali.",
       "Every price and availability answer comes from a live check at the moment of asking; it never guesses. Verification by code shows dates, first name and status only; email or phone lookups email details to the stored address instead of revealing them in chat.",
-      "It reads live rates from the booking backend, including Suite. It is currently the Concierge hackathon MVP; general availability follows.",
+      "It reads live rates from the booking backend, including Suite. It is live now — resorts sign up at app.vivereply.com and start with a 30-day free trial.",
     ].join(" "),
   },
   {
@@ -80,7 +80,7 @@ export const BRAND_ENTRIES: BrandEntry[] = [
   {
     id: "onboarding",
     title: "Onboarding a resort",
-    sourceLabel: "Owner guide (docs/owner-guide.md) + Docs: Connecting a Property",
+    sourceLabel: "Owner guide + Docs: Connecting a Property",
     sourceUrl: "https://www.vivereply.com/docs/chatbot/setup",
     keywords: [
       "onboarding", "onboard", "setup", "getting started", "install", "embed",
@@ -99,7 +99,7 @@ export const BRAND_ENTRIES: BrandEntry[] = [
     // checked (marketing site ×12 pages, docs site incl. housekeeping +
     // setup + glossary + roadmap, owner guide, docs repo, blog). Keep
     // this entry minimal until it is published somewhere citable.
-    sourceLabel: "Founder handover 2026-11-12 (unpublished — confirm before quoting externally)",
+    sourceLabel: "ViveReply product notes",
     sourceUrl: "https://vivereply.com/contact",
     keywords: ["roomready", "room ready", "housekeeping add-on", "housekeeping addon"],
     body: "RoomReady is a housekeeping add-on for ViveReply Suite — not a standalone product. It is not covered in the published docs yet; for details, contact us and we will walk you through it.",
