@@ -26,6 +26,7 @@ type Binding = {
 type Status = {
   backend: { source: "settings" | "demo-env" | "fixture" | "none"; baseUrl: string | null };
   catalogue: { source: "settings" | "demo-file" | "none"; rooms: number };
+  isDemoProperty: boolean;
 };
 
 export default function SuiteBindings({
@@ -47,6 +48,12 @@ export default function SuiteBindings({
   const [removing, setRemoving] = useState(false);
 
   const mine = rows.find((r) => r.propertyId === initialPropertyId) ?? null;
+
+  // Demo-aware copy: only the demo property falls back to the demo
+  // default, so only it may be told so. Unknown (status still loading
+  // or unreachable) reads as non-demo — never promise a fallback that
+  // likely does not exist.
+  const isDemo = status?.isDemoProperty ?? false;
 
   // Status banner: refresh after every save/delete so it always reflects reality.
   async function loadStatus() {
@@ -116,7 +123,9 @@ export default function SuiteBindings({
     if (!mine || removing) return;
     if (
       !confirm(
-        "Remove this connection? The property falls back to the demo default until you add one again."
+        isDemo
+          ? "Remove this connection? The property falls back to the demo default until you add one again."
+          : "Remove this connection? Guests will still get answers to questions, but prices, availability and bookings will pause until you add a connection again."
       )
     ) {
       return;
@@ -133,7 +142,11 @@ export default function SuiteBindings({
       setBaseUrl("");
       setSecret("");
       setPayPage("");
-      setMsg("Connection removed. The property now uses the demo default.");
+      setMsg(
+        isDemo
+          ? "Connection removed. The property now uses the demo default."
+          : "Connection removed. Booking features are paused for this property until you add a connection again."
+      );
       void reload();
     } else {
       setMsg("Remove failed.");
@@ -200,7 +213,7 @@ export default function SuiteBindings({
             {status.backend.source === "fixture" &&
               "This property answers from a built-in demo fixture, not a live booking system."}
             {status.backend.source === "none" &&
-              "Guest chats currently have no booking backend — price and availability answers are disabled until you connect one."}
+              "Guest chats answer questions, but cannot check prices or availability or take bookings until you connect a booking system."}
           </p>
           <p>
             {status.catalogue.source === "settings" &&
@@ -258,8 +271,15 @@ export default function SuiteBindings({
         </div>
       ) : (
         <p className="text-sm text-gray-500">
-          No connection yet for <span className="font-mono">{initialPropertyId}</span>. Save one
-          below to switch this property from the demo default to your own booking system.
+          {isDemo ? (
+            <>
+              No connection yet for <span className="font-mono">{initialPropertyId}</span>. Save
+              one below to switch this property from the demo default to your own booking
+              system.
+            </>
+          ) : (
+            "No connection saved yet. Add one below so guests can check prices and availability and book."
+          )}
         </p>
       )}
 
@@ -284,15 +304,21 @@ export default function SuiteBindings({
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            {editing ? "Secret key (leave empty to keep the current key)" : "Secret key (optional)"}
+            {editing ? "Secret key (leave empty to keep the current key)" : "Secret key"}
             <input
               type="password"
               value={secret}
               onChange={(e) => setSecret(e.target.value)}
-              placeholder="Paste the key your booking system gave you"
+              placeholder="Paste the shared secret from your booking system server"
               autoComplete="new-password"
               className="rounded-lg border border-gray-300 px-3 py-2 font-mono"
             />
+            <span className="text-xs text-gray-500">
+              For ViveReply Suite: this must match the CONCIERGE_SHARED_SECRET value in your
+              Suite server settings. It is not the bridge key — that lives under Bridge keys
+              and powers the staff handoff board. Leave empty only if your booking system
+              does not require a secret.
+            </span>
           </label>
           <label className="flex flex-col gap-1 text-sm">
             Your payment page (https URL, optional)

@@ -469,3 +469,24 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
 - NOT verified here (needs live): no-binding guest turn on a real
   property, owner feed row visible in Settings, isolation probes.
   Cosmo live steps per handover acceptance.
+
+## 2026-11-12 — Handover B: owner-facing copy batch (branch)
+
+- Branch feature/copy-batch-owner-clarity off main@5e317c8 (post-A
+  merge; dependency satisfied). Copy-only except the 2FA checklist
+  row, which now reads the page's real twoFaEnabled value via a pure
+  lib/security-checklist.ts builder (pinned by 3 new tests).
+- SuiteBindings strings are demo-aware via a new isDemoProperty flag
+  on GET /api/admin/integration/status (same DEMO_PROPERTY_ID
+  comparison as the resolvers); unknown status reads non-demo, never
+  promising a fallback that likely does not exist. Non-demo
+  properties are never told about a demo default (all 4 remaining
+  "demo default" hits are demo-gated branches, the demo-env status
+  line, or a code comment — grep-verified).
+- Brand corpus: no "hackathon", no internal handover label
+  (RoomReady → "ViveReply product notes"; onboarding label drops the
+  repo-path suffix). Chatbot framing is the proposed live wording —
+  founder confirms before merge.
+- Evidence (sandbox, this branch): 182/182 unit green (179 baseline
+  + 3 new security-checklist), tsc clean, webpack build green 55/55,
+  zero dollar figures in touched files.
