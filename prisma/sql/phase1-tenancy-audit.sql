@@ -39,7 +39,6 @@ SELECT COUNT(*) AS password_reset_token_rows FROM "PasswordResetToken";
 --    If zero, the demo serves today only via code fallbacks — the seed
 --    step in the PR must run BEFORE deploy, or signed-out chat 403s.
 SELECT id, name, status FROM "Property" WHERE id = '<DEMO_ID>';
-SELECT id, name, status FROM "Property" WHERE id = 'krishnachura-retreat';
 
 -- 4. Orphan audit: every row whose propertyId has no Property row.
 --    EXPECTED: all counts 0. Any nonzero row BLOCKS the FK migration —

@@ -490,3 +490,34 @@ Started 2026-10-28 (Day 3). Uncommitted working file; folds into Nov 2 polish.
 - Evidence (sandbox, this branch): 182/182 unit green (179 baseline
   + 3 new security-checklist), tsc clean, webpack build green 55/55,
   zero dollar figures in touched files.
+
+## 2026-11-12 — Handover C: remove production demo defaults (branch)
+
+- Branch feature/remove-demo-defaults off main@79d0473 (post-A+B).
+  Single demoPropertyId() helper (lib/demo.ts, zero imports, null
+  when unset/blank) now gates every demo fallback: Suite demo-env
+  binding + mirror (lib/suite.ts ×2), file catalogue + mirror
+  (demo-config/rooms.ts ×2), static widget keys incl. Settings
+  display (demo-config/widget-keys.ts + settings page),
+  fixture backends (demo-config/fixture.ts, demo-mode gate), owner
+  copy flag (integration status route), super-admin default page
+  (lib/tenant.ts resolvePropertyId — throws fail-closed when no
+  demo is configured and no ?property= selects one).
+- Acceptance grep `?? "krishnachura-retreat"` over lib demo-config
+  app: EMPTY. Only env read left is the helper.
+- Evidence (sandbox, this branch): 192/192 unit green BOTH with
+  DEMO_PROPERTY_ID unset (CI mode) and set to krishnachura-retreat
+  (demo mode) — 182 baseline + 10 new tests/demo-defaults.test.mjs;
+  only env-setup line added to suite-contracts (assertions
+  untouched). tsc clean, webpack build exit 0.
+- Deliberately untouched (see PR): probes guard/target defaults
+  (protective + operator targeting, explicit env already wins),
+  component placeholder text (inert), prompts/tools DEMO_ROOMS
+  signature defaults (no property selection; route passes
+  explicitly), public/widget.js key-less default (inert without
+  server resolution), dead legacy env-based Suite exports (zero
+  callers), eval EVAL_PROPERTY_ID default (explicit live target).
+- NOT verified here (needs live): unset-mode widget error panel +
+  uniform unconfigured-property behaviour on the VM; founder
+  workflow note — super-admin pages without ?property= now hit the
+  error boundary when unset (append ?property=<active-id>).

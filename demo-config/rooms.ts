@@ -20,6 +20,8 @@
 // to a real room without inventing anything. Only Terracotta Villa
 // has a sea view in the seed — that is why a sea-facing ask maps to
 // it, and to nothing else.
+import { demoPropertyId } from "@/lib/demo";
+
 export type DemoRoom = {
   slug: string;
   name: string;
@@ -48,9 +50,10 @@ export function catalogueText(rooms: DemoRoom[] = DEMO_ROOMS): string {
   ).join("\n");
 }
 
-// Per-property catalogue (adapter Phase 3). Rows win when present; the demo
-// property falls back to this file until it is seeded; any other property
-// without rows fails honestly instead of borrowing the demo's rooms.
+// Per-property catalogue (adapter Phase 3). Rows win when present; the
+// CONFIGURED demo property falls back to this file until it is seeded;
+// with DEMO_PROPERTY_ID unset (production) no property takes that path
+// and every row-less property fails honestly instead of borrowing rooms.
 export async function catalogueForProperty(propertyId: string): Promise<DemoRoom[]> {
   const { withTenant } = await import("@/lib/tenant-db");
   const rows = await withTenant(propertyId, (tx) =>
@@ -68,7 +71,8 @@ export async function catalogueForProperty(propertyId: string): Promise<DemoRoom
       highlights: r.highlights,
     }));
   }
-  if (propertyId === (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat")) {
+  const demoId = demoPropertyId();
+  if (demoId !== null && propertyId === demoId) {
     return DEMO_ROOMS;
   }
   throw new Error(`Property "${propertyId}" has no room catalogue yet.`);
@@ -84,7 +88,8 @@ export async function describeCatalogueResolution(
   const { withTenant } = await import("@/lib/tenant-db");
   const count = await withTenant(propertyId, (tx) => tx.roomMapping.count({ where: { propertyId } }));
   if (count > 0) return { source: "settings", rooms: count };
-  if (propertyId === (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat")) {
+  const demoId = demoPropertyId();
+  if (demoId !== null && propertyId === demoId) {
     return { source: "demo-file", rooms: DEMO_ROOMS.length };
   }
   return { source: "none", rooms: 0 };

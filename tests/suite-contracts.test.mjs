@@ -7,6 +7,11 @@ import { describe, it, afterEach } from "node:test";
 import { strict as assert } from "node:assert";
 import { FixtureSuiteAdapter, HttpSuiteAdapter } from "@/lib/suite";
 
+// Explicit demo mode: the fixture adapter activates only when a demo
+// property is configured, and this file exercises the fixture path —
+// so it declares the mode instead of relying on ambient env.
+process.env.DEMO_PROPERTY_ID = "krishnachura-retreat";
+
 const GUEST = { guestName: "A Test", guestEmail: "a@b.c", guestPhone: "1" };
 const realFetch = globalThis.fetch;
 

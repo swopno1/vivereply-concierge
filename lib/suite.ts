@@ -14,6 +14,7 @@
 // handoff), never a crash on undefined fields and never an invented number.
 
 import { withTenant } from "@/lib/tenant-db";
+import { demoPropertyId } from "./demo";
 import { decryptSecret } from "./secrets";
 import { fixtureRoomsFor } from "@/demo-config/fixture";
 import { isDateString, nightsBetween, quoteForStay } from "@/demo-config/rates";
@@ -319,7 +320,10 @@ export async function resolveSuiteBinding(propertyId: string): Promise<ResolvedS
     tx.propertyBinding.findUnique({ where: { propertyId } })
   );
   if (!row) {
-    if (propertyId === (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat")) {
+    // Demo-env fallback for the CONFIGURED demo property only. Unset
+    // DEMO_PROPERTY_ID (production) means no property takes this path.
+    const demoId = demoPropertyId();
+    if (demoId !== null && propertyId === demoId) {
       const demo = defaultBinding();
       return { kind: "http", baseUrl: demo.baseUrl, secret: demo.secret, version: demo.version };
     }
@@ -358,7 +362,8 @@ export async function describeBackendResolution(
     })
   );
   if (row) return { source: "settings", baseUrl: row.suiteBaseUrl };
-  if (propertyId === (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat")) {
+  const demoId = demoPropertyId();
+  if (demoId !== null && propertyId === demoId) {
     const env = process.env.SUITE_API_BASE_URL ?? "";
     return env ? { source: "demo-env", baseUrl: env.replace(/\/$/, "") } : { source: "none", baseUrl: null };
   }

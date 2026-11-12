@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
+import { demoPropertyId } from "@/lib/demo";
 import { describeBackendResolution } from "@/lib/suite";
 import { describeCatalogueResolution } from "@/demo-config/rooms";
 
@@ -27,8 +28,9 @@ export async function GET(req: NextRequest) {
     describeCatalogueResolution(propertyId),
   ]);
   // Demo flag for owner copy: only the demo property falls back to the
-  // demo default, so only it may be told so. Same comparison as the
+  // demo default, so only it may be told so. Same helper as the
   // resolvers above (lib/suite.ts, demo-config/rooms.ts).
-  const isDemoProperty = propertyId === (process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat");
+  const demoId = demoPropertyId();
+  const isDemoProperty = demoId !== null && propertyId === demoId;
   return NextResponse.json({ backend, catalogue, isDemoProperty });
 }

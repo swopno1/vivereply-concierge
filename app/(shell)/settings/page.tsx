@@ -11,7 +11,7 @@ import { redirect } from "next/navigation";
 import { prisma, prismaService } from "@/lib/prisma";
 import { getSession, resolvePropertyId, sessionOwnerVerified } from "@/lib/tenant";
 import { withTenant } from "@/lib/tenant-db";
-import { WIDGET_KEYS } from "@/demo-config/widget-keys";
+import { visibleWidgetKeys } from "@/demo-config/widget-keys";
 import CopyButton from "../../components/CopyButton";
 import SignOutButton from "../../components/SignOutButton";
 import SuiteBindings from "../../components/SuiteBindings";
@@ -233,7 +233,7 @@ export default async function SettingsPage({
 
   // Widget keys for THIS property: static entries plus the seeded row's
   // key (deduped — the demo key lives in both until the seed runs).
-  const keys = Object.entries(WIDGET_KEYS).filter(([, prop]) => prop.propertyId === propertyId);
+  const keys = visibleWidgetKeys().filter(([, prop]) => prop.propertyId === propertyId);
   if (property && !keys.some(([key]) => key === property.widgetKey)) {
     keys.push([property.widgetKey, { propertyId: property.id, title: property.name }]);
   }
