@@ -10,11 +10,11 @@
 //   - resolvePropertyId(session, param): which property a page acts for.
 //     OWNER is pinned to its own (a ?property= override is ignored, not
 //     an error; a null propertyId throws — fail closed, never demo).
-//     SUPER_ADMIN may pass ?property=<active-id>, else the demo
-//     property. Signed out also yields the demo property id (public
-//     chat) — but the id alone serves nothing: every consumer checks
-//     isPropertyActive, which fails closed on a missing row, so the
-//     demo works only through its explicit seeded Property row.
+//     SUPER_ADMIN may pass ?property=<active-id>, else the configured
+//     demo property — and when no demo property is configured (unset
+//     DEMO_PROPERTY_ID, i.e. production), no selection throws instead
+//     of silently serving a special property. Signed-out callers never
+//     reach this (pages redirect to login first).
 //   - revokeSession / revokeUserSessions: the kill switches logout,
 //     password change, and admin revoke act through.
 //   - withTenant: run tenant-table queries with app.tenant_id set (the
@@ -23,6 +23,7 @@
 //     marked at each call site, listed in the Phase 1 PR).
 
 import { cookies } from "next/headers";
+import { demoPropertyId } from "./demo";
 import { prisma, prismaService } from "@/lib/prisma";
 import { withTenant } from "@/lib/tenant-db";
 import { logAudit } from "@/lib/audit";
@@ -147,10 +148,6 @@ export async function sessionOwnerVerified(session: Session | null): Promise<boo
   return user?.emailVerifiedAt != null;
 }
 
-export function demoPropertyId(): string {
-  return process.env.DEMO_PROPERTY_ID ?? "krishnachura-retreat";
-}
-
 // Tenant kill-switch predicate. ACTIVE means live; anything else means
 // suspended — including a MISSING row (Phase 1 killed the demo no-row
 // fallback: the demo serves only through its explicit seeded Property
@@ -175,5 +172,13 @@ export async function resolvePropertyId(
     const row = await prisma.property.findUnique({ where: { id: param } }).catch(() => null);
     if (row && row.status === "ACTIVE") return row.id;
   }
-  return demoPropertyId();
+  // No valid selection: the configured demo property, or a fail-closed
+  // throw when none is configured. A super-admin page opened without
+  // ?property= in production lands on the error boundary — honest, and
+  // the fix is the URL: append ?property=<active-id>.
+  const demo = demoPropertyId();
+  if (!demo) {
+    throw new Error("No property selected (?property=<id>) and DEMO_PROPERTY_ID is not set.");
+  }
+  return demo;
 }

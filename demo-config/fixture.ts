@@ -11,6 +11,8 @@
 // anything — the draft tool surfaces it as a totals warning — but keep
 // them in sync (see ROOMS in prisma/seed-tenants.mjs).
 
+import { demoPropertyId } from "@/lib/demo";
+
 export type FixtureRoom = {
   slug: string;
   name: string;
@@ -42,5 +44,11 @@ export const FIXTURE_CATALOGUE: Record<string, FixtureRoom[]> = {
 };
 
 export function fixtureRoomsFor(propertyId: string): FixtureRoom[] | undefined {
+  // Fixture backends exist only in demo mode: with DEMO_PROPERTY_ID
+  // unset (production), no fixture adapter activates for any property.
+  // Note the gate is demo-mode itself, not the demo property's id —
+  // test properties (e.g. seabreeze-test) keep working whenever demo
+  // mode is on, exactly as today.
+  if (demoPropertyId() === null) return undefined;
   return FIXTURE_CATALOGUE[propertyId];
 }
