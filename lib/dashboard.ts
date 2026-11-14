@@ -48,6 +48,15 @@ export type AttentionInput = {
 export function attentionItems({ snapshot }: AttentionInput): AttentionItem[] {
   if (!snapshot || !snapshot.hasSubscription) return [];
   if (!snapshot.gate.allowed) {
+    if (snapshot.gate.reason === "admin-hold") {
+      return [
+        {
+          id: "paused",
+          text: "Paused by ViveReply — contact support.",
+          href: "/support",
+        },
+      ];
+    }
     return [
       {
         id: "paused",
@@ -61,6 +70,8 @@ export function attentionItems({ snapshot }: AttentionInput): AttentionItem[] {
       },
     ];
   }
+  // Manual billing: Stripe nags don't apply (see shell banner).
+  if (snapshot.manualActive) return [];
   const items: AttentionItem[] = [];
   if (snapshot.status === "PAST_DUE") {
     items.push({

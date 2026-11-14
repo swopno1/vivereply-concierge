@@ -25,6 +25,10 @@ type Snapshot = {
   usageThisMonth: number;
   quotaThisMonth: number;
   gate: { allowed: boolean; reason: string };
+  adminHold: boolean;
+  manualPlan: string | null;
+  manualPeriodEnd: string | null;
+  manualActive: boolean;
 };
 
 const TIERS = [
@@ -115,6 +119,9 @@ export default function BillingClient({
 
   function statusLine(): string {
     if (!snapshot.hasSubscription) return "No billing record — full access.";
+    if (snapshot.manualActive) {
+      return `${snapshot.manualPlan} plan — manual billing, paid through ${fmtDate(snapshot.manualPeriodEnd)}. Renewals are arranged with ViveReply directly.`;
+    }
     switch (snapshot.status) {
       case "TRIAL":
         return `Free trial — ${snapshot.trialDaysLeft} day${snapshot.trialDaysLeft === 1 ? "" : "s"} left (ends ${fmtDate(snapshot.trialEndsAt)}). Full Growth features, no card needed yet.`;
@@ -158,9 +165,17 @@ export default function BillingClient({
         <p className="text-sm text-gray-600">{statusLine()}</p>
         {paused && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
-            {snapshot.gate.reason === "quota-exceeded"
-              ? "Guest chat is paused — the monthly limit is reached. It resumes automatically next month, or on upgrade."
-              : "Guest chat is paused — subscribe below to resume immediately."}
+            {snapshot.gate.reason === "admin-hold"
+              ? "Paused by ViveReply — contact support."
+              : snapshot.gate.reason === "quota-exceeded"
+                ? "Guest chat is paused — the monthly limit is reached. It resumes automatically next month, or on upgrade."
+                : "Guest chat is paused — subscribe below to resume immediately."}
+          </p>
+        )}
+        {snapshot.manualActive && (
+          <p className="rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700">
+            Manual billing — {snapshot.manualPlan} plan, paid through {fmtDate(snapshot.manualPeriodEnd)}.
+            Renewals are arranged with ViveReply directly.
           </p>
         )}
       </div>

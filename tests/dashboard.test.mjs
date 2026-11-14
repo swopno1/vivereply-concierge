@@ -107,6 +107,26 @@ describe("attention strip matrix (D1)", () => {
       ["trial-ending"]
     );
   });
+
+  it("S3: admin hold routes to support, never to billing", () => {
+    const items = attentionItems({
+      snapshot: snap({ gate: { allowed: false, reason: "admin-hold" } }),
+    });
+    assert.equal(items.length, 1);
+    assert.match(items[0].text, /Paused by ViveReply/);
+    assert.equal(items[0].href, "/support");
+  });
+
+  it("S3: live manual billing suppresses Stripe nags", () => {
+    assert.deepEqual(
+      attentionItems({ snapshot: snap({ status: "TRIAL", trialDaysLeft: 2, manualActive: true }) }),
+      []
+    );
+    assert.deepEqual(
+      attentionItems({ snapshot: snap({ status: "PAST_DUE", manualActive: true }) }),
+      []
+    );
+  });
 });
 
 describe("first-run checklist derivation (D1)", () => {

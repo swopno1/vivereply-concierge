@@ -161,12 +161,14 @@ export async function POST(req: NextRequest) {
       { status: 403 }
     );
   }
-  // Billing gate (Phase 3): trial-expiry, ended subscriptions, and
-  // the 120% quota stop land HERE — before any row is written, before
-  // the model spends a cent, on every scope (owners see the same
-  // pause guests do; the banner + billing page explain why). No
-  // Subscription row = grandfathered (demo, seeds, pre-Phase-3):
-  // served, no clock. A pause answers as a NORMAL in-thread reply —
+  // Billing gate (Phase 3 + S3): trial-expiry, ended
+  // subscriptions, the 120% quota stop, the super-admin hold, and
+  // manual (offline/BD) periods land HERE — before any row is
+  // written, before the model spends a cent, on every scope (owners
+  // see the same pause guests do; the banner + billing page explain
+  // why). No Subscription row = grandfathered (demo, seeds,
+  // pre-Phase-3): served, no clock — unless a hold or manual period
+  // is set on the property. A pause answers as a NORMAL in-thread reply —
   // honest message + the resort's human contact — never an error
   // toast, never a 500, never a hallucinated quote. Paused turns
   // write nothing, so they consume no quota. A billing-READ failure
@@ -175,13 +177,29 @@ export async function POST(req: NextRequest) {
   // by the outage and audit-visible in the server log.
   {
     const now = new Date();
-    const billing = await withTenant(chatToken.propertyId, (tx) =>
-      tx.subscription.findUnique({ where: { propertyId: chatToken.propertyId } })
-    ).catch((e) => {
-      console.error("billing gate: subscription read failed, serving", e);
-      return null;
-    });
-    if (billing) {
+    const [billing, propertyGate] = await Promise.all([
+      withTenant(chatToken.propertyId, (tx) =>
+        tx.subscription.findUnique({ where: { propertyId: chatToken.propertyId } })
+      ).catch((e) => {
+        console.error("billing gate: subscription read failed, serving", e);
+        return null;
+      }),
+      // S3 super-admin inputs (hold + manual billing). A failed read
+      // degrades to "no hold, no manual" — same fail-open posture as
+      // the subscription read: billing must never break guest chat.
+      // (A hold the gate can't see is bounded by the outage; the
+      // property row is also checked by isPropertyActive above.)
+      withTenant(chatToken.propertyId, (tx) =>
+        tx.property.findUnique({
+          where: { id: chatToken.propertyId },
+          select: { adminHold: true, manualPlan: true, manualPeriodEnd: true },
+        })
+      ).catch((e) => {
+        console.error("billing gate: property read failed, serving", e);
+        return null;
+      }),
+    ]);
+    if (billing || propertyGate?.adminHold || propertyGate?.manualPlan) {
       const usage = await withTenant(chatToken.propertyId, (tx) =>
         tx.conversation.count({
           where: { propertyId: chatToken.propertyId, createdAt: { gte: monthStartUtc(now) } },
@@ -191,16 +209,19 @@ export async function POST(req: NextRequest) {
         return 0;
       });
       const verdict = gateDecision(
-        {
-          tier: billing.tier,
-          status: billing.status,
-          trialEndsAt: billing.trialEndsAt,
-          currentPeriodEnd: billing.currentPeriodEnd,
-          cancelAtPeriodEnd: billing.cancelAtPeriodEnd,
-          overageAgreed: billing.overageAgreed,
-        },
+        billing
+          ? {
+              tier: billing.tier,
+              status: billing.status,
+              trialEndsAt: billing.trialEndsAt,
+              currentPeriodEnd: billing.currentPeriodEnd,
+              cancelAtPeriodEnd: billing.cancelAtPeriodEnd,
+              overageAgreed: billing.overageAgreed,
+            }
+          : null,
         usage,
-        now
+        now,
+        propertyGate
       );
       if (!verdict.allowed) {
         // Contact is read only on the pause path (saves a query on
