@@ -109,7 +109,10 @@ export default async function HomePage({
   const paused = !snap.gate.allowed;
   const usagePct = snap.quotaThisMonth > 0 ? Math.min(100, Math.round((snap.usageThisMonth / snap.quotaThisMonth) * 100)) : 0;
   const suiteHost = data.binding ? hostOf(data.binding.suiteBaseUrl) : null;
-  const renewal = fmtDate(snap.currentPeriodEnd) ?? fmtDate(snap.trialEndsAt);
+  const planName = snap.manualActive && snap.manualPlan ? snap.manualPlan : snap.tier;
+  const renewal = snap.manualActive
+    ? fmtDate(snap.manualPeriodEnd)
+    : (fmtDate(snap.currentPeriodEnd) ?? fmtDate(snap.trialEndsAt));
   const embedSnippet = data.widgetKey ? `<script src="${origin}/widget.js" data-key="${data.widgetKey}"></script>` : null;
 
   return (
@@ -139,6 +142,7 @@ export default async function HomePage({
             {paused ? "Paused" : "Live"}
             {paused && snap.gate.reason === "trial-expired" ? " · trial ended" : ""}
             {paused && snap.gate.reason === "quota-exceeded" ? " · limit reached" : ""}
+            {paused && snap.gate.reason === "admin-hold" ? " · by ViveReply" : ""}
           </p>
           <p className="mt-1 text-sm text-gray-600">
             {snap.usageThisMonth.toLocaleString()} / {snap.quotaThisMonth.toLocaleString()} conversations
@@ -146,7 +150,7 @@ export default async function HomePage({
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-200" role="img" aria-label={`${usagePct}% of quota used`}>
             <div className="h-full rounded-full bg-gray-900" style={{ width: `${usagePct}%` }} />
           </div>
-          <p className="mt-2 text-sm text-gray-600">{snap.tier} plan</p>
+          <p className="mt-2 text-sm text-gray-600">{planName} plan{snap.manualActive ? " (manual billing)" : ""}</p>
           <a href="/chatbot" className="mt-2 inline-block text-sm font-medium text-gray-900 underline underline-offset-2">
             Open Chatbot
           </a>
@@ -188,9 +192,10 @@ export default async function HomePage({
       <Card>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-sm font-semibold text-gray-900">
-            {snap.hasSubscription ? `${snap.tier} plan` : "No billing record — full access"}
+            {snap.hasSubscription ? `${planName} plan` : "No billing record — full access"}
+            {snap.manualActive ? <span className="font-normal text-gray-600"> (manual billing)</span> : null}
             {renewal ? <span className="font-normal text-gray-600"> · renews {renewal}</span> : null}
-            {snap.status === "TRIAL" ? (
+            {snap.status === "TRIAL" && !snap.manualActive ? (
               <span className="font-normal text-gray-600">
                 {" "}
                 · trial ends {fmtDate(snap.trialEndsAt) ?? `${snap.trialDaysLeft} days left`}

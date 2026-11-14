@@ -43,6 +43,7 @@ export default async function BillingPage({
         ...snapshot,
         trialEndsAt: snapshot.trialEndsAt?.toISOString() ?? null,
         currentPeriodEnd: snapshot.currentPeriodEnd?.toISOString() ?? null,
+        manualPeriodEnd: snapshot.manualPeriodEnd?.toISOString() ?? null,
       }}
       checkout={params.checkout === "success" || params.checkout === "cancelled" ? params.checkout : null}
     />

@@ -27,6 +27,18 @@ model Property {
   // on the User row; this field only answers "how many properties
   // does this owner have?".
   ownerEmail         String?
+  // S3 super-admin hold: while true the billing gate denies guest
+  // chat and the owner dashboard shows "Paused by ViveReply —
+  // contact support" (distinct from billing pauses). Set only from
+  // the admin console (superadmin_rw role); nothing else writes it.
+  adminHold          Boolean             @default(false)
+  // S3 manual (offline/BD) billing: plan name + paid-through date,
+  // set by console approval. A live period serves exactly like a
+  // paid Stripe property; an expired one pauses like a lapsed
+  // subscription. NEVER a faked Stripe id — the gate reads these
+  // fields, never stripeCustomerId/stripeSubscriptionId, for manual.
+  manualPlan         String?
+  manualPeriodEnd    DateTime?
   status             String              @default("ACTIVE")
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt

@@ -94,24 +94,56 @@ export type GateReason =
   | "trial-expired"
   | "subscription-ended"
   | "quota-exceeded"
+  | "admin-hold"
   | "billing-unknown";
 
 export type GateVerdict = { allowed: boolean; reason: GateReason };
 
-// Decides whether guest chat serves a property. NULL subscription =
+// S3 super-admin inputs, read from the Property row (never from the
+// subscription): the hard hold + the manual (offline/BD) billing
+// pair. NULL = pre-S3 caller that only knows subscriptions.
+export type PropertyGateInput = {
+  adminHold: boolean;
+  manualPlan: string | null;
+  manualPeriodEnd: Date | null;
+};
+
+// Decides whether guest chat serves a property. Order: the admin
+// hold wins over everything (including grandfathering — a hold is a
+// deliberate operator act); then a LIVE manual period serves exactly
+// like a paid subscription (it overrides even an expired-trial row,
+// which is the normal BD shape: trial lapsed, paid by invoice);
+// otherwise the subscription machine below decides, and an expired
+// manual period simply falls through to it. NULL subscription =
 // grandfathered (demo, seeds, pre-Phase-3 rows): full access, no
-// clock. Everything else follows the status machine (see schema).
-// PAST_DUE stays served while Stripe retries; CANCELED serves to the
-// period end, then pauses; EXPIRED and spent trials pause. The 120%
-// hard stop honors overageAgreed ONLY with a live subscription — a
-// trial has no card, so trial overage can't be billed and always
-// stops. Unknown statuses fail closed (generic reason, honest
-// message, no state leak to the guest).
+// clock. PAST_DUE stays served while Stripe retries; CANCELED serves
+// to the period end, then pauses; EXPIRED and spent trials pause.
+// The 120% hard stop honors overageAgreed ONLY with a live Stripe
+// subscription — a trial or manual period has no card, so its
+// overage can't be billed and always stops. Unknown statuses fail
+// closed (generic reason, honest message, no state leak to the
+// guest). Unknown manualPlan strings fall back to the Starter quota
+// (same drift rule as quotaForTier).
 export function gateDecision(
   sub: SubscriptionRow | null,
   usageThisMonth: number,
-  now: Date
+  now: Date,
+  property: PropertyGateInput | null = null
 ): GateVerdict {
+  if (property?.adminHold) return { allowed: false, reason: "admin-hold" };
+  if (
+    property?.manualPlan &&
+    property.manualPeriodEnd &&
+    now.getTime() <= property.manualPeriodEnd.getTime()
+  ) {
+    if (
+      usageThisMonth >=
+      Math.floor(quotaForTier(property.manualPlan) * HARD_STOP_RATIO)
+    ) {
+      return { allowed: false, reason: "quota-exceeded" };
+    }
+    return { allowed: true, reason: "ok" };
+  }
   if (!sub) return { allowed: true, reason: "ok" };
   const overQuota =
     usageThisMonth >= Math.floor(quotaForTier(sub.tier) * HARD_STOP_RATIO);
@@ -274,6 +306,15 @@ export type BillingSnapshot = {
   usageThisMonth: number;
   quotaThisMonth: number;
   gate: GateVerdict;
+  // S3 super-admin state, read from the Property row (see schema).
+  // Consumers: an admin hold shows "Paused by ViveReply — contact
+  // support" (never a subscribe nudge); a live manual period
+  // suppresses Stripe billing nags (trial-ending, past-due,
+  // resubscribe) and is the renewal date, NOT currentPeriodEnd.
+  adminHold: boolean;
+  manualPlan: string | null;
+  manualPeriodEnd: Date | null;
+  manualActive: boolean;
 };
 
 // Everything the billing page + shell banner need in one call.
@@ -284,9 +325,27 @@ export async function getBillingSnapshot(
   now: Date
 ): Promise<BillingSnapshot> {
   const db = prismaService();
-  const sub = await db.subscription
-    .findUnique({ where: { propertyId } })
-    .catch(() => null);
+  const [sub, property] = await Promise.all([
+    db.subscription.findUnique({ where: { propertyId } }).catch(() => null),
+    db.property
+      .findUnique({
+        where: { id: propertyId },
+        select: { adminHold: true, manualPlan: true, manualPeriodEnd: true },
+      })
+      .catch(() => null),
+  ]);
+  const adminHold = property?.adminHold ?? false;
+  const manualPlan = property?.manualPlan ?? null;
+  const manualPeriodEnd = property?.manualPeriodEnd ?? null;
+  // Narrowed once: non-null exactly when the manual period is live.
+  const liveManualPlan =
+    manualPlan && manualPeriodEnd && now.getTime() <= manualPeriodEnd.getTime()
+      ? manualPlan
+      : null;
+  const manualActive = liveManualPlan !== null;
+  const propertyGate: PropertyGateInput | null = property
+    ? { adminHold, manualPlan, manualPeriodEnd }
+    : null;
   if (!sub) {
     return {
       hasSubscription: false,
@@ -299,14 +358,24 @@ export async function getBillingSnapshot(
       cancelAtPeriodEnd: false,
       overageAgreed: false,
       usageThisMonth: 0,
-      quotaThisMonth: TIER_QUOTA.GROWTH,
-      gate: { allowed: true, reason: "ok" },
+      quotaThisMonth: liveManualPlan
+        ? quotaForTier(liveManualPlan)
+        : TIER_QUOTA.GROWTH,
+      gate: gateDecision(null, 0, now, propertyGate),
+      adminHold,
+      manualPlan,
+      manualPeriodEnd,
+      manualActive,
     };
   }
   const usage = await db.conversation
     .count({ where: { propertyId, createdAt: { gte: monthStartUtc(now) } } })
     .catch(() => 0);
-  const quota = sub.status === "TRIAL" ? TIER_QUOTA.GROWTH : quotaForTier(sub.tier);
+  const quota = liveManualPlan
+    ? quotaForTier(liveManualPlan)
+    : sub.status === "TRIAL"
+      ? TIER_QUOTA.GROWTH
+      : quotaForTier(sub.tier);
   return {
     hasSubscription: true,
     status: sub.status,
@@ -329,8 +398,13 @@ export async function getBillingSnapshot(
         overageAgreed: sub.overageAgreed,
       },
       usage,
-      now
+      now,
+      propertyGate
     ),
+    adminHold,
+    manualPlan,
+    manualPeriodEnd,
+    manualActive,
   };
 }
 
@@ -392,6 +466,11 @@ export function pauseMessage(reason: GateReason, contact: ResortContact | null):
   switch (reason) {
     case "trial-expired":
     case "subscription-ended":
+    case "admin-hold":
+      // The guest reads the same honest unavailable copy for an
+      // admin hold — tenant/operator state is never guest business.
+      // The owner sees the distinct "Paused by ViveReply" state on
+      // their own dashboard instead.
       return (
         `Our chat assistant is temporarily unavailable — please contact the resort directly and the team will help you right away.${tail ? ` ${tail.trim()}` : ""}`
       );

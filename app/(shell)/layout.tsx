@@ -21,9 +21,21 @@ async function billingBannerFor(propertyId: string): Promise<BillingBanner> {
   const snap = await getBillingSnapshot(propertyId, new Date()).catch(() => null);
   if (!snap || !snap.hasSubscription) return null;
   if (!snap.gate.allowed) {
+    if (snap.gate.reason === "admin-hold") {
+      return { text: "Paused by ViveReply — contact support.", tone: "bad" };
+    }
     return snap.gate.reason === "quota-exceeded"
       ? { text: "Guest chat is paused — the monthly limit is reached.", tone: "bad" }
       : { text: "Guest chat is paused — subscribe to resume immediately.", tone: "bad" };
+  }
+  // Manual (offline/BD) billing: Stripe nags don't apply — the
+  // renewal is arranged with ViveReply directly, not by card.
+  if (snap.manualActive) {
+    if (snap.usageThisMonth >= Math.floor(snap.quotaThisMonth * USAGE_ALERT_RATIO)) {
+      const pct = Math.round((snap.usageThisMonth / snap.quotaThisMonth) * 100);
+      return { text: `${pct}% of monthly conversations used.`, tone: "warn" };
+    }
+    return null;
   }
   if (snap.status === "PAST_DUE") {
     return { text: "Latest payment failed — chat keeps running while we retry.", tone: "warn" };

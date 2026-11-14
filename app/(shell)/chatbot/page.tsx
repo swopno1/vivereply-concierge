@@ -50,7 +50,9 @@ export default async function ChatbotOverviewPage({
           Status:{" "}
           {paused ? (
             <span className="text-red-700">
-              Paused{snapshot && snapshot.gate.reason !== "ok" ? ` (${snapshot.gate.reason})` : ""}
+              {snapshot?.gate.reason === "admin-hold"
+                ? "Paused by ViveReply — contact support"
+                : `Paused${snapshot && snapshot.gate.reason !== "ok" ? ` (${snapshot.gate.reason})` : ""}`}
             </span>
           ) : (
             <span className="text-green-700">Live</span>

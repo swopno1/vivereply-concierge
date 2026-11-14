@@ -44,7 +44,8 @@ export default async function ChatbotUsagePage({
               <div className="h-full rounded-full bg-gray-900" style={{ width: `${pct}%` }} />
             </div>
             <p className="text-sm text-gray-600">
-              {snapshot.tier} plan
+              {snapshot.manualActive && snapshot.manualPlan ? snapshot.manualPlan : snapshot.tier} plan
+              {snapshot.manualActive ? " (manual billing)" : ""}
               {!snapshot.gate.allowed && snapshot.gate.reason === "quota-exceeded"
                 ? " · limit reached — guest chat resumes next month, or on upgrade."
                 : ""}

@@ -98,19 +98,24 @@ export type AccountState = {
 export async function accountStateFor(propertyId: string): Promise<AccountState | null> {
   const snapshot = await getBillingSnapshot(propertyId, new Date()).catch(() => null);
   if (!snapshot) return null;
-  const usageLine = `Conversations this month: ${snapshot.usageThisMonth.toLocaleString()} used of ${snapshot.quotaThisMonth.toLocaleString()} (plan ${snapshot.tier}).`;
-  const planLine = !snapshot.hasSubscription
-    ? "No subscription on file: full access."
-    : snapshot.status === "TRIAL"
-      ? `Trial plan; ${snapshot.trialDaysLeft} day(s) left${snapshot.trialEndsAt ? `, ends ${snapshot.trialEndsAt.toISOString().slice(0, 10)}` : ""}.`
-      : `${snapshot.tier} plan, ${snapshot.interval}; ${snapshot.status === "PAST_DUE" ? "latest payment failed (Stripe is retrying; chat keeps running)" : `renews ${snapshot.currentPeriodEnd?.toISOString().slice(0, 10) ?? "at period end"}`}.`;
+  const planName = snapshot.manualActive && snapshot.manualPlan ? snapshot.manualPlan : snapshot.tier;
+  const usageLine = `Conversations this month: ${snapshot.usageThisMonth.toLocaleString()} used of ${snapshot.quotaThisMonth.toLocaleString()} (plan ${planName}).`;
+  const planLine = snapshot.manualActive
+    ? `Manual billing: ${planName} plan, paid through ${snapshot.manualPeriodEnd?.toISOString().slice(0, 10) ?? "unknown"} (renewals arranged with ViveReply directly).`
+    : !snapshot.hasSubscription
+      ? "No subscription on file: full access."
+      : snapshot.status === "TRIAL"
+        ? `Trial plan; ${snapshot.trialDaysLeft} day(s) left${snapshot.trialEndsAt ? `, ends ${snapshot.trialEndsAt.toISOString().slice(0, 10)}` : ""}.`
+        : `${snapshot.tier} plan, ${snapshot.interval}; ${snapshot.status === "PAST_DUE" ? "latest payment failed (Stripe is retrying; chat keeps running)" : `renews ${snapshot.currentPeriodEnd?.toISOString().slice(0, 10) ?? "at period end"}`}.`;
   const pauseLine = snapshot.gate.allowed
     ? "Guest chat is currently running."
-    : snapshot.gate.reason === "trial-expired"
-      ? "Guest chat is paused: trial-expired. Fix: subscribe on Orders & Billing."
-      : snapshot.gate.reason === "quota-exceeded"
-        ? "Guest chat is paused: quota-exceeded. Fix: wait for next month or upgrade."
-        : "Guest chat is paused: subscription-ended. Fix: resubscribe on Orders & Billing.";
+    : snapshot.gate.reason === "admin-hold"
+      ? "Guest chat is paused by ViveReply. Fix: contact support."
+      : snapshot.gate.reason === "trial-expired"
+        ? "Guest chat is paused: trial-expired. Fix: subscribe on Orders & Billing."
+        : snapshot.gate.reason === "quota-exceeded"
+          ? "Guest chat is paused: quota-exceeded. Fix: wait for next month or upgrade."
+          : "Guest chat is paused: subscription-ended. Fix: resubscribe on Orders & Billing.";
   return { usageLine, planLine, pauseLine };
 }
 

@@ -130,10 +130,65 @@ describe("gateDecision", () => {
       allowed: false,
       reason: "subscription-ended",
     });
-    assert.deepEqual(gateDecision(sub({ status: "LIMBO" }), 0, now), {
+    assert.deepEqual(gateDecision(sub({ status: "LIMBO" }), 0, now), { allowed: false, reason: "billing-unknown" });
+  });
+  it("S3: admin hold denies over everything, including grandfathering", () => {
+    const hold = { adminHold: true, manualPlan: null, manualPeriodEnd: null };
+    assert.deepEqual(gateDecision(null, 0, now, hold), { allowed: false, reason: "admin-hold" });
+    assert.deepEqual(
+      gateDecision(sub({ status: "ACTIVE", tier: "SCALE" }), 0, now, hold),
+      { allowed: false, reason: "admin-hold" }
+    );
+  });
+  it("S3: live manual period serves like paid, even over an expired trial", () => {
+    const manual = {
+      adminHold: false,
+      manualPlan: "GROWTH",
+      manualPeriodEnd: new Date(now.getTime() + 10 * D),
+    };
+    assert.deepEqual(
+      gateDecision(sub({ trialEndsAt: new Date(now.getTime() - D) }), 0, now, manual),
+      { allowed: true, reason: "ok" }
+    );
+    assert.deepEqual(gateDecision(null, 0, now, manual), { allowed: true, reason: "ok" });
+  });
+  it("S3: manual quota is the plan quota at 120%, unconditional", () => {
+    const manual = {
+      adminHold: false,
+      manualPlan: "STARTER",
+      manualPeriodEnd: new Date(now.getTime() + 10 * D),
+    };
+    assert.deepEqual(gateDecision(sub(), 599, now, manual), { allowed: true, reason: "ok" });
+    assert.deepEqual(gateDecision(sub(), 600, now, manual), { allowed: false, reason: "quota-exceeded" });
+  });
+  it("S3: expired manual falls through to the subscription machine", () => {
+    const manual = {
+      adminHold: false,
+      manualPlan: "GROWTH",
+      manualPeriodEnd: new Date(now.getTime() - 1),
+    };
+    assert.deepEqual(gateDecision(sub(), 0, now, manual), { allowed: true, reason: "ok" });
+    assert.deepEqual(gateDecision(sub({ status: "EXPIRED" }), 0, now, manual), {
       allowed: false,
-      reason: "billing-unknown",
+      reason: "subscription-ended",
     });
+  });
+  it("S3: unknown manual plan falls back to the Starter quota", () => {
+    const manual = {
+      adminHold: false,
+      manualPlan: "PLATINUM",
+      manualPeriodEnd: new Date(now.getTime() + 10 * D),
+    };
+    assert.deepEqual(gateDecision(sub(), 599, now, manual), { allowed: true, reason: "ok" });
+    assert.deepEqual(gateDecision(sub(), 600, now, manual), { allowed: false, reason: "quota-exceeded" });
+  });
+  it("S3: hold beats a live manual period", () => {
+    const both = {
+      adminHold: true,
+      manualPlan: "SCALE",
+      manualPeriodEnd: new Date(now.getTime() + 10 * D),
+    };
+    assert.deepEqual(gateDecision(sub(), 0, now, both), { allowed: false, reason: "admin-hold" });
   });
 });
 
@@ -146,9 +201,13 @@ describe("pauseMessage", () => {
       pauseMessage("subscription-ended", null),
       pauseMessage("quota-exceeded", null),
       pauseMessage("billing-unknown", null),
+      pauseMessage("admin-hold", null),
     ]) {
       assert.ok(!/trial|quota|billing|payment|subscription|\$|invoice/i.test(m), m);
     }
+  });
+  it("S3: admin hold reuses the honest unavailable copy", () => {
+    assert.equal(pauseMessage("admin-hold", null), pauseMessage("subscription-ended", null));
   });
 });
 
