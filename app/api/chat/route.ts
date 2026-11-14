@@ -23,6 +23,7 @@ import { detectLanguage } from "@/lib/language";
 import { buildCards } from "@/lib/cards";
 import { embedText } from "@/lib/embeddings";
 import { retrieveGrounding, toVectorLiteral } from "@/lib/rag";
+import { runLaneATurn } from "@/lib/assistant-rag";
 import { capHistoryForModel } from "@/lib/history";
 import { verifyChatToken } from "@/lib/auth";
 import { isDomainApproved } from "@/lib/domains";
@@ -350,6 +351,20 @@ export async function POST(req: NextRequest) {
             replyRole: staffTurn.replyRole,
           });
           return;
+        }
+        // Lane A (R1): direct-scope ViveReply questions answer from the
+        // platform corpus + live account state. Widget and brand scopes
+        // never enter; trivial turns skip the embedding call; anything
+        // Lane A declines falls through to Lane B below, unchanged.
+        if (chatToken.scope === "direct" && needsRetrieval(message)) {
+          const laneA = await runLaneATurn({
+            message,
+            lang: activeConversation.language === "bn" ? "bn" : "en",
+            propertyId: tenant,
+            conversationId: activeConversation.id,
+            send,
+          });
+          if (laneA.handled) return;
         }
         // History window = the LAST 20 messages: newest-first fetch,
         // reversed back to chronological order for the model. (An
