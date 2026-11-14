@@ -23,7 +23,7 @@ export default async function BillingPage({
   if (session.role !== "OWNER" || !session.propertyId) {
     return (
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 p-4 md:p-6">
-        <h1 className="text-xl font-bold text-gray-900">Billing</h1>
+        <h1 className="text-xl font-bold text-gray-900">Orders &amp; Billing</h1>
         <p className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 shadow-sm">
           Billing is per-resort and managed by the resort owner — there
           is nothing to show on this account.

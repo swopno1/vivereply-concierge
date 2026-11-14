@@ -37,6 +37,7 @@ import {
   type Session,
 } from "@/lib/auth";
 import { mintLoginSession } from "@/lib/tenant";
+import { preferredOwnerProperty } from "@/lib/dashboard";
 import { turnstileConfigured, verifyTurnstileToken } from "@/lib/turnstile";
 import { logAudit } from "@/lib/audit";
 
@@ -92,7 +93,13 @@ export async function POST(req: NextRequest) {
       if (user.role === "OWNER" && user.propertyId) {
         const prop = await prismaService().property.findUnique({ where: { id: user.propertyId } }).catch(() => null);
         if (prop && prop.status === "ACTIVE") {
-          session = { uid: user.id, email: user.email, role: "OWNER", propertyId: user.propertyId };
+          // D1: reopen the switcher's last property when it is still valid.
+          const propertyId = await preferredOwnerProperty({
+            email: user.email,
+            propertyId: user.propertyId,
+            lastPropertyId: user.lastPropertyId ?? null,
+          });
+          session = { uid: user.id, email: user.email, role: "OWNER", propertyId };
           userId = user.id;
         }
       } else if (user.role === "SUPER_ADMIN" && !user.propertyId) {

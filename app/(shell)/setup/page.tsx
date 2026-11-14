@@ -25,7 +25,7 @@ export default async function SetupPage({
         <div>
           <h1 className="text-xl font-bold text-gray-900">Getting started</h1>
           <p className="mt-1 text-sm text-gray-600">
-            No resort is configured yet. The chat on the home page is currently the{" "}
+            No resort is configured yet. The Assistant chat is currently the{" "}
             <strong className="font-semibold text-gray-900">Vivereply brand assistant</strong> — it
             answers questions about ViveReply products (Suite, Chatbot, onboarding, RoomReady,
             payments) from our official site and docs. It has no resort data: no bookings,

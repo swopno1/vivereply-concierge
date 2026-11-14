@@ -65,6 +65,11 @@ model User {
   role               String
   propertyId         String?
   property           Property?                @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  // D1 dashboard switcher: the property this owner last opened. Plain id,
+  // no FK — validated (exists, ACTIVE, owned) every time it is used, so a
+  // stale or revoked value fails closed back to propertyId. Survives
+  // sign-out; login prefers it over propertyId when valid.
+  lastPropertyId     String?
   active             Boolean                  @default(true)
   // True while a temporary (seed-issued) password is in force — the owner
   // sees a change-password banner until they set their own.

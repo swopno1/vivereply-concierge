@@ -14,6 +14,7 @@
 
 import { getSession } from "@/lib/tenant";
 import { USAGE_ALERT_RATIO, getBillingSnapshot } from "@/lib/billing";
+import { getOwnTwoFaEnabled, listOwnerProperties } from "@/lib/dashboard";
 import AppShell, { type BillingBanner } from "../components/AppShell";
 
 async function billingBannerFor(propertyId: string): Promise<BillingBanner> {
@@ -56,6 +57,11 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     session && session.role === "OWNER" && session.propertyId
       ? await billingBannerFor(session.propertyId)
       : null;
+  const properties =
+    session?.role === "OWNER" && session.email
+      ? await listOwnerProperties(session.email, session.propertyId)
+      : [];
+  const twoFaEnabled = await getOwnTwoFaEnabled(session);
   return (
     <AppShell
       session={
@@ -63,6 +69,8 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           ? { email: session.email, role: session.role, propertyId: session.propertyId }
           : null
       }
+      properties={properties}
+      twoFaEnabled={twoFaEnabled}
       billingBanner={banner}
     >
       {children}

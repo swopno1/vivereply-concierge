@@ -1,10 +1,12 @@
 // Chatbot profile API (owner self-service). The onboarding run sets the
 // profile once; this endpoint lets owners rename their chatbot and flip
 // suggestion segments afterwards without re-running ingestion.
-//   PATCH -> { propertyId, assistantName?, greeting?, tone?, suggestionSegments? }
+//   PATCH -> { propertyId, assistantName?, greeting?, tone?, suggestionSegments?, phone? }
 // Names are plain text (max 100); segment ids outside lib/segments are
 // dropped, never stored. Upserts: a property without a profile row gets
-// one (business name falls back to the property name).
+// one (business name falls back to the property name). `phone` (D1: the
+// handoff contact number) applies only when the key is present, so older
+// callers never wipe it.
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession, sessionCan, sessionOwnerVerified } from "@/lib/tenant";
@@ -48,11 +50,12 @@ export async function PATCH(req: NextRequest) {
     tone: optStr(body?.tone, 500),
     suggestionSegments: cleanSegmentIds(body?.suggestionSegments),
   };
+  const patch = body && typeof body === "object" && "phone" in body ? { ...data, phone: optStr(body.phone, 32) } : data;
   const row = await withTenant(tenant, (tx) =>
     tx.propertyProfile.upsert({
       where: { propertyId },
-      create: { propertyId, businessName: property.name, ...data },
-      update: data,
+      create: { propertyId, businessName: property.name, ...patch },
+      update: patch,
     })
   );
   return NextResponse.json({
@@ -61,5 +64,6 @@ export async function PATCH(req: NextRequest) {
     greeting: row.greeting,
     tone: row.tone,
     suggestionSegments: row.suggestionSegments,
+    phone: row.phone,
   });
 }

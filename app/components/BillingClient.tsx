@@ -135,7 +135,7 @@ export default function BillingClient({
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 p-4 md:p-6">
-      <h1 className="text-xl font-bold text-gray-900">Billing</h1>
+      <h1 className="text-xl font-bold text-gray-900">Orders &amp; Billing</h1>
       {checkout === "success" && (
         <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           Checkout complete — your plan activates in a moment. If this page hasn&apos;t updated,
