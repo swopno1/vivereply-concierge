@@ -320,9 +320,11 @@ model PropertyBinding {
 
 model KnowledgeDocument {
   id         String           @id @default(cuid())
-  // No default: a missing propertyId must fail, not silently join the demo.
-  propertyId String
-  property   Property         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  // NULL = platform corpus (R1 Lane A: ViveReply knowledge, readable by
+  // all tenants via the marked service path). Property writers must still
+  // pass an explicit propertyId — see the ingestion guards, not the type.
+  propertyId String?
+  property   Property?        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   title      String
   source     String           @default("demo-seed")
   content    String
@@ -559,4 +561,19 @@ model StripeEvent {
   id        String   @id
   type      String
   createdAt DateTime @default(now())
+}
+
+// R1 Lane A misses: questions the platform corpus could not answer.
+// Service-only like StripeEvent (see prisma/sql/r1-assistant-rls.sql);
+// the super-admin unanswered list reads them. propertyId records where
+// the question was asked (nullable: brand scope has none).
+model AssistantUnanswered {
+  id         String   @id @default(cuid())
+  question   String
+  lang       String   @default("en")
+  propertyId String?
+  createdAt  DateTime @default(now())
+  resolvedAt DateTime?
+
+  @@index([resolvedAt, createdAt])
 }

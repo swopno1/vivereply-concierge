@@ -48,7 +48,9 @@ SELECT 'Conversation' AS t, COUNT(*) AS orphans FROM "Conversation" c LEFT JOIN 
 SELECT 'BridgeToken', COUNT(*) FROM "BridgeToken" b LEFT JOIN "Property" p ON p.id = b."propertyId" WHERE p.id IS NULL UNION ALL
 SELECT 'RoomMapping', COUNT(*) FROM "RoomMapping" r LEFT JOIN "Property" p ON p.id = r."propertyId" WHERE p.id IS NULL UNION ALL
 SELECT 'PropertyBinding', COUNT(*) FROM "PropertyBinding" b LEFT JOIN "Property" p ON p.id = b."propertyId" WHERE p.id IS NULL UNION ALL
-SELECT 'KnowledgeDocument', COUNT(*) FROM "KnowledgeDocument" d LEFT JOIN "Property" p ON p.id = d."propertyId" WHERE p.id IS NULL UNION ALL
+-- R1: NULL propertyId = platform corpus rows (intended); only non-null
+-- dangling ids are orphans — same nullable-aware shape as AuditLog/User.
+SELECT 'KnowledgeDocument', COUNT(*) FROM "KnowledgeDocument" d LEFT JOIN "Property" p ON p.id = d."propertyId" WHERE d."propertyId" IS NOT NULL AND p.id IS NULL UNION ALL
 SELECT 'PropertyProfile', COUNT(*) FROM "PropertyProfile" p2 LEFT JOIN "Property" p ON p.id = p2."propertyId" WHERE p.id IS NULL UNION ALL
 SELECT 'OnboardingRun', COUNT(*) FROM "OnboardingRun" o LEFT JOIN "Property" p ON p.id = o."propertyId" WHERE p.id IS NULL UNION ALL
 SELECT 'ApprovedDomain', COUNT(*) FROM "ApprovedDomain" a LEFT JOIN "Property" p ON p.id = a."propertyId" WHERE p.id IS NULL UNION ALL
@@ -62,7 +64,7 @@ SELECT 'Conversation' AS t, c.id, c."propertyId" FROM "Conversation" c LEFT JOIN
 SELECT 'BridgeToken' AS t, b.id, b."propertyId" FROM "BridgeToken" b LEFT JOIN "Property" p ON p.id = b."propertyId" WHERE p.id IS NULL LIMIT 5;
 SELECT 'RoomMapping' AS t, r.id, r."propertyId" FROM "RoomMapping" r LEFT JOIN "Property" p ON p.id = r."propertyId" WHERE p.id IS NULL LIMIT 5;
 SELECT 'PropertyBinding' AS t, b.id, b."propertyId" FROM "PropertyBinding" b LEFT JOIN "Property" p ON p.id = b."propertyId" WHERE p.id IS NULL LIMIT 5;
-SELECT 'KnowledgeDocument' AS t, d.id, d."propertyId" FROM "KnowledgeDocument" d LEFT JOIN "Property" p ON p.id = d."propertyId" WHERE p.id IS NULL LIMIT 5;
+SELECT 'KnowledgeDocument' AS t, d.id, d."propertyId" FROM "KnowledgeDocument" d LEFT JOIN "Property" p ON p.id = d."propertyId" WHERE d."propertyId" IS NOT NULL AND p.id IS NULL LIMIT 5;
 SELECT 'PropertyProfile' AS t, p2.id, p2."propertyId" FROM "PropertyProfile" p2 LEFT JOIN "Property" p ON p.id = p2."propertyId" WHERE p.id IS NULL LIMIT 5;
 SELECT 'OnboardingRun' AS t, o.id, o."propertyId" FROM "OnboardingRun" o LEFT JOIN "Property" p ON p.id = o."propertyId" WHERE p.id IS NULL LIMIT 5;
 SELECT 'ApprovedDomain' AS t, a.id, a."propertyId" FROM "ApprovedDomain" a LEFT JOIN "Property" p ON p.id = a."propertyId" WHERE p.id IS NULL LIMIT 5;
