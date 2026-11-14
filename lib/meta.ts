@@ -44,6 +44,28 @@ const FIXED_TEMPERATURE: number | null = (() => {
   return t;
 })();
 
+// Completion budgets (R1.2): reasoning tokens count against max_tokens
+// and the model's reasoning appetite has inflated past the old caps
+// (1024 plain / 2048 tools) — empty-content 200s. 4096 default; optional
+// META_MAX_TOKENS_PLAIN / META_MAX_TOKENS_TOOLS (integer 256–16384) let
+// the founder raise the budget from env with no code change. Validated
+// once at module load like FIXED_TEMPERATURE; invalid warns and falls
+// back, so a typo can never silently reshape behaviour.
+export const DEFAULT_MAX_TOKENS = 4096;
+
+export function resolveMaxTokens(raw: string | undefined, name: string): number {
+  if (raw === undefined || raw === "") return DEFAULT_MAX_TOKENS;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 256 || n > 16384) {
+    console.warn(`concierge: ignoring invalid ${name}=${JSON.stringify(raw)} (want integer 256-16384)`);
+    return DEFAULT_MAX_TOKENS;
+  }
+  return n;
+}
+
+const MAX_TOKENS_PLAIN = resolveMaxTokens(process.env.META_MAX_TOKENS_PLAIN, "META_MAX_TOKENS_PLAIN");
+const MAX_TOKENS_TOOLS = resolveMaxTokens(process.env.META_MAX_TOKENS_TOOLS, "META_MAX_TOKENS_TOOLS");
+
 export type ChatMessage = {
   role: "user" | "assistant" | "system" | "tool";
   content: string;
@@ -168,14 +190,29 @@ async function completionsWithFallback(payload: Record<string, unknown>): Promis
   }
 }
 
+// One log line when a 200 carries no usable reply (R1.2): finish
+// reason + token split turn the next occurrence from a two-round
+// log/DB investigation into a single grep. Thrown errors unchanged.
+function logEmptyReply(data: unknown, via: LlmBackend): void {
+  const d = data as { choices?: { finish_reason?: unknown }[]; usage?: Record<string, unknown> };
+  const finish = d?.choices?.[0]?.finish_reason;
+  const usage = parseUsage({ usage: d?.usage }, via);
+  console.error(
+    `concierge: empty reply from model (finish_reason=${typeof finish === "string" ? finish : "unknown"}, ` +
+      `prompt=${usage.promptTokens}, completion=${usage.completionTokens}, reasoning=${usage.reasoningTokens}, via=${via})`
+  );
+}
+
 export async function chatCompletion(
   messages: ChatMessage[]
 ): Promise<{ reply: string; usage: Usage }> {
   // Generous max_tokens: Muse Spark reasons first and reasoning tokens
-  // count against this budget (smoke test: 337 reasoning tokens for one word).
-  const { data, via } = await completionsWithFallback({ messages, max_tokens: 1024 });
+  // count against this budget (2026-11-14 probe: 379 reasoning tokens
+  // for one sentence — the old 1024 cap starved real turns).
+  const { data, via } = await completionsWithFallback({ messages, max_tokens: MAX_TOKENS_PLAIN });
   const content = (data as { choices?: { message?: { content?: unknown } }[] })?.choices?.[0]?.message?.content;
   if (typeof content !== "string" || !content) {
+    logEmptyReply(data, via);
     throw new Error("Empty reply from model");
   }
   return { reply: content, usage: parseUsage(data as { usage?: Record<string, unknown> }, via) };
@@ -204,11 +241,12 @@ export async function chatCompletionWithTools(
     return { role: m.role, content: m.content };
   });
 
-  const { data, via } = await completionsWithFallback({ messages: wireMessages, tools, max_tokens: 2048 });
+  const { data, via } = await completionsWithFallback({ messages: wireMessages, tools, max_tokens: MAX_TOKENS_TOOLS });
   const message = (data as { choices?: { message?: unknown }[] })?.choices?.[0]?.message as
     | { content?: unknown; tool_calls?: { id: string; function?: { name?: string; arguments?: string } }[] }
     | undefined;
   if (!message) {
+    logEmptyReply(data, via);
     throw new Error("Empty reply from model");
   }
   const toolCalls: ToolCall[] = Array.isArray(message.tool_calls)
@@ -222,6 +260,7 @@ export async function chatCompletionWithTools(
     : [];
   const content = typeof message.content === "string" ? message.content : null;
   if (!content && toolCalls.length === 0) {
+    logEmptyReply(data, via);
     throw new Error("Empty reply from model");
   }
   return { content, toolCalls, usage: parseUsage(data as { usage?: Record<string, unknown> }, via) };
