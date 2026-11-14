@@ -1,130 +1,46 @@
-// App shell: left nav sidebar + content area + mobile top bar (client).
-// Rendered by app/(shell)/layout.tsx around every shell page (auth pages
-// use the minimal (auth) layout instead). The New chat button talks to
-// the Chat component through a window event, because the layout sits
-// above the page and cannot call its state directly — Chat ignores the
-// event while a reply is in flight, so the button needs no busy state
-// of its own. The footer shows Sign in (with a ?next= back to the
-// current page) or the signed-in row with Sign out, plus a Docs link
-// (above both states, so docs stay one click away). There is no
-// separate admin area: super-admin oversight (tenants, re-run approvals)
-// lives as extra sections inside /settings, rendered server-side.
+// App shell: tenant dashboard sidebar + content area + mobile top bar
+// (client). Rendered by app/(shell)/layout.tsx around every shell page
+// (auth pages use the minimal (auth) layout instead). The New chat
+// button talks to the Chat component through a window event, because the
+// layout sits above the page and cannot call its state directly — Chat
+// ignores the event while a reply is in flight, so the button needs no
+// busy state of its own. The footer shows Sign in (with a ?next= back to
+// the current page) or the account block (email, 2FA status, sign out),
+// plus a Docs link (above both states, so docs stay one click away).
 
 "use client";
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
+import PropertySwitcher from "./PropertySwitcher";
+import type { OwnerProperty } from "@/lib/dashboard";
 
 export const NEW_CHAT_EVENT = "concierge:new-chat";
 
-// Nav groups: Talk (the product), Manage (people), Configure (setup).
-// Every item is visible to every signed-in role — super-admin extras
-// live inside /settings sections, not in the nav.
-const NAV_GROUPS: { heading: string; items: { href: string; label: string; icon: React.ReactNode }[] }[] = [
+export const DOCS_URL = "https://www.vivereply.com/docs";
+
+// D1 nav, in order. Chatbot is a section with sub-pages; everything else
+// is a single entry. /staff, /setup and /onboarding stay reachable by URL
+// and deep links but are no longer sidebar entries.
+const NAV: { href: string; label: string; section?: { href: string; label: string }[] }[] = [
+  { href: "/", label: "Home" },
+  { href: "/assistant", label: "Assistant" },
   {
-    heading: "Talk",
-    items: [
-      {
-        href: "/",
-        label: "Chat",
-        icon: (
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path
-              d="M2 3.5h12v7H8l-3.5 3v-3H2v-7Z"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinejoin="round"
-            />
-          </svg>
-        ),
-      },
+    href: "/chatbot",
+    label: "Chatbot",
+    section: [
+      { href: "/chatbot", label: "Overview" },
+      { href: "/chatbot/widget", label: "Widget & keys" },
+      { href: "/chatbot/booking", label: "Booking system" },
+      { href: "/chatbot/knowledge", label: "Knowledge" },
+      { href: "/chatbot/handoffs", label: "Handoffs" },
+      { href: "/chatbot/usage", label: "Usage" },
     ],
   },
-  {
-    heading: "Manage",
-    items: [
-      {
-        href: "/staff",
-        label: "Staff handoffs",
-        icon: (
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path
-              d="M5.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm0 1.5c-2 0-4 1-4 3v1.5h8V12.5c0-2-2-3-4-3Zm7.5-6.5h3m-1.5-1.5v3"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-            />
-          </svg>
-        ),
-      },
-    ],
-  },
-  {
-    heading: "Configure",
-    items: [
-      {
-        href: "/setup",
-        label: "Getting started",
-        icon: (
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path
-              d="M5.5 8.5 7.5 10.5 11 6M3 2.5h10v11H3v-11Z"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        ),
-      },
-      {
-        href: "/settings",
-        label: "Settings",
-        icon: (
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.6" />
-            <path
-              d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2 3.4 12.6"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-            />
-          </svg>
-        ),
-      },
-      {
-        href: "/billing",
-        label: "Billing",
-        icon: (
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
-            <path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.6" />
-          </svg>
-        ),
-      },
-      {
-        href: "/onboarding",
-        label: "Onboarding",
-        icon: (
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path
-              d="M2.5 8a5.5 5.5 0 0 1 9.5-3.8M13.5 8a5.5 5.5 0 0 1-9.5 3.8"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-            />
-            <path
-              d="M12 1.8v3h-3M4 14.2v-3h3"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        ),
-      },
-    ],
-  },
+  { href: "/services", label: "My Services" },
+  { href: "/billing", label: "Orders & Billing" },
+  { href: "/support", label: "Support" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export type ShellSession = {
@@ -137,17 +53,24 @@ export type BillingBanner = { text: string; tone: "warn" | "bad" } | null;
 
 export default function AppShell({
   session,
+  properties,
+  twoFaEnabled,
   billingBanner,
   children,
 }: {
   session: ShellSession;
+  properties: OwnerProperty[];
+  twoFaEnabled: boolean;
   billingBanner?: BillingBanner;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [chatbotOpen, setChatbotOpen] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
   const pathname = usePathname();
-  const visibleGroups = NAV_GROUPS.filter((group) => group.items.length > 0);
+  const currentProperty = session?.propertyId
+    ? (properties.find((p) => p.id === session.propertyId) ?? properties[0] ?? null)
+    : (properties[0] ?? null);
   const whoLabel = !session ? "" : session.role === "SUPER_ADMIN" ? "Super admin" : (session.email ?? "Owner");
   const whoInitial = !session ? "" : (whoLabel.charAt(0).toUpperCase() || "A");
 
@@ -163,6 +86,11 @@ export default function AppShell({
     window.location.href = "/";
   }
 
+  function isActive(href: string): boolean {
+    if (href === "/") return pathname === "/";
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
   return (
     <main className="flex h-screen w-full bg-white font-sans text-gray-900 antialiased">
       {open && (
@@ -173,25 +101,19 @@ export default function AppShell({
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex h-full w-72 flex-col gap-1 border-r border-gray-200 bg-gray-50 p-3 transition-transform md:static md:w-64 md:shrink-0 md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-full w-72 flex-col gap-1 overflow-y-auto border-r border-gray-200 bg-gray-50 p-3 transition-transform md:static md:w-64 md:shrink-0 md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center gap-3 px-2 py-2">
-          <span
-            aria-hidden
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0C1222]"
-          >
-            <img src="/brand/vivereply-mark.svg" alt="" className="h-7 w-7" />
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-[15px] font-semibold leading-tight">
-              Vivereply Concierge
-            </span>
-            <span className="block truncate text-xs text-gray-500">AI front-of-house</span>
-          </span>
-        </div>
-        {pathname === "/" && (
+        {session?.role === "OWNER" && (
+          <PropertySwitcher properties={properties} currentId={session.propertyId} />
+        )}
+        {session?.role === "SUPER_ADMIN" && (
+          <p className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            Super admin · all properties
+          </p>
+        )}
+        {pathname === "/assistant" && (
           <button
             onClick={newChat}
             title="Start a new conversation"
@@ -203,39 +125,65 @@ export default function AppShell({
             New chat
           </button>
         )}
-        <nav aria-label="Concierge" className="mt-3 flex flex-col gap-4 overflow-y-auto">
-          {visibleGroups.map((group) => (
-            <div key={group.heading} className="flex flex-col gap-1">
-              <p className="px-4 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                {group.heading}
-              </p>
-              {group.items.map((item) =>
-                pathname === item.href ? (
-                  <span
-                    key={item.href}
-                    aria-current="page"
-                    className="flex items-center gap-3 rounded-xl bg-gray-200/70 px-4 py-2.5 text-sm font-medium text-gray-900"
-                  >
-                    <span aria-hidden className="shrink-0 text-gray-700">{item.icon}</span>
-                    {item.label}
+        <nav aria-label="Concierge" className="mt-3 flex flex-col gap-1">
+          {NAV.map((item) =>
+            item.section ? (
+              <div key={item.href} className="flex flex-col gap-1">
+                <button
+                  onClick={() => setChatbotOpen((o) => !o)}
+                  aria-expanded={chatbotOpen}
+                  className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium ${
+                    isActive(item.href) ? "bg-gray-200/70 text-gray-900" : "text-gray-700 hover:bg-gray-200/50"
+                  }`}
+                >
+                  {item.label}
+                  <span aria-hidden className="text-gray-500">
+                    {chatbotOpen ? "▾" : "▸"}
                   </span>
-                ) : (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-200/50"
-                  >
-                    <span aria-hidden className="shrink-0 text-gray-500">{item.icon}</span>
-                    {item.label}
-                  </a>
-                )
-              )}
-            </div>
-          ))}
+                </button>
+                {chatbotOpen &&
+                  item.section.map((sub) =>
+                    pathname === sub.href ? (
+                      <span
+                        key={sub.href}
+                        aria-current="page"
+                        className="rounded-xl bg-gray-200/70 px-4 py-2 pl-8 text-sm font-medium text-gray-900"
+                      >
+                        {sub.label}
+                      </span>
+                    ) : (
+                      <a
+                        key={sub.href}
+                        href={sub.href}
+                        className="rounded-xl px-4 py-2 pl-8 text-sm text-gray-700 hover:bg-gray-200/50"
+                      >
+                        {sub.label}
+                      </a>
+                    )
+                  )}
+              </div>
+            ) : pathname === item.href ? (
+              <span
+                key={item.href}
+                aria-current="page"
+                className="rounded-xl bg-gray-200/70 px-4 py-2.5 text-sm font-medium text-gray-900"
+              >
+                {item.label}
+              </span>
+            ) : (
+              <a
+                key={item.href}
+                href={item.href}
+                className="rounded-xl px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-200/50"
+              >
+                {item.label}
+              </a>
+            )
+          )}
         </nav>
         <div className="mt-auto px-1 py-1">
           <a
-            href="https://vivereply.com/docs"
+            href={DOCS_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="mb-2 flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm text-gray-600 hover:bg-gray-200/50 hover:text-gray-900"
@@ -257,21 +205,26 @@ export default function AppShell({
             Docs
           </a>
           {session ? (
-            <div className="flex items-center gap-2 rounded-xl bg-gray-200/50 px-3 py-2">
-              <span
-                aria-hidden
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-700 text-xs font-bold text-white"
-              >
-                {whoInitial}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">{whoLabel}</span>
-              <button
-                onClick={signOut}
-                disabled={signingOut}
-                className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 hover:text-gray-900 disabled:opacity-50"
-              >
-                {signingOut ? "Signing out…" : "Sign out"}
-              </button>
+            <div className="flex flex-col gap-1 rounded-xl bg-gray-200/50 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-700 text-xs font-bold text-white"
+                >
+                  {whoInitial}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">{whoLabel}</span>
+                <button
+                  onClick={signOut}
+                  disabled={signingOut}
+                  className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 hover:text-gray-900 disabled:opacity-50"
+                >
+                  {signingOut ? "Signing out…" : "Sign out"}
+                </button>
+              </div>
+              <a href="/settings#security" className="pl-9 text-xs text-gray-600 underline-offset-2 hover:text-gray-900 hover:underline">
+                Two-factor: {twoFaEnabled ? "on" : "off"}
+              </a>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -308,9 +261,11 @@ export default function AppShell({
               />
             </svg>
           </button>
-          <span className="truncate text-[15px] font-semibold">Vivereply Concierge</span>
+          <span className="truncate text-[15px] font-semibold">
+            {session?.role === "OWNER" ? (currentProperty?.name ?? "Vivereply Concierge") : "Vivereply Concierge"}
+          </span>
         </div>
-        {billingBanner && pathname !== "/billing" && (
+        {billingBanner && pathname !== "/billing" && pathname !== "/" && (
           <a
             href="/billing"
             className={`block px-4 py-2 text-center text-sm font-medium ${

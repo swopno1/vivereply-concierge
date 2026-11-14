@@ -1,34 +1,25 @@
 // Settings (inside the shell route group). Session-protected: no valid
 // session cookie means a redirect to /login. Single-property view —
 // owners see only their own property, the super-admin may pass
-// ?property=<id>. A mix of real rooms and honest placeholders: a section
-// marked Later renders no working controls, only what it will hold.
-// Snippet origins come from the live request headers, so preview
-// deployments show their own URLs, not production's.
+// ?property=<id>. Since D1 this holds property profile, account &
+// security, and link cards to the Chatbot section (which owns the
+// chatbot/widget/bridge/booking rooms moved out of here).
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { prisma, prismaService } from "@/lib/prisma";
+import { prismaService } from "@/lib/prisma";
 import { getSession, resolvePropertyId, sessionOwnerVerified } from "@/lib/tenant";
 import { withTenant } from "@/lib/tenant-db";
-import type { WidgetProperty } from "@/demo-config/widget-keys";
-import CopyButton from "../../components/CopyButton";
 import SignOutButton from "../../components/SignOutButton";
-import SuiteBindings from "../../components/SuiteBindings";
-import RoomCatalogues from "../../components/RoomCatalogues";
-import AdminDomains from "../../components/AdminDomains";
-import BridgeTokens from "../../components/BridgeTokens";
 import PasswordChange from "../../components/PasswordChange";
 import TwoFactorSettings from "../../components/TwoFactorSettings";
 import EvalRunner from "../../components/EvalRunner";
 import VerifyPrompt from "../../components/VerifyPrompt";
-import ChatbotProfile from "../../components/ChatbotProfile";
+import PropertyContact from "../../components/PropertyContact";
 import OnboardingApprovals from "../../components/OnboardingApprovals";
 import OwnerActions from "../../components/OwnerActions";
 import PropertyStatusToggle from "../../components/PropertyStatusToggle";
 import AuditTrail from "../../components/AuditTrail";
 import { CASES } from "@/eval/cases.mjs";
-import { BACKEND_FAILURE_TOOL_NAMES, isFailureOutput } from "@/lib/booking-mode";
 import { securityChecklistRows } from "@/lib/security-checklist";
 
 export const dynamic = "force-dynamic";
@@ -64,20 +55,6 @@ function Later({ what }: { what: string }) {
         </span>
         {what}
       </p>
-    </div>
-  );
-}
-
-function Snippet({ label, text }: { label: string; text: string }) {
-  return (
-    <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-gray-900">{label}</p>
-        <CopyButton text={text} label={label} />
-      </div>
-      <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-gray-900 px-3 py-2 font-mono text-xs leading-relaxed text-gray-100">
-        {text}
-      </pre>
     </div>
   );
 }
@@ -126,83 +103,14 @@ export default async function SettingsPage({
             .catch(() => null);
   const twoFaEnabled = !!(twoFaRow?.totpSecretEnc && twoFaRow.totpEnabledAt);
 
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "app.vivereply.com";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const origin = `${proto}://${host}`;
-
-  const property = await prisma.property.findUnique({ where: { id: propertyId } }).catch(() => null);
-  const [domains, tokenCount, tokenRows] = await withTenant(propertyId, (tx) =>
+  const [property, activeDomainCount, tokenCount, contactPhone] = await withTenant(propertyId, (tx) =>
     Promise.all([
-      tx.approvedDomain.findMany({
-        where: { propertyId },
-        orderBy: { createdAt: "asc" },
-      }),
+      tx.property.findUnique({ where: { id: propertyId }, select: { id: true, name: true } }).catch(() => null),
+      tx.approvedDomain.count({ where: { propertyId, active: true } }),
       tx.bridgeToken.count({ where: { propertyId, active: true } }),
-      tx.bridgeToken.findMany({
-        where: { propertyId },
-        orderBy: { createdAt: "asc" },
-      }),
+      tx.propertyProfile.findUnique({ where: { propertyId }, select: { phone: true } }).catch(() => null),
     ])
-  );
-  const activeDomains = domains.filter((d) => d.active);
-  const initialTokens = tokenRows.map((r) => ({
-    id: r.id,
-    prefix: r.prefix,
-    name: r.name,
-    propertyId: r.propertyId,
-    active: r.active,
-    createdAt: r.createdAt.toISOString(),
-  }));
-  const initialDomains = domains.map((d) => ({
-    id: d.id,
-    domain: d.domain,
-    propertyId: d.propertyId,
-    active: d.active,
-    createdAt: d.createdAt.toISOString(),
-  }));
-  const [chatbotProfile, recentLogs] = await withTenant(propertyId, (tx) =>
-    Promise.all([
-      tx.propertyProfile.findUnique({ where: { propertyId } }).catch(() => null),
-      tx.toolCallLog.findMany({
-        where: {
-          conversation: { propertyId },
-          toolName: {
-            in: BACKEND_FAILURE_TOOL_NAMES,
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 50,
-        include: { conversation: { select: { propertyId: true } } },
-      }),
-    ])
-  );
-  const backendFailures = recentLogs
-    .filter((l) => isFailureOutput(l.output))
-    .slice(0, 10)
-    .map((l) => ({
-      toolName: l.toolName,
-      error: (l.output as { error: string }).error,
-      propertyId: l.conversation.propertyId,
-      createdAt: l.createdAt.toISOString(),
-    }));
-  const bindingRows = await withTenant(propertyId, (tx) =>
-    tx.propertyBinding.findMany({
-      where: { propertyId },
-      orderBy: { createdAt: "asc" },
-    })
-  );
-  const initialBindings = bindingRows.map((r) => ({
-    id: r.id,
-    propertyId: r.propertyId,
-    suiteBaseUrl: r.suiteBaseUrl,
-    paymentPageUrl: r.paymentPageUrl,
-    version: r.version,
-    secretSet: r.secretEnc !== null,
-    lastTestedAt: r.lastTestedAt?.toISOString() ?? null,
-    lastTestOk: r.lastTestOk,
-    createdAt: r.createdAt.toISOString(),
-  }));
+  ).catch(() => [null, 0, 0, null] as const);
   // Super-admin oversight (relocated from the deleted /admin page):
   // cross-property tenants + onboarding approvals. Owners never fetch
   // these rows — the queries below run for super-admins only.
@@ -231,42 +139,6 @@ export default async function SettingsPage({
         )
     : [];
 
-  // Widget key for THIS property: the Property row's own key (minted at
-  // signup). No row, no snippet.
-  const keys: Array<[string, WidgetProperty]> =
-    property != null
-      ? [[property.widgetKey, { propertyId: property.id, title: property.name }]]
-      : [];
-  const bridgeExample = [
-    `# Staff bridge — run from the client SERVER, never the browser.`,
-    `# Mint the key in Bridge keys below; it is shown once.`,
-    `BRIDGE_KEY='cb.<prefix>.<secret>'`,
-    `curl -s "${origin}/api/bridge/handoffs?status=OPEN" \\`,
-    `  -H "Authorization: Bearer $BRIDGE_KEY"`,
-  ].join("\n");
-  const bridgeNode = [
-    `// Node (server only). Full contract: docs/bridge-integration.md`,
-    `const res = await fetch("${origin}/api/bridge/handoffs?status=OPEN", {`,
-    `  headers: { Authorization: \`Bearer \${process.env.CONCIERGE_BRIDGE_KEY}\` },`,
-    `});`,
-    `const openHandoffs = await res.json();`,
-  ].join("\n");
-  const staffWidgetSnippet = [
-    `<!-- Staff widget: mint a token server-side per page load, then embed. -->`,
-    `<!-- Never put the bridge key in the browser. -->`,
-    `<iframe`,
-    `  src="${origin}/staff/embed?token=<dashboard-token>"`,
-    `  width="100%" height="720" style="border:0; border-radius:12px"`,
-    `  title="Concierge staff handoffs"></iframe>`,
-  ].join("\n");
-  const embedMintSnippet = [
-    `# Mint the <dashboard-token> above from the client SERVER (tokens live 15 minutes):`,
-    `curl -s -X POST "${origin}/api/bridge/embed-tokens" \\`,
-    `  -H "Authorization: Bearer $BRIDGE_KEY" \\`,
-    `  -H 'Content-Type: application/json' \\`,
-    `  -d '{"origin":"https://dashboard.example.com"}'`,
-  ].join("\n");
-
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 p-4">
       <header className="border-b border-gray-200 pb-3">
@@ -294,13 +166,7 @@ export default async function SettingsPage({
           : []
         )
           .concat([
-            ["chatbot", "Chatbot name + topics"],
-            ["widget-codes", "Chat widget codes"],
-            ["domains", "Widget domains"],
-            ["bridge-codes", "Staff bridge codes"],
-            ["bridge-keys", "Bridge keys"],
-            ["booking", "Booking system"],
-            ["rooms", "Room catalogues"],
+            ["chatbot-section", "Chatbot"],
             ["secrets", "Secrets"],
             ["security", "Security"],
             ["exam", "Exam"],
@@ -371,104 +237,16 @@ export default async function SettingsPage({
       )}
 
       <Section
-        id="chatbot"
-        title="Chatbot name + topics"
-        blurb="What guests see (name, greeting, tone) and what the chatbot may advise on. Saving here takes effect on the next widget load — no re-ingestion."
+        id="chatbot-section"
+        title="Chatbot"
+        blurb="Name and topics, widget codes and domains, bridge keys, booking system and rooms now live under Chatbot in the sidebar."
       >
-        <ChatbotProfile
-          propertyId={propertyId}
-          initial={{
-            assistantName: chatbotProfile?.assistantName ?? "",
-            greeting: chatbotProfile?.greeting ?? "",
-            tone: chatbotProfile?.tone ?? "",
-            suggestionSegments: chatbotProfile?.suggestionSegments ?? [],
-          }}
-        />
-      </Section>
-
-      <Section
-        id="widget-codes"
-        title="Chat widget codes"
-        blurb="One script tag per key. It only runs on that property's approved domains."
-      >
-        {keys.map(([key, prop]) => {
-          const snippet = `<script src="${origin}/widget.js" data-key="${key}"></script>`;
-          const approved = domains.filter((d) => d.propertyId === prop.propertyId && d.active);
-          return (
-            <div key={key} className="flex flex-col gap-2">
-              <Snippet label={`${prop.title} (${key})`} text={snippet} />
-              <p className="text-sm text-gray-500">
-                Approved domains:{" "}
-                {approved.length > 0
-                  ? approved.map((d) => d.domain).join(", ")
-                  : "none yet — add one in Widget domains below."}
-              </p>
-            </div>
-          );
-        })}
-      </Section>
-
-      <Section
-        id="domains"
-        title="Widget domains"
-        blurb="Only these sites can host this property's chat widget. Deactivating a domain stops its widget on the next chat message."
-      >
-        <AdminDomains initial={initialDomains} initialPropertyId={propertyId} />
-      </Section>
-
-      <Section
-        id="bridge-codes"
-        title="Staff bridge codes"
-        blurb="Server-to-server snippets for client dashboards. Keys are minted below and stay on the client server."
-      >
-        <Snippet label="List open handoffs (curl)" text={bridgeExample} />
-        <Snippet label="List open handoffs (Node)" text={bridgeNode} />
-        <Snippet label="Staff widget embed (dashboard HTML)" text={staffWidgetSnippet} />
-        <Snippet label="Mint the dashboard token (server, curl)" text={embedMintSnippet} />
-        <p className="text-sm text-gray-500">
-          Full contract (read, assign, close, notes, widget):{" "}
-          <span className="font-mono">docs/bridge-integration.md</span> in the repo.
-        </p>
-      </Section>
-
-      <Section
-        id="bridge-keys"
-        title="Bridge keys"
-        blurb="Server-to-server keys for this property's dashboards and staff widget. A key sees only this property's handoffs; the full token shows once, at mint time."
-      >
-        <BridgeTokens initial={initialTokens} initialPropertyId={propertyId} />
-        <p className="text-sm text-gray-500">
-          {tokenCount} active {tokenCount === 1 ? "key" : "keys"}. Revoking kills a key on its
-          next call.
-        </p>
-      </Section>
-
-      <Section
-        id="booking"
-        title="Booking system"
-        blurb="One connection per property: the address above is what answers your guests' price and availability questions. Test runs server-side and never reveals the key. Changes apply on the next chat message."
-      >
-        <SuiteBindings initial={initialBindings} initialPropertyId={propertyId} />
-        <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-          <p className="text-sm font-semibold text-gray-900">Recent backend failures</p>
-          {backendFailures.length === 0 ? (
-            <p className="text-sm text-gray-500">None in the last 50 backend calls.</p>
-          ) : (
-            backendFailures.map((f, i) => (
-              <p key={i} className="text-sm text-gray-700">
-                <span className="font-mono">{f.toolName}</span> · {f.propertyId} · {f.error}
-              </p>
-            ))
-          )}
-        </div>
-      </Section>
-
-      <Section
-        id="rooms"
-        title="Room catalogues"
-        blurb="One room list per property. Sync it from your booking system, or add rows manually — rows govern chat once present."
-      >
-        <RoomCatalogues initialPropertyId={propertyId} />
+        <a
+          href="/chatbot"
+          className="block rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-900 shadow-sm hover:bg-gray-50"
+        >
+          Open Chatbot settings →
+        </a>
       </Section>
 
       <Section
@@ -486,7 +264,7 @@ export default async function SettingsPage({
       >
         <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm shadow-sm">
           {securityChecklistRows({
-            activeDomainCount: activeDomains.length,
+            activeDomainCount,
             bridgeTokenCount: tokenCount,
             twoFaEnabled,
           }).map((row) => (
@@ -545,6 +323,9 @@ export default async function SettingsPage({
         </div>
         {me && <PasswordChange mustChange={me.mustChangePassword} />}
         <TwoFactorSettings enabled={twoFaEnabled} />
+        {property && (
+          <PropertyContact propertyId={property.id} propertyName={property.name} initialPhone={contactPhone?.phone ?? ""} />
+        )}
       </Section>
 
       <Section

@@ -21,6 +21,7 @@ import {
   verifyTwoFactorChallengeToken,
 } from "@/lib/auth";
 import { mintLoginSession } from "@/lib/tenant";
+import { preferredOwnerProperty } from "@/lib/dashboard";
 import { logAudit } from "@/lib/audit";
 import { verifyAndClaimRecoveryCode, verifyUserTotp } from "@/lib/two-factor";
 
@@ -81,6 +82,7 @@ export async function POST(req: NextRequest) {
         email: true,
         role: true,
         propertyId: true,
+        lastPropertyId: true,
         active: true,
         totpSecretEnc: true,
         totpEnabledAt: true,
@@ -122,6 +124,7 @@ export async function POST(req: NextRequest) {
     .catch(() => null);
   // Bootstrap keeps its exact password-only session shape (uid
   // "bootstrap", null user row link); row users mint from the fresh row.
+  // D1: owners reopen the switcher's last property when still valid.
   const minted = challenge.bootstrap
     ? await mintLoginSession({
         session: { uid: "bootstrap", email: user.email, role: "SUPER_ADMIN", propertyId: null },
@@ -129,7 +132,15 @@ export async function POST(req: NextRequest) {
         ip,
       })
     : await mintLoginSession({
-        session: { uid: user.id, email: user.email, role: user.role as "OWNER" | "SUPER_ADMIN", propertyId: user.propertyId },
+        session: {
+          uid: user.id,
+          email: user.email,
+          role: user.role as "OWNER" | "SUPER_ADMIN",
+          propertyId:
+            user.role === "OWNER" && user.propertyId
+              ? await preferredOwnerProperty({ email: user.email, propertyId: user.propertyId, lastPropertyId: user.lastPropertyId ?? null })
+              : user.propertyId,
+        },
         userId: user.id,
         ip,
       });
