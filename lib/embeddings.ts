@@ -58,32 +58,65 @@ export async function embedText(
 // Batch embeddings for ingestion (onboarding callback). One HTTP call per
 // 100 texts; order preserved. Same model, same 768 dimensions, document
 // task type — queries keep using embedText above.
+//
+// R1.1: 429/5xx responses retry with exponential backoff (~5s → 15s →
+// 30s → 60s, 5 attempts max), honouring Retry-After (capped at 120s).
+// Anything else (400/401/403/404, transport errors) throws immediately,
+// exactly as before. `sleepMs` is injectable for tests; callers pass
+// nothing and see identical success behaviour.
+const EMBED_RETRY_WAITS_MS = [5_000, 15_000, 30_000, 60_000];
+const RETRY_AFTER_CAP_MS = 120_000;
+
+const defaultSleepMs = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+function retryAfterMs(res: Response): number | null {
+  const raw = res.headers.get("Retry-After");
+  if (!raw) return null;
+  const seconds = Number.parseInt(raw.trim(), 10);
+  if (!Number.isFinite(seconds) || seconds < 0) return null;
+  return Math.min(seconds * 1000, RETRY_AFTER_CAP_MS);
+}
+
 export async function embedMany(
   texts: string[],
-  taskType: EmbedTaskType = "RETRIEVAL_DOCUMENT"
+  taskType: EmbedTaskType = "RETRIEVAL_DOCUMENT",
+  opts: { sleepMs?: (ms: number) => Promise<void> } = {}
 ): Promise<number[][]> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
     throw new Error("GEMINI_API_KEY is not set");
   }
+  const sleepMs = opts.sleepMs ?? defaultSleepMs;
   const out: number[][] = [];
   for (let i = 0; i < texts.length; i += 100) {
     const batch = texts.slice(i, i + 100);
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_EMBED_MODEL}:batchEmbedContents`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        body: JSON.stringify({
-          requests: batch.map((text) => ({
-            model: `models/${GEMINI_EMBED_MODEL}`,
-            content: { parts: [{ text }] },
-            taskType,
-            outputDimensionality: GEMINI_EMBED_DIMENSIONS,
-          })),
-        }),
+    const res = await (async () => {
+      let last: Response | null = null;
+      for (let attempt = 0; attempt <= EMBED_RETRY_WAITS_MS.length; attempt += 1) {
+        const r = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_EMBED_MODEL}:batchEmbedContents`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+            body: JSON.stringify({
+              requests: batch.map((text) => ({
+                model: `models/${GEMINI_EMBED_MODEL}`,
+                content: { parts: [{ text }] },
+                taskType,
+                outputDimensionality: GEMINI_EMBED_DIMENSIONS,
+              })),
+            }),
+          }
+        );
+        if (r.ok) return r;
+        last = r;
+        const retryable = r.status === 429 || (r.status >= 500 && r.status <= 599);
+        if (!retryable || attempt === EMBED_RETRY_WAITS_MS.length) break;
+        const headerWait = retryAfterMs(r);
+        await sleepMs(headerWait == null ? EMBED_RETRY_WAITS_MS[attempt] : Math.max(EMBED_RETRY_WAITS_MS[attempt], headerWait));
       }
-    );
+      return last as Response;
+    })();
     if (!res.ok) {
       throw new Error(`Gemini batch embeddings responded ${res.status}`);
     }

@@ -176,6 +176,93 @@ describe("ingestAssistantCorpus orchestration (R1)", () => {
     assert.equal(report.curatedDocuments, CURATED_ENTRIES.length);
   });
 
+  it("skips stored sources without fetching or embedding them", async () => {
+    let embeds = 0;
+    let fetches = 0;
+    const report = await ingestAssistantCorpus({
+      fetchPage: async (url) => {
+        fetches += 1;
+        return { status: 200, html: `<html><body><main><p>${"x ".repeat(300)}</p></main></body></html>` };
+      },
+      discoverSitemap: async () => ["rooms"],
+      embed: async (texts) => {
+        embeds += 1;
+        return texts.map(() => [0.1]);
+      },
+      replaceDocument: async (doc) => doc.chunks.length,
+      skipSources: ["https://www.vivereply.com/docs/rooms", "curated:business-identity"],
+    });
+    assert.deepEqual(report.pages, [{ path: "rooms", status: "skipped", chunks: 0, detail: "already stored" }]);
+    assert.equal(fetches, 0);
+    const skippedCurated = report.curated.filter((c) => c.status === "skipped");
+    assert.deepEqual(
+      skippedCurated.map((c) => c.id),
+      ["business-identity"]
+    );
+    assert.equal(skippedCurated[0].detail, "already stored");
+    // Only the non-skipped curated entries embedded (docs page skipped too).
+    assert.equal(embeds, CURATED_ENTRIES.length - 1);
+  });
+
+  it("continues past one page's embed failure and reports it failed", async () => {
+    const report = await ingestAssistantCorpus({
+      fetchPage: async () => ({ status: 200, html: `<html><body><main><p>${"y ".repeat(300)}</p></main></body></html>` }),
+      discoverSitemap: async () => ["rooms", "audit"],
+      embed: (() => {
+        let n = 0;
+        return async (texts) => {
+          n += 1;
+          if (n === 1) throw new Error("Gemini batch embeddings responded 429");
+          return texts.map(() => [0.1]);
+        };
+      })(),
+      replaceDocument: async (doc) => doc.chunks.length,
+    });
+    const byPath = Object.fromEntries(report.pages.map((p) => [p.path, p]));
+    assert.equal(byPath.rooms.status, "failed");
+    assert.match(byPath.rooms.detail ?? "", /429/);
+    assert.equal(byPath.audit.status, "ok");
+    assert.equal(report.curated.filter((c) => c.status === "ok").length, CURATED_ENTRIES.length);
+  });
+
+  it("reports a curated failure and continues with the rest", async () => {
+    const report = await ingestAssistantCorpus({
+      fetchPage: async () => ({ status: 200, html: "" }),
+      discoverSitemap: async () => [],
+      embed: (() => {
+        let n = 0;
+        return async (texts) => {
+          n += 1;
+          if (n === 1) throw new Error("boom");
+          return texts.map(() => [0.1]);
+        };
+      })(),
+      replaceDocument: async (doc) => doc.chunks.length,
+      only: "curated",
+    });
+    assert.equal(report.pages.length, 0);
+    assert.equal(report.curated[0].status, "failed");
+    assert.equal(report.curated[0].detail, "boom");
+    assert.ok(report.curated.slice(1).every((c) => c.status === "ok"));
+    assert.equal(report.curatedDocuments, CURATED_ENTRIES.length - 1);
+  });
+
+  it("an empty skip set (= --force) re-embeds everything", async () => {
+    let embeds = 0;
+    const report = await ingestAssistantCorpus({
+      fetchPage: async () => ({ status: 200, html: `<html><body><main><p>${"z ".repeat(300)}</p></main></body></html>` }),
+      discoverSitemap: async () => ["rooms"],
+      embed: async (texts) => {
+        embeds += 1;
+        return texts.map(() => [0.1]);
+      },
+      replaceDocument: async (doc) => doc.chunks.length,
+      skipSources: [],
+    });
+    assert.equal(report.pages[0].status, "ok");
+    assert.equal(embeds, 1 + CURATED_ENTRIES.length);
+  });
+
   it("falls back to the curated page list when discovery fails", async () => {
     const seen = [];
     const report = await ingestAssistantCorpus({
