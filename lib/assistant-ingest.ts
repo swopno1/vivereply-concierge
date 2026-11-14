@@ -113,16 +113,6 @@ export interface IngestDoc {
   chunks: string[];
 }
 
-export interface PageFetch {
-  fetchPage(url: string): Promise<{ status: number; html: string }>;
-  discoverSitemap?(): Promise<string[] | null>;
-}
-
-export interface ChunkStore {
-  /** Idempotent per-document replace (delete-by-source + insert). */
-  replaceDocument(doc: IngestDoc, embeddings: number[][]): Promise<number>;
-}
-
 /** Extract /docs/ page paths from sitemap XML; null when unusable. */
 export function parseSitemapXml(xml: string): string[] | null {
   try {
@@ -155,11 +145,30 @@ export interface PageOutcome {
   detail?: string;
 }
 
+export interface CuratedOutcome {
+  id: string;
+  status: "ok" | "skipped" | "failed";
+  chunks: number;
+  detail?: string;
+}
+
 export interface IngestReport {
   pages: PageOutcome[];
+  curated: CuratedOutcome[];
   curatedDocuments: number;
   documents: number;
   chunks: number;
+}
+
+export interface IngestDeps {
+  fetchPage(url: string): Promise<{ status: number; html: string }>;
+  discoverSitemap?(): Promise<string[] | null>;
+  embed(texts: string[]): Promise<number[][]>;
+  replaceDocument(doc: IngestDoc, embeddings: number[][]): Promise<number>;
+  /** Sources to skip without fetching or embedding (script loads the stored set). */
+  skipSources?: ReadonlySet<string> | readonly string[];
+  /** Restrict the run to one half (script flags). */
+  only?: "docs" | "curated";
 }
 
 /** Minimum extracted characters for a docs page to be worth indexing. */
@@ -169,10 +178,11 @@ export const MIN_PAGE_CHARS = 400;
  * Build the full ingest set (docs pages + curated entries) and store it
  * through the injected steps. Pure orchestration — no network, embedding,
  * or database calls of its own, so tests drive it end to end with fakes.
+ * R1.1: per-item failures are reported, never fatal; sources in the skip
+ * set are never fetched or embedded.
  */
-export async function ingestAssistantCorpus(deps: PageFetch & ChunkStore & { embed(texts: string[]): Promise<number[][]> }): Promise<IngestReport> {
-  const report: IngestReport = { pages: [], curatedDocuments: 0, documents: 0, chunks: 0 };
-
+export async function ingestDocsPages(deps: IngestDeps, report: IngestReport): Promise<void> {
+  const skip = new Set(deps.skipSources ?? []);
   let pages: string[] | null = null;
   if (deps.discoverSitemap) {
     try {
@@ -185,6 +195,10 @@ export async function ingestAssistantCorpus(deps: PageFetch & ChunkStore & { emb
 
   for (const path of paths) {
     const url = path === "index" ? `${DOCS_BASE}` : `${DOCS_BASE}/${path}`;
+    if (skip.has(url)) {
+      report.pages.push({ path, status: "skipped", chunks: 0, detail: "already stored" });
+      continue;
+    }
     let fetched: { status: number; html: string };
     try {
       fetched = await deps.fetchPage(url);
@@ -201,29 +215,48 @@ export async function ingestAssistantCorpus(deps: PageFetch & ChunkStore & { emb
       report.pages.push({ path, status: "skipped", chunks: 0, detail: `too little text (${text.length} chars)` });
       continue;
     }
-    const chunks = chunkText(text);
-    const embeddings = await deps.embed(chunks);
-    const stored = await deps.replaceDocument(
-      { title: title || prettifySlug(path), source: url, chunks },
-      embeddings
-    );
-    report.pages.push({ path, status: "ok", chunks: stored });
-    report.documents += 1;
-    report.chunks += stored;
+    try {
+      const chunks = chunkText(text);
+      const embeddings = await deps.embed(chunks);
+      const stored = await deps.replaceDocument(
+        { title: title || prettifySlug(path), source: url, chunks },
+        embeddings
+      );
+      report.pages.push({ path, status: "ok", chunks: stored });
+      report.documents += 1;
+      report.chunks += stored;
+    } catch (e) {
+      report.pages.push({ path, status: "failed", chunks: 0, detail: e instanceof Error ? e.message : String(e) });
+    }
   }
+}
 
+export async function ingestCurated(deps: IngestDeps, report: IngestReport): Promise<void> {
+  const skip = new Set(deps.skipSources ?? []);
   for (const entry of CURATED_ENTRIES) {
-    const chunks = chunkText(`${entry.title}\n\n${entry.body}`);
-    const embeddings = await deps.embed(chunks);
-    const stored = await deps.replaceDocument(
-      { title: entry.title, source: `curated:${entry.id}`, chunks },
-      embeddings
-    );
-    report.curatedDocuments += 1;
-    report.documents += 1;
-    report.chunks += stored;
+    const source = `curated:${entry.id}`;
+    if (skip.has(source)) {
+      report.curated.push({ id: entry.id, status: "skipped", chunks: 0, detail: "already stored" });
+      continue;
+    }
+    try {
+      const chunks = chunkText(`${entry.title}\n\n${entry.body}`);
+      const embeddings = await deps.embed(chunks);
+      const stored = await deps.replaceDocument({ title: entry.title, source, chunks }, embeddings);
+      report.curated.push({ id: entry.id, status: "ok", chunks: stored });
+      report.curatedDocuments += 1;
+      report.documents += 1;
+      report.chunks += stored;
+    } catch (e) {
+      report.curated.push({ id: entry.id, status: "failed", chunks: 0, detail: e instanceof Error ? e.message : String(e) });
+    }
   }
+}
 
+export async function ingestAssistantCorpus(deps: IngestDeps): Promise<IngestReport> {
+  const report: IngestReport = { pages: [], curated: [], curatedDocuments: 0, documents: 0, chunks: 0 };
+  if (!deps.only || deps.only === "docs") await ingestDocsPages(deps, report);
+  if (!deps.only || deps.only === "curated") await ingestCurated(deps, report);
   return report;
 }
 
